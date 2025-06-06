@@ -222,8 +222,8 @@ export function DirectionsForm({ onGetDirections, isLoading, destination, setDes
             </AddressAutofill>
           )}
            {/* Hidden fields for validation, RHF will pick them up */}
-          <FormField control={form.control} name="startLat" render={({ field }) => <input type="hidden" {...field} />} />
-          <FormField control={form.control} name="startLng" render={({ field }) => <input type="hidden" {...field} />} />
+          <FormField control={form.control} name="startLat" render={({ field }) => <input type="hidden" {...field} value={field.value ?? ''} />} />
+          <FormField control={form.control} name="startLng" render={({ field }) => <input type="hidden" {...field} value={field.value ?? ''} />} />
           {/* Show validation messages for startLat/startLng if needed */}
           <FormMessage /> 
         </div>
@@ -256,8 +256,8 @@ export function DirectionsForm({ onGetDirections, isLoading, destination, setDes
               className="w-full"
             />
           </AddressAutofill>
-          <FormField control={form.control} name="endLat" render={({ field }) => <input type="hidden" {...field} />} />
-          <FormField control={form.control} name="endLng" render={({ field }) => <input type="hidden" {...field} />} />
+          <FormField control={form.control} name="endLat" render={({ field }) => <input type="hidden" {...field} value={field.value ?? ''} />} />
+          <FormField control={form.control} name="endLng" render={({ field }) => <input type="hidden" {...field} value={field.value ?? ''} />} />
           <FormMessage />
         </div>
         
