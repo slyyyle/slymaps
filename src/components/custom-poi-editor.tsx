@@ -8,11 +8,11 @@ import { z } from 'zod';
 import { AddressAutofill, config as mapboxSearchConfig } from '@mapbox/search-js-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogDescription as ShadCnDialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog'; // Renamed DialogDescription to avoid conflict
+import { Dialog, DialogContent, DialogDescription as ShadCnDialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Icons } from '@/components/icons';
 import type { CustomPOI } from '@/types';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form"; // Added FormDescription here
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { ScrollArea } from './ui/scroll-area';
 import { CAPITOL_HILL_COORDS } from '@/lib/constants';
 
@@ -70,14 +70,14 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPoi, setEditingPoi] = useState<CustomPOI | null>(null);
   const [tokenInitializing, setTokenInitializing] = useState(true);
-  const [autofillInputValue, setAutofillInputValue] = useState(''); // Local state for AddressAutofill visual input
+  const [autofillInputValue, setAutofillInputValue] = useState('');
 
   const form = useForm<PoiFormData>({
     resolver: zodResolver(poiSchema),
     defaultValues: {
       name: '',
       type: '',
-      address: '', // RHF address, will be set by onRetrieve
+      address: '',
       latitude: undefined,
       longitude: undefined,
       description: '',
@@ -100,15 +100,15 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
         form.reset({
           name: editingPoi.name,
           type: editingPoi.type,
-          address: editingPoi.address || '', 
+          address: editingPoi.address || '',
           latitude: editingPoi.latitude,
           longitude: editingPoi.longitude,
           description: editingPoi.description || '',
         });
-        setAutofillInputValue(editingPoi.address || ''); 
+        setAutofillInputValue(editingPoi.address || '');
       } else {
         form.reset({ name: '', type: '', address: '', latitude: undefined, longitude: undefined, description: '' });
-        setAutofillInputValue(''); 
+        setAutofillInputValue('');
       }
       form.clearErrors();
     }
@@ -116,44 +116,55 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
 
   const handleAddressRetrieve = (response: any) => {
     const feature = response?.features?.[0];
-    let lat: number | undefined = undefined;
-    let lon: number | undefined = undefined;
-    let retrievedAddress: string = '';
+    let newLat: number | undefined = undefined;
+    let newLon: number | undefined = undefined;
+    let newAddress: string = '';
 
-    if (feature?.geometry?.coordinates && feature.geometry.coordinates.length === 2) {
+    if (feature?.properties && feature?.geometry?.coordinates && feature.geometry.coordinates.length === 2) {
+      newAddress = feature.properties.formatted_address || feature.properties.name || '';
+
       const rawLon = feature.geometry.coordinates[0];
       const rawLat = feature.geometry.coordinates[1];
 
-      if (typeof rawLon === 'number' && !isNaN(rawLon)) lon = rawLon;
-      else if (typeof rawLon === 'string') {
+      if (typeof rawLon === 'number' && !isNaN(rawLon)) {
+        newLon = rawLon;
+      } else if (typeof rawLon === 'string') {
         const parsed = parseFloat(rawLon);
-        lon = isNaN(parsed) ? undefined : parsed;
+        if (!isNaN(parsed)) newLon = parsed;
       }
 
-      if (typeof rawLat === 'number' && !isNaN(rawLat)) lat = rawLat;
-      else if (typeof rawLat === 'string') {
+      if (typeof rawLat === 'number' && !isNaN(rawLat)) {
+        newLat = rawLat;
+      } else if (typeof rawLat === 'string') {
         const parsed = parseFloat(rawLat);
-        lat = isNaN(parsed) ? undefined : parsed;
+        if (!isNaN(parsed)) newLat = parsed;
       }
-      
-      retrievedAddress = feature.properties?.formatted_address || feature.properties?.name || '';
     }
-    
-    form.setValue('address', retrievedAddress, { shouldValidate: true });
-    form.setValue('latitude', lat, { shouldValidate: true });
-    form.setValue('longitude', lon, { shouldValidate: true });
-    
-    setAutofillInputValue(retrievedAddress); 
 
-    if (lat === undefined || lon === undefined || !retrievedAddress) {
-       form.setError("address", {type: "manual", message: "Coordinates could not be determined. Please select a valid address suggestion."});
-    } else {
-        form.clearErrors(['latitude', 'longitude', 'address']);
+    // Update RHF state
+    form.setValue('address', newAddress, { shouldValidate: true });
+    form.setValue('latitude', newLat, { shouldValidate: true });
+    form.setValue('longitude', newLon, { shouldValidate: true });
+    
+    setAutofillInputValue(newAddress); // Update visual input
+
+    // Clear errors only if all parts are valid, otherwise let Zod show specific errors
+    if (newAddress && newLat !== undefined && newLon !== undefined) {
+      form.clearErrors(['address', 'latitude', 'longitude']);
+    } else if (newAddress && (newLat === undefined || newLon === undefined)) {
+      // If address was selected but coordinates couldn't be derived
+      form.setError('address', { type: 'manual', message: 'Coordinates could not be determined. Try another address.' });
+      // The latitude/longitude required_errors from Zod will also show
     }
+    // If newAddress is empty, Zod's required_error for address will show
   };
 
+
   const onSubmit: SubmitHandler<PoiFormData> = (data) => {
+    // Zod validation should have already ensured latitude and longitude are numbers
+    // if they passed validation.
     if (typeof data.latitude !== 'number' || typeof data.longitude !== 'number' || isNaN(data.latitude) || isNaN(data.longitude)) {
+      // This case should ideally be caught by Zod, but as a fallback:
       form.setError("address", {type: "manual", message: "Invalid or missing coordinates. Please select a valid address from the suggestions."});
       return;
     }
@@ -162,8 +173,8 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
       id: editingPoi ? editingPoi.id : `custom-${Date.now()}`,
       name: data.name,
       type: data.type,
-      address: data.address, 
-      latitude: data.latitude, 
+      address: data.address,
+      latitude: data.latitude,
       longitude: data.longitude,
       description: data.description,
       isCustom: true as const,
@@ -185,12 +196,12 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
   
   const handleAddNew = () => {
     setEditingPoi(null);
-    form.reset({ 
-      name: '', type: '', address: '', 
-      latitude: undefined, longitude: undefined, 
+    form.reset({
+      name: '', type: '', address: '',
+      latitude: undefined, longitude: undefined,
       description: ''
     });
-    setAutofillInputValue(''); 
+    setAutofillInputValue('');
     form.clearErrors();
     setIsDialogOpen(true);
   };
@@ -208,7 +219,7 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
       {customPois.length > 0 && (
         <Card>
           <CardHeader>
-            <DialogTitle className="text-md">Your Custom POIs</DialogTitle> 
+            <DialogTitle className="text-md">Your Custom POIs</DialogTitle>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[200px]">
@@ -238,7 +249,7 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
       <Dialog open={isDialogOpen} onOpenChange={(open) => {
           setIsDialogOpen(open);
           if (!open) {
-            form.clearErrors(); 
+            form.clearErrors();
             setEditingPoi(null);
           }
         }}
@@ -261,19 +272,19 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
               
               <FormField
                 control={form.control}
-                name="address" 
-                render={({ field }) => ( // field here refers to RHF's 'address'
+                name="address"
+                render={({ field }) => ( 
                   <FormItem>
                     <FormLabel>Address</FormLabel>
                     <FormControl>
                        {!mapboxAccessToken ? (
                           <Input placeholder="Mapbox token missing" disabled />
                        ) : (
-                        <AddressAutofill 
-                          accessToken={mapboxAccessToken} 
+                        <AddressAutofill
+                          accessToken={mapboxAccessToken}
                           onRetrieve={handleAddressRetrieve}
                           options={{
-                            country: "US", 
+                            country: "US",
                             language: "en",
                             proximity: [CAPITOL_HILL_COORDS.longitude, CAPITOL_HILL_COORDS.latitude]
                           }}
@@ -281,22 +292,17 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                           <Input
                             placeholder="Type an address and select"
                             autoComplete="off"
-                            value={autofillInputValue} // Visually controlled by local state
+                            value={autofillInputValue}
                             onChange={(e) => {
-                              setAutofillInputValue(e.target.value); // Update local visual state
+                              setAutofillInputValue(e.target.value);
                               // If user clears the input manually after a selection was made,
                               // also clear RHF's address, lat, and lon.
-                              // Note: RHF's address might not be directly tied to this onChange for selection,
-                              // but for manual clearing, this is one way.
                               if (e.target.value === '') {
                                 form.setValue('address', '', { shouldValidate: true });
                                 form.setValue('latitude', undefined, { shouldValidate: true });
                                 form.setValue('longitude', undefined, { shouldValidate: true });
-                                form.clearErrors(['latitude', 'longitude', 'address']);
+                                form.clearErrors(['address', 'latitude', 'longitude']);
                               }
-                              // RHF's `field.onChange` for "address" is NOT called here,
-                              // because `AddressAutofill` manages the input value.
-                              // RHF's "address" field is updated in `handleAddressRetrieve`.
                             }}
                           />
                         </AddressAutofill>
@@ -313,15 +319,10 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                         </span>
                       )}
                     </FormDescription>
-                    <FormMessage /> 
+                    <FormMessage />
                   </FormItem>
                 )}
               />
-              
-              {/* These FormMessage instances are for potential direct errors on lat/lon if needed, 
-                  though primary validation comes from the schema and is reflected on the 'address' field errors. */}
-              {form.formState.errors.latitude && <FormMessage>{form.formState.errors.latitude.message}</FormMessage>}
-              {form.formState.errors.longitude && <FormMessage>{form.formState.errors.longitude.message}</FormMessage>}
 
               <FormField control={form.control} name="description" render={({ field }) => (
                 <FormItem><FormLabel>Description (Optional)</FormLabel><FormControl><Input placeholder="Notes about this place" {...field} /></FormControl><FormMessage /></FormItem>
