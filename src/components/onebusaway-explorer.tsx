@@ -23,6 +23,7 @@ interface OneBusAwayExplorerProps {
   currentOBARouteDisplayData: CurrentOBARouteDisplayData | null;
   onSelectPoiFromList: (poi: PointOfInterest) => void;
   onFlyTo: (coords: Coordinates, zoom?: number) => void;
+  isLoadingObaVehicles: boolean;
 }
 
 const formatObaTime = (epochTime: number | null | undefined): string => {
@@ -48,7 +49,8 @@ export function OneBusAwayExplorer({
   isLoadingRoutePath,
   currentOBARouteDisplayData,
   onSelectPoiFromList,
-  onFlyTo
+  onFlyTo,
+  isLoadingObaVehicles,
 }: OneBusAwayExplorerProps) {
   const [routeIdQuery, setRouteIdQuery] = useState('');
 
@@ -98,8 +100,8 @@ export function OneBusAwayExplorer({
               onChange={(e) => setRouteIdQuery(e.target.value)}
               onKeyPress={(e) => { if (e.key === 'Enter') handleRouteSearch(); }}
             />
-            <Button onClick={handleRouteSearch} disabled={isLoadingRoutePath || !routeIdQuery.trim()}>
-              {isLoadingRoutePath && routeIdQuery ? <Icons.Route className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Route className="mr-2 h-4 w-4" />}
+            <Button onClick={handleRouteSearch} disabled={isLoadingRoutePath || isLoadingObaVehicles || !routeIdQuery.trim()}>
+              {(isLoadingRoutePath || isLoadingObaVehicles) && routeIdQuery ? <Icons.Time className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Route className="mr-2 h-4 w-4" />}
               Show
             </Button>
           </div>
@@ -154,7 +156,7 @@ export function OneBusAwayExplorer({
                             size="sm"
                             className="p-0 h-auto font-bold text-base"
                             onClick={() => onSelectRoute(arrival.routeId)}
-                            disabled={isLoadingRoutePath}
+                            disabled={isLoadingRoutePath || isLoadingObaVehicles}
                             title={`Show path for route ${arrival.routeShortName}`}
                           >
                             <Badge variant="secondary" className="font-bold text-base px-2 py-1 w-16 text-center hover:bg-primary/20">
@@ -201,13 +203,19 @@ export function OneBusAwayExplorer({
         </CardContent>
       </Card>
 
-      {(isLoadingRoutePath || currentOBARouteDisplayData) && <Separator className="my-4" />}
+      {(isLoadingRoutePath || isLoadingObaVehicles || currentOBARouteDisplayData) && <Separator className="my-4" />}
 
-      {isLoadingRoutePath && !currentOBARouteDisplayData && (
+      {(isLoadingRoutePath || isLoadingObaVehicles) && !currentOBARouteDisplayData && (
         <div className="flex items-center justify-center text-sm text-muted-foreground p-4">
-          <Icons.Route className="mr-2 h-4 w-4 animate-spin" /> Loading route details...
+          <Icons.Time className="mr-2 h-4 w-4 animate-spin" /> Loading route details & vehicles...
         </div>
       )}
+       {isLoadingObaVehicles && currentOBARouteDisplayData && (
+        <div className="flex items-center justify-center text-sm text-muted-foreground p-2">
+          <Icons.Time className="mr-2 h-4 w-4 animate-spin" /> Loading vehicle locations...
+        </div>
+      )}
+
 
       {currentOBARouteDisplayData && (
         <Card>
@@ -254,5 +262,3 @@ export function OneBusAwayExplorer({
     </div>
   );
 }
-
-    

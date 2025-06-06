@@ -106,3 +106,15 @@ export interface CurrentOBARouteDisplayData {
   routeInfo: ObaRoute;
   stops: PointOfInterest[];
 }
+
+export interface ObaVehicleLocation {
+  id: string; // Vehicle ID
+  routeId: string;
+  latitude: number;
+  longitude: number;
+  heading?: number; // Optional, in degrees from North
+  tripId?: string;
+  tripHeadsign?: string;
+  lastUpdateTime?: number; // epoch time
+  phase?: string; // e.g., IN_PROGRESS
+}

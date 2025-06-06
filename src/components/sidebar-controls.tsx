@@ -35,8 +35,6 @@ interface SidebarControlsProps {
   currentMapStyle: MapStyle;
   onMapStyleChange: (style: MapStyle) => void;
   customPois: CustomPOI[];
-  // onAddCustomPoi: (poi: CustomPOI) => void; // Removed
-  // onUpdateCustomPoi: (poi: CustomPOI) => void; // Removed
   onDeleteCustomPoi: (poiId: string) => void;
   onGetDirections: (start: Coordinates, end: Coordinates, mode: TransitMode) => Promise<void>;
   isLoadingRoute: boolean;
@@ -44,7 +42,6 @@ interface SidebarControlsProps {
   destination: Coordinates | null;
   setDestination: (dest: Coordinates | null) => void;
   onFlyTo: (coords: Coordinates, zoom?: number) => void;
-  // mapboxAccessToken: string; // No longer needed directly by SidebarControls for CustomPoiEditor
   oneBusAwayApiKey: string;
   selectedPoi: PointOfInterest | CustomPOI | null;
   onSelectPoi: (poi: PointOfInterest | CustomPOI | null) => void;
@@ -53,6 +50,7 @@ interface SidebarControlsProps {
   onSelectRouteForPath: (routeId: string) => void;
   isLoadingObaRouteGeometry: boolean;
   currentOBARouteDisplayData: CurrentOBARouteDisplayData | null;
+  isLoadingObaVehicles: boolean;
 }
 
 export function SidebarControls({
@@ -60,8 +58,6 @@ export function SidebarControls({
   currentMapStyle,
   onMapStyleChange,
   customPois,
-  // onAddCustomPoi, // Removed
-  // onUpdateCustomPoi, // Removed
   onDeleteCustomPoi,
   onGetDirections,
   isLoadingRoute,
@@ -69,7 +65,6 @@ export function SidebarControls({
   destination,
   setDestination,
   onFlyTo,
-  // mapboxAccessToken, // Removed
   oneBusAwayApiKey,
   selectedPoi,
   onSelectPoi,
@@ -78,6 +73,7 @@ export function SidebarControls({
   onSelectRouteForPath,
   isLoadingObaRouteGeometry,
   currentOBARouteDisplayData,
+  isLoadingObaVehicles,
 }: SidebarControlsProps) {
   const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>("onebusaway-explorer");
 
@@ -102,7 +98,7 @@ export function SidebarControls({
                 destination={destination}
                 setDestination={setDestination}
                 onFlyTo={onFlyTo}
-                mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || ''} // Passed directly as DirectionsForm needs it
+                mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || ''} 
               />
               {currentRoute && <DirectionsResult route={currentRoute} />}
             </AccordionContent>
@@ -123,6 +119,7 @@ export function SidebarControls({
                 currentOBARouteDisplayData={currentOBARouteDisplayData}
                 onSelectPoiFromList={onSelectPoi}
                 onFlyTo={onFlyTo}
+                isLoadingObaVehicles={isLoadingObaVehicles}
               />
             </AccordionContent>
           </AccordionItem>

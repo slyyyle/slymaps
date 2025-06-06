@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Map, { Marker, Popup, NavigationControl, FullscreenControl, GeolocateControl, Source, Layer, type ViewState, type MapLayerMouseEvent, type MapRef } from 'react-map-gl';
-import type { PointOfInterest, CustomPOI, Route as MapboxRouteType, Coordinates, ObaArrivalDeparture, ObaRouteGeometry } from '@/types';
+import type { PointOfInterest, CustomPOI, Route as MapboxRouteType, Coordinates, ObaArrivalDeparture, ObaRouteGeometry, ObaVehicleLocation } from '@/types';
 import { MAPBOX_ACCESS_TOKEN, INITIAL_VIEW_STATE } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -27,6 +27,7 @@ interface MapViewProps {
   obaStopArrivals: ObaArrivalDeparture[];
   isLoadingArrivals: boolean;
   onSelectRouteForPath: (routeId: string) => void;
+  obaVehicleLocations: ObaVehicleLocation[];
 }
 
 const getIconForPoiType = (poi: PointOfInterest | CustomPOI): IconName => {
@@ -70,9 +71,11 @@ export function MapView({
   obaStopArrivals,
   isLoadingArrivals,
   onSelectRouteForPath,
+  obaVehicleLocations,
 }: MapViewProps) {
   const [internalViewState, setInternalViewState] = useState<Partial<ViewState>>(INITIAL_VIEW_STATE);
   const [cursor, setCursor] = useState<string>('grab');
+  const [selectedVehicle, setSelectedVehicle] = useState<ObaVehicleLocation | null>(null);
 
   useEffect(() => {
     setInternalViewState(prev => ({ ...prev, ...externalViewState }));
@@ -86,7 +89,17 @@ export function MapView({
   const handlePoiClick = (e: MapLayerMouseEvent, poi: PointOfInterest | CustomPOI) => {
     e.originalEvent.stopPropagation();
     onSelectPoi(poi);
+    setSelectedVehicle(null); // Deselect vehicle if a POI is clicked
   };
+
+  const handleVehicleClick = (e: MapLayerMouseEvent, vehicle: ObaVehicleLocation) => {
+    e.originalEvent.stopPropagation();
+    setSelectedVehicle(vehicle);
+    onSelectPoi(null); // Deselect POI if a vehicle is clicked
+    // Optionally fly to vehicle, but might be jumpy if vehicles update frequently
+    // onFlyTo({ latitude: vehicle.latitude, longitude: vehicle.longitude }, internalViewState.zoom || 15);
+  };
+
 
   const mapboxDirectionsRouteLayer: any = {
     id: 'mapbox-directions-route',
@@ -132,7 +145,10 @@ export function MapView({
       cursor={cursor}
       onMouseDown={() => setCursor('grabbing')}
       onMouseUp={() => setCursor('grab')}
-      onClick={() => onSelectPoi(null)} 
+      onClick={() => {
+        onSelectPoi(null);
+        setSelectedVehicle(null);
+      }}
       interactiveLayerIds={['clusters', 'unclustered-point', 'mapbox-directions-route', 'oba-route-path']}
       onLoad={(e) => {
         if (mapRef && !mapRef.current) {
@@ -144,11 +160,12 @@ export function MapView({
       <FullscreenControl position="top-right" />
       <NavigationControl position="top-right" />
 
+      {/* POI Markers */}
       {pois.map(poi => {
         const IconComponent = Icons[getIconForPoiType(poi)] || Icons.MapPin;
         return (
           <Marker
-            key={poi.id}
+            key={`poi-${poi.id}`}
             longitude={poi.longitude}
             latitude={poi.latitude}
             onClick={(e) => handlePoiClick(e, poi)}
@@ -164,6 +181,26 @@ export function MapView({
         );
       })}
 
+      {/* OBA Vehicle Markers */}
+      {obaVehicleLocations.map(vehicle => (
+        <Marker
+          key={`vehicle-${vehicle.id}`}
+          longitude={vehicle.longitude}
+          latitude={vehicle.latitude}
+          onClick={(e) => handleVehicleClick(e, vehicle)}
+          anchor="bottom"
+          // rotation={vehicle.heading} // Mapbox GL JS Marker doesn't directly support rotation. SymbolLayer would be needed for this.
+        >
+          <button className="transform hover:scale-110 transition-transform focus:outline-none">
+             <Icons.Car // Using Car icon for vehicles for now to differentiate
+                className={`w-6 h-6 ${selectedVehicle?.id === vehicle.id ? 'text-orange-500' : 'text-teal-600'} drop-shadow-md`}
+                strokeWidth={selectedVehicle?.id === vehicle.id ? 2.5 : 1.5}
+              />
+          </button>
+        </Marker>
+      ))}
+
+      {/* POI Popup */}
       {selectedPoi && (
         <Popup
           longitude={selectedPoi.longitude}
@@ -245,6 +282,37 @@ export function MapView({
           </Card>
         </Popup>
       )}
+
+      {/* Vehicle Popup */}
+      {selectedVehicle && (
+        <Popup
+          longitude={selectedVehicle.longitude}
+          latitude={selectedVehicle.latitude}
+          onClose={() => setSelectedVehicle(null)}
+          closeOnClick={false}
+          anchor="top"
+          offset={25}
+          className="font-body"
+          maxWidth="280px"
+        >
+          <Card className="border-none shadow-none">
+            <CardHeader className="p-3">
+              <CardTitle className="text-base font-headline">Vehicle {selectedVehicle.id.split('_')[1] || selectedVehicle.id}</CardTitle>
+              {selectedVehicle.tripHeadsign && (
+                <CardDescription className="text-xs">
+                  Route {selectedVehicle.routeId.split('_')[1] || selectedVehicle.routeId} to: {selectedVehicle.tripHeadsign}
+                </CardDescription>
+              )}
+            </CardHeader>
+            <CardContent className="p-3 pt-0 text-sm space-y-1">
+              {selectedVehicle.phase && <p>Status: <Badge variant="outline" className="text-xs">{selectedVehicle.phase.replace(/_/g, ' ')}</Badge></p>}
+              <p>Last Update: {selectedVehicle.lastUpdateTime ? formatObaTime(selectedVehicle.lastUpdateTime) : 'N/A'}</p>
+              {typeof selectedVehicle.heading === 'number' && <p>Heading: {selectedVehicle.heading}°</p>}
+            </CardContent>
+          </Card>
+        </Popup>
+      )}
+
 
       {mapboxDirectionsRoute && mapboxDirectionsRoute.geometry && (
         <Source id="mapbox-directions-route-source" type="geojson" data={mapboxDirectionsRoute.geometry}>

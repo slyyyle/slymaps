@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { Icons } from '@/components/icons';
 import { INITIAL_VIEW_STATE, INITIAL_POIS, MAP_STYLES, MAPBOX_ACCESS_TOKEN, ONEBUSAWAY_API_KEY } from '@/lib/constants';
-import type { PointOfInterest, CustomPOI, MapStyle, Route as RouteType, Coordinates, TransitMode, ObaArrivalDeparture, ObaPolyline, ObaRouteGeometry, ObaRoute, CurrentOBARouteDisplayData } from '@/types';
+import type { PointOfInterest, CustomPOI, MapStyle, Route as RouteType, Coordinates, TransitMode, ObaArrivalDeparture, ObaPolyline, ObaRouteGeometry, ObaRoute, CurrentOBARouteDisplayData, ObaVehicleLocation } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 
 const SearchBar = dynamic(() => import('@/components/search-bar').then(mod => mod.SearchBar), { 
@@ -39,6 +39,8 @@ export function AppShell() {
   const [obaRouteGeometry, setObaRouteGeometry] = useState<ObaRouteGeometry | null>(null);
   const [isLoadingObaRouteGeometry, setIsLoadingObaRouteGeometry] = useState(false);
   const [currentOBARouteDisplayData, setCurrentOBARouteDisplayData] = useState<CurrentOBARouteDisplayData | null>(null);
+  const [obaVehicleLocations, setObaVehicleLocations] = useState<ObaVehicleLocation[]>([]);
+  const [isLoadingObaVehicles, setIsLoadingObaVehicles] = useState(false);
 
 
   const { toast } = useToast();
@@ -190,12 +192,11 @@ export function AppShell() {
     setRoute(null); 
     setObaRouteGeometry(null);
     setCurrentOBARouteDisplayData(null);
+    setObaVehicleLocations([]);
     if (name) {
       toast({ title: "Location Found", description: `Navigating to ${name}`});
     }
   }, [handleFlyTo, toast]);
-
-  // handleAddCustomPoi and handleUpdateCustomPoi removed as per request
   
   const handleDeleteCustomPoi = useCallback((poiId: string) => {
     setCustomPois(prev => prev.filter(p => p.id !== poiId));
@@ -212,6 +213,7 @@ export function AppShell() {
     setRoute(null);
     setObaRouteGeometry(null); 
     setCurrentOBARouteDisplayData(null);
+    setObaVehicleLocations([]);
     const query = await fetch(
       `https://api.mapbox.com/directions/v5/mapbox/${mode}/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?steps=true&geometries=geojson&access_token=${MAPBOX_ACCESS_TOKEN}`
     );
@@ -234,6 +236,43 @@ export function AppShell() {
     setIsLoadingRoute(false);
   }, [handleFlyTo, toast]);
 
+  const fetchVehiclesForObaRoute = useCallback(async (routeId: string) => {
+    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE" || ONEBUSAWAY_API_KEY === "") return;
+    setIsLoadingObaVehicles(true);
+    setObaVehicleLocations([]);
+    try {
+      const response = await fetch(`https://api.pugetsound.onebusaway.org/api/where/vehicles-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includeStatus=true&includeTrip=true`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.text || `Failed to fetch OBA vehicles (status ${response.status})`);
+      }
+      const data = await response.json();
+      if (data.data && data.data.list && data.data.list.length > 0) {
+        const vehicles: ObaVehicleLocation[] = data.data.list.map((v: any) => ({
+          id: v.vehicleId,
+          routeId: v.trip?.routeId || routeId, // Fallback to requested routeId
+          latitude: v.location.lat,
+          longitude: v.location.lon,
+          heading: v.heading,
+          tripId: v.trip?.id,
+          tripHeadsign: v.trip?.tripHeadsign,
+          lastUpdateTime: v.lastUpdateTime || v.observedLastKnownLocationTime,
+          phase: v.phase,
+        }));
+        setObaVehicleLocations(vehicles);
+      } else {
+        setObaVehicleLocations([]);
+         toast({ title: "No Vehicles Found", description: `No active vehicles currently reported for route ${routeId}.`, variant: "default" });
+      }
+    } catch (error) {
+      console.error(`Error fetching OBA vehicles for route ${routeId}:`, error);
+      toast({ title: "Error Fetching Vehicles", description: (error as Error).message, variant: "destructive" });
+      setObaVehicleLocations([]);
+    } finally {
+      setIsLoadingObaVehicles(false);
+    }
+  }, [toast]);
+
   const handleSelectRouteForPath = useCallback(async (routeId: string) => {
     if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE" || ONEBUSAWAY_API_KEY === "") {
       toast({ title: "Configuration Error", description: "OneBusAway API Key is missing.", variant: "destructive" });
@@ -242,6 +281,7 @@ export function AppShell() {
     setIsLoadingObaRouteGeometry(true);
     setObaRouteGeometry(null);
     setCurrentOBARouteDisplayData(null);
+    setObaVehicleLocations([]); // Clear previous vehicles
     setRoute(null); 
 
     try {
@@ -305,8 +345,11 @@ export function AppShell() {
       
       if (routeDetails && routeStops.length > 0) {
         setCurrentOBARouteDisplayData({ routeInfo: routeDetails, stops: routeStops });
+        // Fetch vehicles after route details are set
+        fetchVehiclesForObaRoute(routeId);
       } else {
         setCurrentOBARouteDisplayData(null); 
+        setObaVehicleLocations([]);
       }
 
       if (routePath && routePath.geometry.coordinates.length > 0) {
@@ -324,10 +367,11 @@ export function AppShell() {
       toast({ title: "Error Fetching Route Path", description: (error as Error).message, variant: "destructive" });
       setObaRouteGeometry(null);
       setCurrentOBARouteDisplayData(null);
+      setObaVehicleLocations([]);
     } finally {
       setIsLoadingObaRouteGeometry(false);
     }
-  }, [toast, handleFlyTo]);
+  }, [toast, handleFlyTo, fetchVehiclesForObaRoute]);
 
   const allPois = React.useMemo(() => {
     const combined = [...INITIAL_POIS, ...customPois, ...obaStopsData];
@@ -355,8 +399,6 @@ export function AppShell() {
                 currentMapStyle={currentMapStyle}
                 onMapStyleChange={setCurrentMapStyle}
                 customPois={customPois}
-                // onAddCustomPoi={handleAddCustomPoi} // Removed
-                // onUpdateCustomPoi={handleUpdateCustomPoi} // Removed
                 onDeleteCustomPoi={handleDeleteCustomPoi}
                 onGetDirections={fetchDirections}
                 isLoadingRoute={isLoadingRoute}
@@ -364,7 +406,6 @@ export function AppShell() {
                 destination={destination}
                 setDestination={setDestination}
                 onFlyTo={handleFlyTo}
-                // mapboxAccessToken={MAPBOX_ACCESS_TOKEN} // Removed
                 oneBusAwayApiKey={ONEBUSAWAY_API_KEY}
                 selectedPoi={selectedPoi}
                 onSelectPoi={handleSelectPoi}
@@ -373,6 +414,7 @@ export function AppShell() {
                 onSelectRouteForPath={handleSelectRouteForPath}
                 isLoadingObaRouteGeometry={isLoadingObaRouteGeometry}
                 currentOBARouteDisplayData={currentOBARouteDisplayData}
+                isLoadingObaVehicles={isLoadingObaVehicles}
               />
             </SheetContent>
           </Sheet>
@@ -389,6 +431,7 @@ export function AppShell() {
               setRoute(null);
               setObaRouteGeometry(null);
               setCurrentOBARouteDisplayData(null);
+              setObaVehicleLocations([]);
             }}
           />
       </div>
@@ -407,6 +450,7 @@ export function AppShell() {
         obaStopArrivals={obaStopArrivals}
         isLoadingArrivals={isLoadingArrivals}
         onSelectRouteForPath={handleSelectRouteForPath}
+        obaVehicleLocations={obaVehicleLocations}
       />
     </div>
   );
