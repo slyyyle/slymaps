@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Icons } from '@/components/icons';
 import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture, ObaRouteGeometry, CurrentOBARouteDisplayData } from '@/types';
-import { CustomPoiEditor } from '@/components/custom-poi-editor';
+// Removed: import { CustomPoiEditor } from '@/components/custom-poi-editor'; // Will be dynamically imported
 import { StyleSelector } from '@/components/style-selector';
 import { DirectionsResult } from '@/components/directions-result';
 import { Card, CardContent, CardHeader, CardTitle as ShadCnCardTitle } from './ui/card'; 
@@ -19,6 +19,11 @@ import { SheetHeader, SheetTitle } from '@/components/ui/sheet';
 const DirectionsForm = dynamic(() => import('@/components/directions-form').then(mod => mod.DirectionsForm), {
   ssr: false,
   loading: () => <div className="p-2 text-sm text-muted-foreground">Loading directions form...</div>
+});
+
+const CustomPoiEditor = dynamic(() => import('@/components/custom-poi-editor').then(mod => mod.CustomPoiEditor), {
+  ssr: false,
+  loading: () => <div className="p-2 text-sm text-muted-foreground">Loading POI editor...</div>
 });
 
 const OneBusAwayExplorer = dynamic(() => import('@/components/onebusaway-explorer').then(mod => mod.OneBusAwayExplorer), {
@@ -137,6 +142,7 @@ export function SidebarControls({
                   onSelectPoi(poi); // Ensure the POI is selected in AppShell
                   onFlyTo({latitude: poi.latitude, longitude: poi.longitude});
                 }}
+                mapboxAccessToken={mapboxAccessToken} // Pass token here
               />
             </AccordionContent>
           </AccordionItem>
