@@ -38,7 +38,7 @@ export interface RouteStep {
 
 export interface Route {
   id: string;
-  geometry: any; // GeoJSON LineString
+  geometry: any; // GeoJSON LineString for Mapbox Directions
   legs: {
     steps: RouteStep[];
     summary: string;
@@ -68,4 +68,21 @@ export interface ObaArrivalDeparture {
   vehicleId?: string;
   distanceFromStop?: number; // in meters
   lastUpdateTime?: number; // epoch time
+}
+
+export interface ObaPolyline {
+  points: string; // Encoded polyline string
+  length: number;
+}
+
+// For GeoJSON rendering of OBA route paths
+export interface ObaRouteGeometry {
+  type: "Feature";
+  geometry: {
+    type: "LineString";
+    coordinates: number[][]; // Array of [lon, lat]
+  };
+  properties: {
+    routeId: string;
+  };
 }

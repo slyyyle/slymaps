@@ -8,12 +8,15 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Icons } from '@/components/icons';
 import type { PointOfInterest, CustomPOI, ObaArrivalDeparture } from '@/types';
+import { Button } from './ui/button';
 
 interface OneBusAwayExplorerProps {
   apiKey: string;
   selectedPoi: PointOfInterest | CustomPOI | null;
   arrivals: ObaArrivalDeparture[];
   isLoadingArrivals: boolean;
+  onSelectRoute: (routeId: string) => void;
+  isLoadingRoutePath: boolean;
 }
 
 const formatObaTime = (epochTime: number | null | undefined): string => {
@@ -30,7 +33,7 @@ const getStatusColor = (status?: string) => {
 };
 
 
-export function OneBusAwayExplorer({ apiKey, selectedPoi, arrivals, isLoadingArrivals }: OneBusAwayExplorerProps) {
+export function OneBusAwayExplorer({ apiKey, selectedPoi, arrivals, isLoadingArrivals, onSelectRoute, isLoadingRoutePath }: OneBusAwayExplorerProps) {
   if (!apiKey || apiKey === "YOUR_ONEBUSAWAY_API_KEY_HERE" || apiKey === "") {
     return (
       <Card>
@@ -64,7 +67,7 @@ export function OneBusAwayExplorer({ apiKey, selectedPoi, arrivals, isLoadingArr
           </CardDescription>
         ) : (
           <CardDescription>
-            Select a bus stop on the map to view its live arrival times.
+            Select a bus stop on the map to view its live arrival times and route paths.
           </CardDescription>
         )}
       </CardHeader>
@@ -89,44 +92,60 @@ export function OneBusAwayExplorer({ apiKey, selectedPoi, arrivals, isLoadingArr
           </div>
         )}
         {currentObaStop && !isLoadingArrivals && arrivals.length > 0 && (
-          <ScrollArea className="h-[250px] pr-2">
-            <ul className="space-y-2.5">
-              {arrivals.map((arrival, index) => (
-                <li key={`${arrival.tripId}-${arrival.scheduledArrivalTime}-${index}`} className="p-2 rounded-md border bg-card/50">
-                  <div className="flex justify-between items-center mb-1">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="font-bold text-base px-2 py-1 w-16 text-center">
-                        {arrival.routeShortName}
-                      </Badge>
-                      <span className="font-medium text-sm truncate" title={arrival.tripHeadsign}>
-                        {arrival.tripHeadsign}
-                      </span>
-                    </div>
-                     <div className="flex items-center gap-1.5">
-                        {arrival.status && (
-                          <span 
-                            className={`inline-block h-2.5 w-2.5 rounded-full ${getStatusColor(arrival.status)}`} 
-                            title={`Status: ${arrival.status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}`}
-                          ></span>
-                        )}
-                        {arrival.predictedArrivalTime ? (
-                          <span className="font-semibold text-sm text-accent">{formatObaTime(arrival.predictedArrivalTime)}</span>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">{formatObaTime(arrival.scheduledArrivalTime)}</span>
-                        )}
+          <>
+            <ScrollArea className="h-[250px] pr-2">
+              <ul className="space-y-2.5">
+                {arrivals.map((arrival, index) => (
+                  <li key={`${arrival.tripId}-${arrival.scheduledArrivalTime}-${index}`} className="p-2 rounded-md border bg-card/50">
+                    <div className="flex justify-between items-center mb-1">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 h-auto font-bold text-base"
+                          onClick={() => onSelectRoute(arrival.routeId)}
+                          disabled={isLoadingRoutePath}
+                          title={`Show path for route ${arrival.routeShortName}`}
+                        >
+                          <Badge variant="secondary" className="font-bold text-base px-2 py-1 w-16 text-center hover:bg-primary/20">
+                            {arrival.routeShortName}
+                          </Badge>
+                        </Button>
+                        <span className="font-medium text-sm truncate" title={arrival.tripHeadsign}>
+                          {arrival.tripHeadsign}
+                        </span>
                       </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {arrival.predictedArrivalTime && arrival.predictedArrivalTime !== arrival.scheduledArrivalTime && (
-                       <p>Scheduled: {formatObaTime(arrival.scheduledArrivalTime)}</p>
-                    )}
-                    {arrival.status && <p>Status: {arrival.status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</p>}
-                    {arrival.vehicleId && <p>Vehicle: {arrival.vehicleId}</p>}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </ScrollArea>
+                       <div className="flex items-center gap-1.5">
+                          {arrival.status && (
+                            <span 
+                              className={`inline-block h-2.5 w-2.5 rounded-full ${getStatusColor(arrival.status)}`} 
+                              title={`Status: ${arrival.status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}`}
+                            ></span>
+                          )}
+                          {arrival.predictedArrivalTime ? (
+                            <span className="font-semibold text-sm text-accent">{formatObaTime(arrival.predictedArrivalTime)}</span>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">{formatObaTime(arrival.scheduledArrivalTime)}</span>
+                          )}
+                        </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {arrival.predictedArrivalTime && arrival.predictedArrivalTime !== arrival.scheduledArrivalTime && (
+                         <p>Scheduled: {formatObaTime(arrival.scheduledArrivalTime)}</p>
+                      )}
+                      {arrival.status && <p>Status: {arrival.status.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</p>}
+                      {arrival.vehicleId && <p>Vehicle: {arrival.vehicleId}</p>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </ScrollArea>
+            {isLoadingRoutePath && (
+              <div className="flex items-center justify-center text-sm text-muted-foreground mt-2">
+                <Icons.Route className="mr-2 h-4 w-4 animate-spin" /> Loading route path...
+              </div>
+            )}
+          </>
         )}
         {currentObaStop && !isLoadingArrivals && arrivals.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-4">

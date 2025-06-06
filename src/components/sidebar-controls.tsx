@@ -9,7 +9,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Icons } from '@/components/icons';
-import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture } from '@/types';
+import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture, ObaRouteGeometry } from '@/types';
 import { CustomPoiEditor } from '@/components/custom-poi-editor';
 import { StyleSelector } from '@/components/style-selector';
 import { DirectionsResult } from '@/components/directions-result';
@@ -45,6 +45,8 @@ interface SidebarControlsProps {
   selectedPoi: PointOfInterest | CustomPOI | null;
   obaStopArrivals: ObaArrivalDeparture[];
   isLoadingArrivals: boolean;
+  onSelectRouteForPath: (routeId: string) => void;
+  isLoadingObaRouteGeometry: boolean;
 }
 
 export function SidebarControls({
@@ -66,6 +68,8 @@ export function SidebarControls({
   selectedPoi,
   obaStopArrivals,
   isLoadingArrivals,
+  onSelectRouteForPath,
+  isLoadingObaRouteGeometry,
 }: SidebarControlsProps) {
   const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>("directions");
 
@@ -106,6 +110,8 @@ export function SidebarControls({
                 selectedPoi={selectedPoi}
                 arrivals={obaStopArrivals}
                 isLoadingArrivals={isLoadingArrivals}
+                onSelectRoute={onSelectRouteForPath}
+                isLoadingRoutePath={isLoadingObaRouteGeometry}
               />
             </AccordionContent>
           </AccordionItem>

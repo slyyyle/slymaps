@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Map, { Marker, Popup, NavigationControl, FullscreenControl, GeolocateControl, Source, Layer, type ViewState, type MapLayerMouseEvent, type MapRef } from 'react-map-gl';
-import type { PointOfInterest, CustomPOI, Route as RouteType, Coordinates, ObaArrivalDeparture } from '@/types';
+import type { PointOfInterest, CustomPOI, Route as MapboxRouteType, Coordinates, ObaArrivalDeparture, ObaRouteGeometry } from '@/types';
 import { MAPBOX_ACCESS_TOKEN, INITIAL_VIEW_STATE } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Icons, IconName } from '@/components/icons';
 import Image from 'next/image';
 import { Skeleton } from './ui/skeleton';
+import { Button } from './ui/button'; // Added for route selection in popup
 
 interface MapViewProps {
   mapRef: React.RefObject<MapRef>;
@@ -20,10 +21,13 @@ interface MapViewProps {
   selectedPoi: PointOfInterest | CustomPOI | null;
   onSelectPoi: (poi: PointOfInterest | CustomPOI | null) => void;
   mapStyleUrl: string;
-  route: RouteType | null;
+  mapboxDirectionsRoute: MapboxRouteType | null; // For Mapbox Directions
+  obaRouteGeometry: ObaRouteGeometry | null; // For OBA route paths
   onFlyTo: (coords: Coordinates, zoom?: number) => void;
   obaStopArrivals: ObaArrivalDeparture[];
   isLoadingArrivals: boolean;
+  // Add onSelectRouteForPath if making routes in popup clickable, similar to sidebar
+  // onSelectRouteForPath?: (routeId: string) => void; 
 }
 
 const getIconForPoiType = (poi: PointOfInterest | CustomPOI): IconName => {
@@ -61,7 +65,8 @@ export function MapView({
   selectedPoi,
   onSelectPoi,
   mapStyleUrl,
-  route,
+  mapboxDirectionsRoute,
+  obaRouteGeometry,
   onFlyTo,
   obaStopArrivals,
   isLoadingArrivals,
@@ -81,15 +86,22 @@ export function MapView({
   const handlePoiClick = (e: MapLayerMouseEvent, poi: PointOfInterest | CustomPOI) => {
     e.originalEvent.stopPropagation();
     onSelectPoi(poi);
-    // FlyTo is handled by onSelectPoi in AppShell to coordinate arrival fetching
   };
 
-  const routeLayer: any = {
-    id: 'route',
+  const mapboxDirectionsRouteLayer: any = {
+    id: 'mapbox-directions-route',
     type: 'line',
-    source: 'route',
+    source: 'mapbox-directions-route-source',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': 'hsl(var(--accent))', 'line-width': 6, 'line-opacity': 0.8 },
+  };
+
+  const obaRoutePathLayer: any = {
+    id: 'oba-route-path',
+    type: 'line',
+    source: 'oba-route-path-source',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': 'hsl(var(--primary))', 'line-width': 5, 'line-opacity': 0.75, 'line-dasharray': [2, 2] },
   };
   
   const buildingsLayer: any = {
@@ -120,11 +132,9 @@ export function MapView({
       cursor={cursor}
       onMouseDown={() => setCursor('grabbing')}
       onMouseUp={() => setCursor('grab')}
-      onClick={() => onSelectPoi(null)}
-      interactiveLayerIds={['clusters', 'unclustered-point', 'route']}
+      onClick={() => onSelectPoi(null)} // Deselect POI on map click
+      interactiveLayerIds={['clusters', 'unclustered-point', 'mapbox-directions-route', 'oba-route-path']}
       onLoad={(e) => {
-        // mapRef.current is already set if this Map component is the one controlling it.
-        // If mapRef is passed for an externally controlled map, this onLoad gives the instance.
         if (mapRef && !mapRef.current) {
           (mapRef as React.MutableRefObject<MapRef | null>).current = e.target;
         }
@@ -159,7 +169,7 @@ export function MapView({
           longitude={selectedPoi.longitude}
           latitude={selectedPoi.latitude}
           onClose={() => onSelectPoi(null)}
-          closeOnClick={false}
+          closeOnClick={false} // Keep popup open when map is clicked, deselect handled by map's onClick
           anchor="top"
           offset={25}
           className="font-body"
@@ -200,6 +210,7 @@ export function MapView({
                       {obaStopArrivals.map((arrival, index) => (
                         <li key={`${arrival.tripId}-${arrival.scheduledArrivalTime}-${index}`} className="flex justify-between items-center gap-2">
                           <div className="flex items-center gap-1.5">
+                            {/* Route short name in popup is not clickable for now to keep it simple, use sidebar */}
                             <Badge variant="secondary" className="font-semibold w-12 text-center truncate">{arrival.routeShortName}</Badge>
                             <span className="truncate flex-1" title={arrival.tripHeadsign}>{arrival.tripHeadsign}</span>
                           </div>
@@ -212,7 +223,6 @@ export function MapView({
                             ) : (
                               <span className="text-muted-foreground">{formatObaTime(arrival.scheduledArrivalTime)}</span>
                             )}
-                           
                           </div>
                         </li>
                       ))}
@@ -227,9 +237,15 @@ export function MapView({
         </Popup>
       )}
 
-      {route && route.geometry && (
-        <Source id="route" type="geojson" data={route.geometry}>
-          <Layer {...routeLayer} />
+      {mapboxDirectionsRoute && mapboxDirectionsRoute.geometry && (
+        <Source id="mapbox-directions-route-source" type="geojson" data={mapboxDirectionsRoute.geometry}>
+          <Layer {...mapboxDirectionsRouteLayer} />
+        </Source>
+      )}
+
+      {obaRouteGeometry && obaRouteGeometry.geometry && (
+         <Source id="oba-route-path-source" type="geojson" data={obaRouteGeometry}>
+          <Layer {...obaRoutePathLayer} />
         </Source>
       )}
       
