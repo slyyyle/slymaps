@@ -9,7 +9,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 // Removed: import { Button } from '@/components/ui/button';
 // Removed: import { Separator } from '@/components/ui/separator';
 import { Icons } from '@/components/icons';
-import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture, CurrentOBARouteDisplayData } from '@/types';
+import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture, CurrentOBARouteDisplayData, ObaRoute } from '@/types';
 import { StyleSelector } from '@/components/style-selector';
 import { DirectionsResult } from '@/components/directions-result';
 // Removed: import { Card, CardContent, CardHeader, CardTitle as ShadCnCardTitle } from './ui/card'; 
@@ -51,6 +51,7 @@ interface SidebarControlsProps {
   isLoadingObaRouteGeometry: boolean;
   currentOBARouteDisplayData: CurrentOBARouteDisplayData | null;
   isLoadingObaVehicles: boolean;
+  obaReferencedRoutes: Record<string, ObaRoute>;
 }
 
 export function SidebarControls({
@@ -74,6 +75,7 @@ export function SidebarControls({
   isLoadingObaRouteGeometry,
   currentOBARouteDisplayData,
   isLoadingObaVehicles,
+  obaReferencedRoutes,
 }: SidebarControlsProps) {
   const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>("onebusaway-explorer");
 
@@ -120,6 +122,7 @@ export function SidebarControls({
                 onSelectPoiFromList={onSelectPoi}
                 onFlyTo={onFlyTo}
                 isLoadingObaVehicles={isLoadingObaVehicles}
+                obaReferencedRoutes={obaReferencedRoutes}
               />
             </AccordionContent>
           </AccordionItem>
@@ -129,12 +132,14 @@ export function SidebarControls({
               <Icons.MapPin className="w-5 h-5 mr-2" /> Custom POIs
             </AccordionTrigger>
             <AccordionContent>
-              <CustomPoiEditor
+               <CustomPoiEditor
                 customPois={customPois}
                 onDelete={onDeleteCustomPoi}
                 onSelectPoi={(poi) => {
                   onSelectPoi(poi); 
-                  onFlyTo({latitude: poi.latitude, longitude: poi.longitude});
+                  if (poi.latitude && poi.longitude) {
+                    onFlyTo({latitude: poi.latitude, longitude: poi.longitude});
+                  }
                 }}
               />
             </AccordionContent>

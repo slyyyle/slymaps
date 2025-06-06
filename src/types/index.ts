@@ -90,12 +90,24 @@ export interface ObaRouteGeometry {
   };
 }
 
+export interface ObaAgency {
+  id: string;
+  name: string;
+  url: string;
+  timezone: string;
+  lang?: string;
+  phone?: string;
+  fareUrl?: string;
+  email?: string;
+}
+
 export interface ObaRoute {
   id: string;
   shortName: string;
   longName?: string;
   description?: string;
   agencyId: string;
+  agency?: ObaAgency; // Optional, if full reference is included
   url?: string;
   color?: string;
   textColor?: string;
@@ -117,4 +129,13 @@ export interface ObaVehicleLocation {
   tripHeadsign?: string;
   lastUpdateTime?: number; // epoch time
   phase?: string; // e.g., IN_PROGRESS
+}
+
+// For the references section of OBA API responses
+export interface ObaReferences {
+  agencies: ObaAgency[];
+  routes: ObaRoute[];
+  stops: PointOfInterest[]; // OBA stop structure is similar enough to PointOfInterest
+  trips?: any[]; // Define if needed
+  situations?: any[]; // Define if needed
 }

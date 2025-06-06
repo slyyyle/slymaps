@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { Icons } from '@/components/icons';
 import { INITIAL_VIEW_STATE, INITIAL_POIS, MAP_STYLES, MAPBOX_ACCESS_TOKEN, ONEBUSAWAY_API_KEY } from '@/lib/constants';
-import type { PointOfInterest, CustomPOI, MapStyle, Route as RouteType, Coordinates, TransitMode, ObaArrivalDeparture, ObaPolyline, ObaRouteGeometry, ObaRoute, CurrentOBARouteDisplayData, ObaVehicleLocation } from '@/types';
+import type { PointOfInterest, CustomPOI, MapStyle, Route as RouteType, Coordinates, TransitMode, ObaArrivalDeparture, ObaPolyline, ObaRouteGeometry, ObaRoute, CurrentOBARouteDisplayData, ObaVehicleLocation, ObaReferences } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 
 const SearchBar = dynamic(() => import('@/components/search-bar').then(mod => mod.SearchBar), { 
@@ -28,6 +28,8 @@ export function AppShell() {
   const [selectedPoi, setSelectedPoi] = useState<PointOfInterest | CustomPOI | null>(null);
   const [obaStopArrivals, setObaStopArrivals] = useState<ObaArrivalDeparture[]>([]);
   const [isLoadingArrivals, setIsLoadingArrivals] = useState(false);
+  const [obaReferencedRoutes, setObaReferencedRoutes] = useState<Record<string, ObaRoute>>({});
+
 
   const [currentMapStyle, setCurrentMapStyle] = useState<MapStyle>(MAP_STYLES[0]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -82,7 +84,7 @@ export function AppShell() {
     }
 
     try {
-      const apiUrl = `https://api.pugetsound.onebusaway.org/api/where/stops-for-location.json?key=${ONEBUSAWAY_API_KEY}&lat=${lat}&lon=${lon}&latSpan=${latSpan}&lonSpan=${lonSpan}&includeReferences=false`;
+      const apiUrl = `https://api.pugetsound.onebusaway.org/api/where/stops-for-location.json?key=${ONEBUSAWAY_API_KEY}&lat=${lat}&lon=${lon}&latSpan=${latSpan}&lonSpan=${lonSpan}&includeReferences=true`;
       const response = await fetch(apiUrl);
       let errorMessage = `Failed to fetch OBA stops (status ${response.status})`;
       if (!response.ok) {
@@ -113,6 +115,15 @@ export function AppShell() {
           wheelchairBoarding: stop.wheelchairBoarding,
         }));
         setObaStopsData(fetchedStops);
+
+        if (data.data.references && data.data.references.routes) {
+          const newReferencedRoutes: Record<string, ObaRoute> = {};
+          (data.data.references.routes as ObaRoute[]).forEach(route => {
+            newReferencedRoutes[route.id] = route;
+          });
+          setObaReferencedRoutes(prev => ({ ...prev, ...newReferencedRoutes }));
+        }
+
       } else {
         setObaStopsData([]);
       }
@@ -322,7 +333,7 @@ export function AppShell() {
     }
   }, [toast]);
 
-  const handleSelectRouteForPath = useCallback(async (routeId: string) => {
+  const handleSelectRouteForPath = useCallback(async (routeId: string | null | undefined) => {
     if (!routeId || typeof routeId !== 'string' || routeId.trim() === '') {
       toast({ title: "Invalid Route ID", description: "A valid OneBusAway Route ID is required to fetch its path.", variant: "destructive" });
       setIsLoadingObaRouteGeometry(false);
@@ -378,20 +389,28 @@ export function AppShell() {
       }
 
       let routeDetails: ObaRoute | null = null;
+      // The stops-for-route response puts route details in references.routes like stops-for-location
+      // It also includes route details directly in data.data.entry.route if includeReferences=false
+      // We are using includeReferences=true, so check references first.
       if (data.data && data.data.references && data.data.references.routes && data.data.references.routes.length > 0) {
-        const refRoute = data.data.references.routes[0];
-        routeDetails = {
-          id: refRoute.id,
-          shortName: refRoute.shortName,
-          longName: refRoute.longName,
-          description: refRoute.description,
-          agencyId: refRoute.agencyId,
-          url: refRoute.url,
-          color: refRoute.color,
-          textColor: refRoute.textColor,
-          type: refRoute.type,
-        };
+        // Find the specific route from references if multiple are returned (should usually be one for stops-for-route)
+        const refRoute = (data.data.references.routes as ObaRoute[]).find(r => r.id === routeId) || data.data.references.routes[0];
+         if (refRoute) {
+            routeDetails = {
+            id: refRoute.id,
+            shortName: refRoute.shortName,
+            longName: refRoute.longName,
+            description: refRoute.description,
+            agencyId: refRoute.agencyId,
+            agency: (data.data.references.agencies as ObaAgency[]).find(a => a.id === refRoute.agencyId),
+            url: refRoute.url,
+            color: refRoute.color,
+            textColor: refRoute.textColor,
+            type: refRoute.type,
+            };
+        }
       }
+
 
       let routeStops: PointOfInterest[] = [];
       if (data.data && data.data.list && Array.isArray(data.data.list)) {
@@ -410,29 +429,26 @@ export function AppShell() {
           }));
       }
       
-      // If we have stops, try to show route info even if routeDetails are partially missing.
-      if (routeStops.length > 0) {
-        let displayRouteInfo: ObaRoute;
-        if (routeDetails) {
-          displayRouteInfo = routeDetails;
-        } else {
-          // Construct a fallback routeInfo if full details are missing but we have stops
-          const shortNameFromId = routeId.includes('_') ? routeId.split('_')[1] : routeId;
-          displayRouteInfo = {
-            id: routeId,
-            shortName: shortNameFromId,
-            description: `Route ${shortNameFromId}`, // Fallback description
-            agencyId: routeId.includes('_') ? routeId.split('_')[0] : 'Unknown Agency', // Fallback agency
-          };
-        }
+      let displayRouteInfo: ObaRoute | null = routeDetails;
+
+      if (!displayRouteInfo && obaReferencedRoutes[routeId]) {
+        displayRouteInfo = obaReferencedRoutes[routeId];
+      }
+      
+      if (!displayRouteInfo && routeStops.length > 0) {
+        const shortNameFromId = routeId.includes('_') ? routeId.split('_')[1] : routeId;
+        displayRouteInfo = {
+          id: routeId,
+          shortName: shortNameFromId,
+          description: `Route ${shortNameFromId}`,
+          agencyId: routeId.includes('_') ? routeId.split('_')[0] : 'Unknown Agency',
+        };
+      }
+
+      if (displayRouteInfo) {
         setCurrentOBARouteDisplayData({ routeInfo: displayRouteInfo, stops: routeStops });
         await fetchVehiclesForObaRoute(routeId);
-      } else if (routeDetails) { 
-        // We have route details but no stops, still show route details
-         setCurrentOBARouteDisplayData({ routeInfo: routeDetails, stops: [] });
-         await fetchVehiclesForObaRoute(routeId); // Still try to fetch vehicles
       } else {
-        // No route details and no stops, clear display data
         setCurrentOBARouteDisplayData(null); 
         setObaVehicleLocations([]);
       }
@@ -442,14 +458,11 @@ export function AppShell() {
             const firstCoord = routePath.geometry.coordinates[0];
             handleFlyTo({ longitude: firstCoord[0], latitude: firstCoord[1] }, 13);
           }
-      } else if (!routeDetails && routeStops.length === 0) { 
-         // Only show this toast if we truly have no useful data (no path, no details, no stops)
+      } else if (!displayRouteInfo && routeStops.length === 0) { 
          toast({ title: "No Route Data", description: `No path, details, or stops found for route ${routeId}.`, variant: "default" });
-      } else if (!routePath && (routeDetails || routeStops.length > 0)) {
-         // Path is missing, but we have some details/stops to show in sidebar
+      } else if (!routePath && displayRouteInfo) {
          toast({ title: "Route Path Missing", description: `No polyline data found for route ${routeId}, but displaying available stop/route information.`, variant: "default" });
       }
-
 
     } catch (error) {
       console.error(`Error fetching OBA route path for ${routeId}:`, error);
@@ -464,7 +477,7 @@ export function AppShell() {
     } finally {
       setIsLoadingObaRouteGeometry(false);
     }
-  }, [toast, handleFlyTo, fetchVehiclesForObaRoute]);
+  }, [toast, handleFlyTo, fetchVehiclesForObaRoute, obaReferencedRoutes]);
 
   const allPois = React.useMemo(() => {
     const combined = [...INITIAL_POIS, ...obaStopsData];
@@ -507,6 +520,7 @@ export function AppShell() {
                 isLoadingObaRouteGeometry={isLoadingObaRouteGeometry}
                 currentOBARouteDisplayData={currentOBARouteDisplayData}
                 isLoadingObaVehicles={isLoadingObaVehicles}
+                obaReferencedRoutes={obaReferencedRoutes}
               />
             </SheetContent>
           </Sheet>
