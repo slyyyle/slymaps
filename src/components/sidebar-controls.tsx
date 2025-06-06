@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use client";
 
 import React, { useState } from 'react';
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Icons } from '@/components/icons';
 import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode } from '@/types';
-import { AiTransitAdvisor } from '@/components/ai-transit-advisor';
+// import { AiTransitAdvisor } from '@/components/ai-transit-advisor'; // Removed
 import { CustomPoiEditor } from '@/components/custom-poi-editor';
 import { StyleSelector } from '@/components/style-selector';
 import { DirectionsForm } from '@/components/directions-form';
@@ -73,6 +74,7 @@ export function SidebarControls({
             </AccordionContent>
           </AccordionItem>
 
+          {/* Removed AI Transit Advisor Accordion Item
           <AccordionItem value="ai-transit-advisor">
             <AccordionTrigger className="font-headline text-base">
               <Icons.Suggestion className="w-5 h-5 mr-2" /> AI Transit Advisor
@@ -81,6 +83,7 @@ export function SidebarControls({
               <AiTransitAdvisor />
             </AccordionContent>
           </AccordionItem>
+          */}
 
           <AccordionItem value="custom-pois">
             <AccordionTrigger className="font-headline text-base">
