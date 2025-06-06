@@ -1,0 +1,124 @@
+"use client";
+
+import React, { useState } from 'react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { Icons } from '@/components/icons';
+import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode } from '@/types';
+import { AiTransitAdvisor } from '@/components/ai-transit-advisor';
+import { CustomPoiEditor } from '@/components/custom-poi-editor';
+import { StyleSelector } from '@/components/style-selector';
+import { DirectionsForm } from '@/components/directions-form';
+import { DirectionsResult } from '@/components/directions-result';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+
+interface SidebarControlsProps {
+  mapStyles: MapStyle[];
+  currentMapStyle: MapStyle;
+  onMapStyleChange: (style: MapStyle) => void;
+  customPois: CustomPOI[];
+  onAddCustomPoi: (poi: CustomPOI) => void;
+  onUpdateCustomPoi: (poi: CustomPOI) => void;
+  onDeleteCustomPoi: (poiId: string) => void;
+  onGetDirections: (start: Coordinates, end: Coordinates, mode: TransitMode) => Promise<void>;
+  isLoadingRoute: boolean;
+  currentRoute: RouteType | null;
+  destination: Coordinates | null;
+  setDestination: (dest: Coordinates | null) => void;
+  onFlyTo: (coords: Coordinates, zoom?: number) => void;
+}
+
+export function SidebarControls({
+  mapStyles,
+  currentMapStyle,
+  onMapStyleChange,
+  customPois,
+  onAddCustomPoi,
+  onUpdateCustomPoi,
+  onDeleteCustomPoi,
+  onGetDirections,
+  isLoadingRoute,
+  currentRoute,
+  destination,
+  setDestination,
+  onFlyTo,
+}: SidebarControlsProps) {
+  const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>("directions");
+
+  return (
+    <>
+      <div className="p-4 border-b">
+        <h2 className="text-lg font-headline font-semibold flex items-center">
+          <Icons.Settings className="w-5 h-5 mr-2" />
+          Controls
+        </h2>
+      </div>
+      <ScrollArea className="flex-1">
+        <Accordion type="single" collapsible className="w-full p-4" value={activeAccordionItem} onValueChange={setActiveAccordionItem}>
+          <AccordionItem value="directions">
+            <AccordionTrigger className="font-headline text-base">
+              <Icons.Directions className="w-5 h-5 mr-2" /> Directions
+            </AccordionTrigger>
+            <AccordionContent>
+              <DirectionsForm
+                onGetDirections={onGetDirections}
+                isLoading={isLoadingRoute}
+                destination={destination}
+                setDestination={setDestination}
+                onFlyTo={onFlyTo}
+              />
+              {currentRoute && <DirectionsResult route={currentRoute} />}
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="ai-transit-advisor">
+            <AccordionTrigger className="font-headline text-base">
+              <Icons.Suggestion className="w-5 h-5 mr-2" /> AI Transit Advisor
+            </AccordionTrigger>
+            <AccordionContent>
+              <AiTransitAdvisor />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="custom-pois">
+            <AccordionTrigger className="font-headline text-base">
+              <Icons.MapPin className="w-5 h-5 mr-2" /> Custom POIs
+            </AccordionTrigger>
+            <AccordionContent>
+              <CustomPoiEditor
+                customPois={customPois}
+                onAdd={onAddCustomPoi}
+                onUpdate={onUpdateCustomPoi}
+                onDelete={onDeleteCustomPoi}
+                onSelectPoi={(poi) => onFlyTo({latitude: poi.latitude, longitude: poi.longitude})}
+              />
+            </AccordionContent>
+          </AccordionItem>
+          
+          <AccordionItem value="map-style">
+            <AccordionTrigger className="font-headline text-base">
+              <Icons.MapStyle className="w-5 h-5 mr-2" /> Map Style
+            </AccordionTrigger>
+            <AccordionContent>
+              <StyleSelector
+                styles={mapStyles}
+                currentStyleId={currentMapStyle.id}
+                onStyleChange={(styleId) => {
+                  const newStyle = mapStyles.find(s => s.id === styleId);
+                  if (newStyle) onMapStyleChange(newStyle);
+                }}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </ScrollArea>
+      <div className="p-4 border-t mt-auto">
+        <p className="text-xs text-muted-foreground text-center">
+          Seattle Transit Compass &copy; {new Date().getFullYear()}
+        </p>
+      </div>
+    </>
+  );
+}
