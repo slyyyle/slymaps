@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -5,7 +6,6 @@ import type { ViewState } from 'react-map-gl';
 import dynamic from 'next/dynamic';
 import { MapView } from '@/components/map-view';
 import { SidebarControls } from '@/components/sidebar-controls';
-// import { SearchBar } from '@/components/search-bar'; // Original static import
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { Icons } from '@/components/icons';
@@ -48,15 +48,12 @@ export function AppShell() {
       latitude: coords.latitude,
       zoom,
       transitionDuration: 2000,
-      // transitionInterpolator: new FlyToInterpolator(), // react-map-gl v6, v7 uses different approach
     }));
   }, []);
 
   const handleSearchResult = useCallback((coords: Coordinates, name?: string) => {
     handleFlyTo(coords);
     setDestination(coords);
-    // Optionally add a temporary marker for the search result
-    // Or clear existing route if a new search is made
     setRoute(null); 
     if (name) {
       toast({ title: "Location Found", description: `Navigating to ${name}`});
@@ -80,7 +77,10 @@ export function AppShell() {
   }, [toast]);
 
   const fetchDirections = useCallback(async (start: Coordinates, end: Coordinates, mode: TransitMode) => {
-    if (!MAPBOX_ACCESS_TOKEN) return;
+    if (!MAPBOX_ACCESS_TOKEN) {
+      toast({ title: "Configuration Error", description: "Mapbox Access Token is missing.", variant: "destructive" });
+      return;
+    }
     setIsLoadingRoute(true);
     setRoute(null);
     const query = await fetch(
@@ -97,7 +97,7 @@ export function AppShell() {
         duration: data.duration,
       };
       setRoute(newRoute);
-      handleFlyTo({longitude: (start.longitude + end.longitude)/2, latitude: (start.latitude + end.latitude)/2}, 12); // Adjust zoom based on route bounds
+      handleFlyTo({longitude: (start.longitude + end.longitude)/2, latitude: (start.latitude + end.latitude)/2}, 12);
     } else {
       console.error("Directions API error:", json.message);
       toast({ title: "Error Fetching Directions", description: json.message || "Could not find a route.", variant: "destructive" });
@@ -133,6 +133,7 @@ export function AppShell() {
                 destination={destination}
                 setDestination={setDestination}
                 onFlyTo={handleFlyTo}
+                mapboxAccessToken={MAPBOX_ACCESS_TOKEN}
               />
             </SheetContent>
           </Sheet>

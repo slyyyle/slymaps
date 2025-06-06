@@ -1,7 +1,9 @@
+
 // @ts-nocheck
 "use client";
 
 import React, { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
@@ -10,10 +12,15 @@ import { Icons } from '@/components/icons';
 import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode } from '@/types';
 import { CustomPoiEditor } from '@/components/custom-poi-editor';
 import { StyleSelector } from '@/components/style-selector';
-import { DirectionsForm } from '@/components/directions-form';
+// import { DirectionsForm } from '@/components/directions-form'; // Removed direct import
 import { DirectionsResult } from '@/components/directions-result';
 import { Card, CardContent, CardHeader, CardTitle as ShadCnCardTitle } from './ui/card'; // Renamed to avoid conflict
 import { SheetHeader, SheetTitle } from '@/components/ui/sheet'; // Import SheetHeader and SheetTitle
+
+const DirectionsForm = dynamic(() => import('@/components/directions-form').then(mod => mod.DirectionsForm), {
+  ssr: false,
+  loading: () => <div className="p-2 text-sm text-muted-foreground">Loading directions form...</div>
+});
 
 interface SidebarControlsProps {
   mapStyles: MapStyle[];
@@ -29,6 +36,7 @@ interface SidebarControlsProps {
   destination: Coordinates | null;
   setDestination: (dest: Coordinates | null) => void;
   onFlyTo: (coords: Coordinates, zoom?: number) => void;
+  mapboxAccessToken: string;
 }
 
 export function SidebarControls({
@@ -45,6 +53,7 @@ export function SidebarControls({
   destination,
   setDestination,
   onFlyTo,
+  mapboxAccessToken,
 }: SidebarControlsProps) {
   const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>("directions");
 
@@ -69,6 +78,7 @@ export function SidebarControls({
                 destination={destination}
                 setDestination={setDestination}
                 onFlyTo={onFlyTo}
+                mapboxAccessToken={mapboxAccessToken}
               />
               {currentRoute && <DirectionsResult route={currentRoute} />}
             </AccordionContent>
