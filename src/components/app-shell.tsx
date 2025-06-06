@@ -9,7 +9,7 @@ import { SidebarControls } from '@/components/sidebar-controls';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { Icons } from '@/components/icons';
-import { INITIAL_VIEW_STATE, INITIAL_POIS, MAP_STYLES, MAPBOX_ACCESS_TOKEN } from '@/lib/constants';
+import { INITIAL_VIEW_STATE, INITIAL_POIS, MAP_STYLES, MAPBOX_ACCESS_TOKEN, ONEBUSAWAY_API_KEY } from '@/lib/constants';
 import type { PointOfInterest, CustomPOI, MapStyle, Route as RouteType, Coordinates, TransitMode } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 
@@ -36,6 +36,14 @@ export function AppShell() {
       toast({
         title: "Configuration Error",
         description: "Mapbox Access Token is missing. Maps may not function correctly.",
+        variant: "destructive",
+      });
+    }
+    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE") {
+      console.error("OneBusAway API Key is missing. Please set NEXT_PUBLIC_ONEBUSAWAY_API_KEY environment variable.");
+      toast({
+        title: "Configuration Error",
+        description: "OneBusAway API Key is missing. Real-time transit features will be unavailable.",
         variant: "destructive",
       });
     }
@@ -134,6 +142,7 @@ export function AppShell() {
                 setDestination={setDestination}
                 onFlyTo={handleFlyTo}
                 mapboxAccessToken={MAPBOX_ACCESS_TOKEN}
+                oneBusAwayApiKey={ONEBUSAWAY_API_KEY}
               />
             </SheetContent>
           </Sheet>

@@ -1,6 +1,7 @@
 import type { PointOfInterest, MapStyle } from '@/types';
 
 export const MAPBOX_ACCESS_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
+export const ONEBUSAWAY_API_KEY = process.env.NEXT_PUBLIC_ONEBUSAWAY_API_KEY || '';
 
 export const CAPITOL_HILL_COORDS = {
   longitude: -122.3207,

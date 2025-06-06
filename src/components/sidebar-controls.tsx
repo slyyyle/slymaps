@@ -12,14 +12,18 @@ import { Icons } from '@/components/icons';
 import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode } from '@/types';
 import { CustomPoiEditor } from '@/components/custom-poi-editor';
 import { StyleSelector } from '@/components/style-selector';
-// import { DirectionsForm } from '@/components/directions-form'; // Removed direct import
 import { DirectionsResult } from '@/components/directions-result';
-import { Card, CardContent, CardHeader, CardTitle as ShadCnCardTitle } from './ui/card'; // Renamed to avoid conflict
-import { SheetHeader, SheetTitle } from '@/components/ui/sheet'; // Import SheetHeader and SheetTitle
+import { Card, CardContent, CardHeader, CardTitle as ShadCnCardTitle } from './ui/card'; 
+import { SheetHeader, SheetTitle } from '@/components/ui/sheet'; 
 
 const DirectionsForm = dynamic(() => import('@/components/directions-form').then(mod => mod.DirectionsForm), {
   ssr: false,
   loading: () => <div className="p-2 text-sm text-muted-foreground">Loading directions form...</div>
+});
+
+const OneBusAwayExplorer = dynamic(() => import('@/components/onebusaway-explorer').then(mod => mod.OneBusAwayExplorer), {
+  ssr: false,
+  loading: () => <div className="p-2 text-sm text-muted-foreground">Loading OneBusAway Explorer...</div>
 });
 
 interface SidebarControlsProps {
@@ -37,6 +41,7 @@ interface SidebarControlsProps {
   setDestination: (dest: Coordinates | null) => void;
   onFlyTo: (coords: Coordinates, zoom?: number) => void;
   mapboxAccessToken: string;
+  oneBusAwayApiKey: string;
 }
 
 export function SidebarControls({
@@ -54,6 +59,7 @@ export function SidebarControls({
   setDestination,
   onFlyTo,
   mapboxAccessToken,
+  oneBusAwayApiKey,
 }: SidebarControlsProps) {
   const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>("directions");
 
@@ -81,6 +87,15 @@ export function SidebarControls({
                 mapboxAccessToken={mapboxAccessToken}
               />
               {currentRoute && <DirectionsResult route={currentRoute} />}
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="onebusaway-explorer">
+            <AccordionTrigger className="font-headline text-base">
+              <Icons.Bus className="w-5 h-5 mr-2" /> OneBusAway Explorer
+            </AccordionTrigger>
+            <AccordionContent>
+              <OneBusAwayExplorer apiKey={oneBusAwayApiKey} />
             </AccordionContent>
           </AccordionItem>
 
