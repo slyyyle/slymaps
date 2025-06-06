@@ -88,14 +88,14 @@ export function OneBusAwayExplorer({
           <CardTitle className="flex items-center">
             <Icons.Search className="mr-2 h-5 w-5 text-primary" /> Find Route
           </CardTitle>
-          <CardDescription>Enter a OneBusAway Route ID (e.g., 1_100226 for KCM Route 49) to see its path and stops.</CardDescription>
+          <CardDescription>Enter a OneBusAway Route ID (e.g., 1_100208 for KCM Route 40) to see its path and stops.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           <Label htmlFor="route-id-search">OBA Route ID</Label>
           <div className="flex space-x-2">
             <Input 
               id="route-id-search"
-              placeholder="e.g., 1_100226"
+              placeholder="e.g., 1_100208"
               value={routeIdQuery}
               onChange={(e) => setRouteIdQuery(e.target.value)}
               onKeyPress={(e) => { if (e.key === 'Enter') handleRouteSearch(); }}
@@ -262,3 +262,5 @@ export function OneBusAwayExplorer({
     </div>
   );
 }
+
+ 
