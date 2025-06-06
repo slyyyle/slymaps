@@ -8,12 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Icons } from '@/components/icons';
 import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode } from '@/types';
-// import { AiTransitAdvisor } from '@/components/ai-transit-advisor'; // Removed
 import { CustomPoiEditor } from '@/components/custom-poi-editor';
 import { StyleSelector } from '@/components/style-selector';
 import { DirectionsForm } from '@/components/directions-form';
 import { DirectionsResult } from '@/components/directions-result';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardHeader, CardTitle as ShadCnCardTitle } from './ui/card'; // Renamed to avoid conflict
+import { SheetHeader, SheetTitle } from '@/components/ui/sheet'; // Import SheetHeader and SheetTitle
 
 interface SidebarControlsProps {
   mapStyles: MapStyle[];
@@ -50,12 +50,12 @@ export function SidebarControls({
 
   return (
     <>
-      <div className="p-4 border-b">
-        <h2 className="text-lg font-headline font-semibold flex items-center">
+      <SheetHeader className="p-4 border-b">
+        <SheetTitle className="text-lg font-headline font-semibold flex items-center">
           <Icons.Settings className="w-5 h-5 mr-2" />
           Controls
-        </h2>
-      </div>
+        </SheetTitle>
+      </SheetHeader>
       <ScrollArea className="flex-1">
         <Accordion type="single" collapsible className="w-full p-4" value={activeAccordionItem} onValueChange={setActiveAccordionItem}>
           <AccordionItem value="directions">
@@ -73,17 +73,6 @@ export function SidebarControls({
               {currentRoute && <DirectionsResult route={currentRoute} />}
             </AccordionContent>
           </AccordionItem>
-
-          {/* Removed AI Transit Advisor Accordion Item
-          <AccordionItem value="ai-transit-advisor">
-            <AccordionTrigger className="font-headline text-base">
-              <Icons.Suggestion className="w-5 h-5 mr-2" /> AI Transit Advisor
-            </AccordionTrigger>
-            <AccordionContent>
-              <AiTransitAdvisor />
-            </AccordionContent>
-          </AccordionItem>
-          */}
 
           <AccordionItem value="custom-pois">
             <AccordionTrigger className="font-headline text-base">
