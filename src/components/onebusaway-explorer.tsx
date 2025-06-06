@@ -1,7 +1,7 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,8 @@ import { Icons } from '@/components/icons';
 import type { PointOfInterest, CustomPOI, ObaArrivalDeparture, CurrentOBARouteDisplayData, Coordinates } from '@/types';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
 
 interface OneBusAwayExplorerProps {
   apiKey: string;
@@ -48,6 +50,8 @@ export function OneBusAwayExplorer({
   onSelectPoiFromList,
   onFlyTo
 }: OneBusAwayExplorerProps) {
+  const [routeIdQuery, setRouteIdQuery] = useState('');
+
   if (!apiKey || apiKey === "YOUR_ONEBUSAWAY_API_KEY_HERE" || apiKey === "") {
     return (
       <Card>
@@ -69,8 +73,39 @@ export function OneBusAwayExplorer({
 
   const currentObaStop = selectedPoi && selectedPoi.isObaStop ? selectedPoi : null;
 
+  const handleRouteSearch = () => {
+    if (routeIdQuery.trim()) {
+      onSelectRoute(routeIdQuery.trim());
+    }
+  };
+
   return (
     <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Icons.Search className="mr-2 h-5 w-5 text-primary" /> Find Route
+          </CardTitle>
+          <CardDescription>Enter a OneBusAway Route ID (e.g., 1_100226 for KCM Route 49) to see its path and stops.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Label htmlFor="route-id-search">OBA Route ID</Label>
+          <div className="flex space-x-2">
+            <Input 
+              id="route-id-search"
+              placeholder="e.g., 1_100226"
+              value={routeIdQuery}
+              onChange={(e) => setRouteIdQuery(e.target.value)}
+              onKeyPress={(e) => { if (e.key === 'Enter') handleRouteSearch(); }}
+            />
+            <Button onClick={handleRouteSearch} disabled={isLoadingRoutePath || !routeIdQuery.trim()}>
+              {isLoadingRoutePath && routeIdQuery ? <Icons.Route className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Route className="mr-2 h-4 w-4" />}
+              Show
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center">
@@ -219,3 +254,5 @@ export function OneBusAwayExplorer({
     </div>
   );
 }
+
+    
