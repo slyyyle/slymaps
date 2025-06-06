@@ -3,7 +3,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { ViewState, MapRef } from 'react-map-gl';
-import { FlyToInterpolator } from 'react-map-gl'; // Import FlyToInterpolator
+// Removed: import { FlyToInterpolator } from 'react-map-gl'; 
 import dynamic from 'next/dynamic';
 import polyline from '@mapbox/polyline';
 import { MapView } from '@/components/map-view';
@@ -153,7 +153,7 @@ export function AppShell() {
       latitude: coords.latitude,
       zoom,
       transitionDuration: 1500,
-      transitionInterpolator: new FlyToInterpolator(), // Use FlyToInterpolator
+      // Removed: transitionInterpolator: new FlyToInterpolator(),
     }));
   }, []);
 
@@ -420,3 +420,5 @@ export function AppShell() {
     </div>
   );
 }
+
+    
