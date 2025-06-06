@@ -8,10 +8,10 @@ import { z } from 'zod';
 import { AddressAutofill, config as mapboxSearchConfig } from '@mapbox/search-js-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription as ShadCnCardDescription } from '@/components/ui/card';
 import { Icons } from '@/components/icons';
 import type { CustomPOI } from '@/types';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { ScrollArea } from './ui/scroll-area';
 import { CAPITOL_HILL_COORDS } from '@/lib/constants';
 
@@ -92,7 +92,6 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
     }
   }, [mapboxAccessToken]);
 
-  // Effect to reset form when editingPoi changes (e.g., user clicks "edit" or "add new")
   useEffect(() => {
     if (editingPoi) {
       form.reset({
@@ -165,24 +164,20 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
     } else {
       onAdd(poiData);
     }
-    // Reset form and editing state
     setEditingPoi(null);
-    form.reset({ name: '', type: '', address: '', latitude: undefined, longitude: undefined, description: '' });
-    setAutofillInputValue('');
-    form.clearErrors();
   };
 
   const handleSetEditMode = (poi: CustomPOI) => {
-    setEditingPoi(poi); // This will trigger the useEffect to populate the form
-    onSelectPoi(poi); // Also notify parent for map interaction
+    setEditingPoi(poi);
+    onSelectPoi(poi);
   };
   
   const handleSetNewMode = () => {
-    setEditingPoi(null); // This will trigger the useEffect to clear the form
+    setEditingPoi(null); 
   };
 
   const handleCancelOrClearForm = () => {
-    setEditingPoi(null); // Clears edit mode and form via useEffect
+    setEditingPoi(null); 
   };
   
   if (tokenInitializing && !mapboxAccessToken) {
@@ -222,17 +217,16 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
           </CardContent>
         </Card>
       )}
-      {customPois.length === 0 && !editingPoi && ( // Show this only if not in "add new" mode from an empty list start
+      {customPois.length === 0 && !editingPoi && (
          <p className="text-sm text-muted-foreground text-center py-4">You haven't added any custom POIs yet. Click "Add New" to start.</p>
       )}
 
-      {/* Form Section */}
       <Card>
         <CardHeader>
           <CardTitle className="font-headline">{editingPoi ? `Edit '${editingPoi.name}'` : 'Add New POI'}</CardTitle>
-          <CardDescription>
+          <ShadCnCardDescription>
             {editingPoi ? 'Update the details of your point of interest.' : 'Save a location for quick access. Enter an address and select from suggestions to set coordinates.'}
-          </CardDescription>
+          </ShadCnCardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -266,13 +260,9 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                           <Input
                             placeholder="Type an address and select"
                             autoComplete="off"
-                            value={autofillInputValue} // Controlled by local state for AddressAutofill interaction
+                            value={autofillInputValue} 
                             onChange={(e) => {
                               setAutofillInputValue(e.target.value);
-                              // If user clears the input manually after a selection was made,
-                              // RHF's address, lat, and lon should also ideally be cleared
-                              // but onRetrieve should handle setting these if a new selection is made
-                              // or if user submits with an empty autofillInputValue, RHF validation for address will kick in.
                               if (e.target.value === '') {
                                 form.setValue('address', '', { shouldValidate: true });
                                 form.setValue('latitude', undefined, { shouldValidate: true });
@@ -284,7 +274,7 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                         </AddressAutofill>
                        )}
                     </FormControl>
-                    <FormMessage /> {/* For address field specific errors */}
+                    <FormMessage /> 
                      <FormDescription>
                       {(typeof watchedLat === 'number' && !isNaN(watchedLat) && typeof watchedLng === 'number' && !isNaN(watchedLng)) ? (
                         <span className="block text-xs mt-1 text-green-600">
@@ -296,7 +286,6 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                         </span>
                       )}
                     </FormDescription>
-                    {/* Display errors for latitude and longitude from Zod schema */}
                     {form.formState.errors.latitude && <FormMessage>{form.formState.errors.latitude.message}</FormMessage>}
                     {form.formState.errors.longitude && <FormMessage>{form.formState.errors.longitude.message}</FormMessage>}
                   </FormItem>
@@ -322,6 +311,4 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
     </div>
   );
 }
-    
-
     
