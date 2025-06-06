@@ -23,12 +23,26 @@ const poiSchema = z.object({
   type: z.string().min(1, "Type is required (e.g., Home, Work, Favorite Cafe)"),
   address: z.string().min(1, "Address is required. Select a valid address to get coordinates."),
   latitude: z.preprocess(
-    (val) => (typeof val === 'string' && val !== '' ? parseFloat(val) : val),
-    z.number({ required_error: "Coordinates couldn't be determined. Please select a valid address." }).min(-90, "Invalid latitude").max(90, "Invalid latitude")
+    (val) => {
+      if (typeof val === 'string' && val.trim() !== '') return parseFloat(val);
+      if (typeof val === 'number') return val;
+      return undefined; // Return undefined if not convertible, Zod will catch if required
+    },
+    z.number({ 
+      invalid_type_error: "Latitude must be a valid number.", 
+      required_error: "Coordinates couldn't be determined. Please select a valid address." 
+    }).min(-90, "Invalid latitude").max(90, "Invalid latitude")
   ),
   longitude: z.preprocess(
-    (val) => (typeof val === 'string' && val !== '' ? parseFloat(val) : val),
-    z.number({ required_error: "Coordinates couldn't be determined. Please select a valid address." }).min(-180, "Invalid longitude").max(180, "Invalid longitude")
+    (val) => {
+      if (typeof val === 'string' && val.trim() !== '') return parseFloat(val);
+      if (typeof val === 'number') return val;
+      return undefined; // Return undefined if not convertible, Zod will catch if required
+    },
+    z.number({ 
+      invalid_type_error: "Longitude must be a valid number.", 
+      required_error: "Coordinates couldn't be determined. Please select a valid address." 
+    }).min(-180, "Invalid longitude").max(180, "Invalid longitude")
   ),
   description: z.string().optional(),
 });
@@ -47,7 +61,7 @@ interface CustomPoiEditorProps {
 export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelectPoi, mapboxAccessToken }: CustomPoiEditorProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPoi, setEditingPoi] = useState<CustomPOI | null>(null);
-  const [addressInputValue, setAddressInputValue] = useState(''); // For AddressAutofill input
+  const [addressInputValue, setAddressInputValue] = useState('');
   const [tokenInitializing, setTokenInitializing] = useState(true);
   const { toast } = useToast();
 
@@ -63,6 +77,9 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
     }
   });
 
+  const watchedLat = form.watch('latitude');
+  const watchedLng = form.watch('longitude');
+
   useEffect(() => {
     if (mapboxAccessToken) {
       mapboxSearchConfig.accessToken = mapboxAccessToken;
@@ -77,8 +94,8 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
           name: editingPoi.name,
           type: editingPoi.type,
           address: editingPoi.address || '',
-          latitude: editingPoi.latitude,
-          longitude: editingPoi.longitude,
+          latitude: editingPoi.latitude, // Should be a number
+          longitude: editingPoi.longitude, // Should be a number
           description: editingPoi.description || '',
         });
         setAddressInputValue(editingPoi.address || '');
@@ -92,25 +109,26 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
   const handleAddressRetrieve = (response: any) => {
     const feature = response.features[0];
     if (feature && feature.geometry && feature.geometry.coordinates) {
-      const coords: Coordinates = {
-        latitude: feature.geometry.coordinates[1],
-        longitude: feature.geometry.coordinates[0],
-      };
-      form.setValue('address', feature.properties.formatted_address || feature.properties.name || '');
+      const lat = parseFloat(feature.geometry.coordinates[1]);
+      const lon = parseFloat(feature.geometry.coordinates[0]);
+
+      form.setValue('address', feature.properties.formatted_address || feature.properties.name || '', { shouldValidate: true });
       setAddressInputValue(feature.properties.formatted_address || feature.properties.name || '');
-      form.setValue('latitude', coords.latitude);
-      form.setValue('longitude', coords.longitude);
-      form.clearErrors(['latitude', 'longitude', 'address']); // Clear errors if address is found
+      
+      form.setValue('latitude', lat, { shouldValidate: true });
+      form.setValue('longitude', lon, { shouldValidate: true });
+      
+      form.clearErrors(['latitude', 'longitude', 'address']);
     } else {
-      // If no feature, or feature is bad, clear coordinates and potentially set error
-      form.setValue('latitude', undefined);
-      form.setValue('longitude', undefined);
+      form.setValue('latitude', undefined, { shouldValidate: true });
+      form.setValue('longitude', undefined, { shouldValidate: true });
       form.setError("address", {type: "manual", message: "Could not find coordinates for this address. Please try a different one."})
     }
   };
 
   const onSubmit: SubmitHandler<PoiFormData> = (data) => {
-    if (data.latitude === undefined || data.longitude === undefined) {
+    // data.latitude and data.longitude should be numbers here thanks to Zod's preprocess and resolver
+    if (data.latitude === undefined || data.longitude === undefined || isNaN(data.latitude) || isNaN(data.longitude)) {
       form.setError("address", { type: "manual", message: "Please select a valid address from suggestions to set coordinates." });
       return;
     }
@@ -119,9 +137,9 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
       id: editingPoi ? editingPoi.id : `custom-${Date.now()}`,
       name: data.name,
       type: data.type,
-      address: data.address, // This should be the geocoded address
-      latitude: data.latitude,
-      longitude: data.longitude,
+      address: data.address,
+      latitude: data.latitude, // This must be a number
+      longitude: data.longitude, // This must be a number
       description: data.description,
       isCustom: true as const,
     };
@@ -141,8 +159,7 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
   };
   
   const handleAddNew = () => {
-    setEditingPoi(null); // Clear editingPoi
-    // Reset form for a new entry. Important to clear all fields including hidden lat/lon.
+    setEditingPoi(null);
     form.reset({
       name: '',
       type: '',
@@ -151,21 +168,19 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
       longitude: undefined,
       description: ''
     });
-    setAddressInputValue(''); // Clear visual input for address
+    setAddressInputValue('');
     setIsDialogOpen(true);
   };
   
   const handleAddressInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = event.target;
     setAddressInputValue(value);
-    form.setValue('address', value, {shouldValidate: true}); // Keep RHF informed
-    // If user clears input, clear coords
+    form.setValue('address', value, {shouldValidate: true});
     if (value === '') {
-      form.setValue('latitude', undefined);
-      form.setValue('longitude', undefined);
+      form.setValue('latitude', undefined, { shouldValidate: true });
+      form.setValue('longitude', undefined, { shouldValidate: true });
     }
   };
-
 
   if (tokenInitializing && !mapboxAccessToken) {
     return <div className="p-2 text-sm text-muted-foreground">Initializing POI Editor...</div>;
@@ -210,7 +225,7 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
       <Dialog open={isDialogOpen} onOpenChange={(open) => {
           setIsDialogOpen(open);
           if (!open) {
-            form.clearErrors(); // Clear errors when dialog closes
+            form.clearErrors();
             setEditingPoi(null);
           }
         }}
@@ -234,7 +249,7 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
               <FormField
                 control={form.control}
                 name="address"
-                render={({ field }) => ( // field here is from RHF for the 'address' field
+                render={({ field }) => (
                   <FormItem>
                     <FormLabel>Address</FormLabel>
                     <FormControl>
@@ -252,32 +267,32 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                         >
                           <Input
                             placeholder="Type an address and select from suggestions"
-                            value={addressInputValue} // Controlled by local state for AddressAutofill
-                            onChange={handleAddressInputChange} // Updates local state and RHF
-                            autoComplete="off" // Or an appropriate one for addresses
+                            value={addressInputValue} 
+                            onChange={handleAddressInputChange}
+                            autoComplete="off"
                           />
                         </AddressAutofill>
                        )}
                     </FormControl>
                     <FormDescription>
                       Coordinates (Lat/Lon) will be automatically set when you select an address.
-                      {form.getValues('latitude') && form.getValues('longitude') && (
+                      {(watchedLat !== undefined && watchedLng !== undefined && !isNaN(watchedLat) && !isNaN(watchedLng)) ? (
                         <span className="block text-xs mt-1">
-                          Selected: Lat: {form.getValues('latitude')?.toFixed(5)}, Lon: {form.getValues('longitude')?.toFixed(5)}
+                          Selected: Lat: {Number(watchedLat).toFixed(5)}, Lon: {Number(watchedLng).toFixed(5)}
                         </span>
-                      )}
+                      ) : null}
                     </FormDescription>
-                    <FormMessage /> {/* For 'address' field specific errors from schema or manual */}
+                    <FormMessage /> {/* For 'address' field specific errors */}
                   </FormItem>
                 )}
               />
-              {/* Hidden latitude and longitude fields for RHF to manage and validate */}
-              <input type="hidden" {...form.register("latitude")} />
-              <input type="hidden" {...form.register("longitude")} />
-              {/* Display errors for latitude/longitude if they occur (e.g. not found) */}
+              {/* Hidden latitude and longitude fields. valueAsNumber helps RHF. */}
+              <input type="hidden" {...form.register("latitude", { valueAsNumber: true })} />
+              <input type="hidden" {...form.register("longitude", { valueAsNumber: true })} />
+              
+              {/* Display errors specifically for latitude/longitude if they are not caught by 'address' validation */}
               {form.formState.errors.latitude && <FormMessage>{form.formState.errors.latitude.message}</FormMessage>}
               {form.formState.errors.longitude && <FormMessage>{form.formState.errors.longitude.message}</FormMessage>}
-
 
               <FormField control={form.control} name="description" render={({ field }) => (
                 <FormItem><FormLabel>Description (Optional)</FormLabel><FormControl><Input placeholder="Notes about this place" {...field} /></FormControl><FormMessage /></FormItem>
@@ -295,4 +310,3 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
     </div>
   );
 }
-
