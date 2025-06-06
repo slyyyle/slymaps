@@ -8,9 +8,8 @@ import { z } from 'zod';
 import { AddressAutofill, config as mapboxSearchConfig } from '@mapbox/search-js-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label'; // Keep if used by FormLabel
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card'; // CardDescription, CardFooter removed as not used
 import { Icons } from '@/components/icons';
 import type { CustomPOI } from '@/types';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -27,7 +26,7 @@ const latitudeSchema = z.preprocess(
     return undefined;
   },
   z.number({
-    required_error: "Latitude is required. Please select a valid address.",
+    required_error: "Latitude is required. Select a valid address to auto-fill.",
     invalid_type_error: "Latitude must be a valid number.",
   }).min(-90, "Latitude must be between -90 and 90.").max(90, "Latitude must be between -90 and 90.")
 );
@@ -42,7 +41,7 @@ const longitudeSchema = z.preprocess(
     return undefined;
   },
   z.number({
-    required_error: "Longitude is required. Please select a valid address.",
+    required_error: "Longitude is required. Select a valid address to auto-fill.",
     invalid_type_error: "Longitude must be a valid number.",
   }).min(-180, "Longitude must be between -180 and 180.").max(180, "Longitude must be between -180 and 180.")
 );
@@ -101,8 +100,8 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
           name: editingPoi.name,
           type: editingPoi.type,
           address: editingPoi.address || '',
-          latitude: editingPoi.latitude, // Should be number
-          longitude: editingPoi.longitude, // Should be number
+          latitude: editingPoi.latitude,
+          longitude: editingPoi.longitude,
           description: editingPoi.description || '',
         });
       } else {
@@ -112,42 +111,37 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
     }
   }, [editingPoi, form, isDialogOpen]);
 
-  const handleAddressRetrieve = (response: any, currentAddressFieldVal: string) => {
+  const handleAddressRetrieve = (response: any) => {
     const feature = response?.features?.[0];
     let lat: number | undefined = undefined;
     let lon: number | undefined = undefined;
-    let retrievedAddress: string = currentAddressFieldVal; // Default to what user typed or current RHF value
+    let retrievedAddress: string = '';
 
     if (feature?.geometry?.coordinates && feature.geometry.coordinates.length === 2) {
       const rawLon = feature.geometry.coordinates[0];
       const rawLat = feature.geometry.coordinates[1];
 
-      if (typeof rawLon === 'number' && !isNaN(rawLon)) {
-        lon = rawLon;
-      } else if (typeof rawLon === 'string') {
+      if (typeof rawLon === 'number' && !isNaN(rawLon)) lon = rawLon;
+      else if (typeof rawLon === 'string') {
         const parsed = parseFloat(rawLon);
         lon = isNaN(parsed) ? undefined : parsed;
-      } else {
-        lon = undefined;
       }
 
-      if (typeof rawLat === 'number' && !isNaN(rawLat)) {
-        lat = rawLat;
-      } else if (typeof rawLat === 'string') {
+      if (typeof rawLat === 'number' && !isNaN(rawLat)) lat = rawLat;
+      else if (typeof rawLat === 'string') {
         const parsed = parseFloat(rawLat);
         lat = isNaN(parsed) ? undefined : parsed;
-      } else {
-        lat = undefined;
       }
       
-      retrievedAddress = feature.properties?.formatted_address || feature.properties?.name || currentAddressFieldVal;
+      retrievedAddress = feature.properties?.formatted_address || feature.properties?.name || '';
     }
     
+    // Set RHF values directly from the retrieved data
     form.setValue('address', retrievedAddress, { shouldValidate: true });
     form.setValue('latitude', lat, { shouldValidate: true });
     form.setValue('longitude', lon, { shouldValidate: true });
 
-    if (lat === undefined || lon === undefined) {
+    if (lat === undefined || lon === undefined || !retrievedAddress) {
        form.setError("address", {type: "manual", message: "Coordinates could not be determined. Please select a valid address suggestion."});
     } else {
         form.clearErrors(['latitude', 'longitude', 'address']);
@@ -155,6 +149,13 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
   };
 
   const onSubmit: SubmitHandler<PoiFormData> = (data) => {
+    // Zod validation should have already ensured latitude and longitude are numbers if present
+    if (typeof data.latitude !== 'number' || typeof data.longitude !== 'number') {
+      // This case should ideally be caught by Zod, but as a fallback:
+      form.setError("address", {type: "manual", message: "Invalid coordinates. Please re-select address."});
+      return;
+    }
+
     const poiData: CustomPOI = {
       id: editingPoi ? editingPoi.id : `custom-${Date.now()}`,
       name: data.name,
@@ -204,7 +205,7 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
       {customPois.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-md">Your Custom POIs</CardTitle>
+            <DialogTitle className="text-md">Your Custom POIs</DialogTitle> 
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[200px]">
@@ -267,7 +268,7 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                        ) : (
                         <AddressAutofill 
                           accessToken={mapboxAccessToken} 
-                          onRetrieve={(response) => handleAddressRetrieve(response, field.value)}
+                          onRetrieve={handleAddressRetrieve} // Simplified call
                           options={{
                             country: "US", 
                             language: "en",
@@ -285,7 +286,6 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                                 form.setValue('longitude', undefined, { shouldValidate: true });
                                 form.clearErrors(['latitude', 'longitude', 'address']);
                               }
-                              // No aggressive clearing of lat/lon on every keystroke
                             }}
                           />
                         </AddressAutofill>
@@ -307,9 +307,13 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                 )}
               />
               
-              {/* Display errors for latitude/longitude if they are not caught by the address field message */}
+              {/* Zod messages for latitude/longitude will appear under their respective fields if they were separate FormItems, 
+                  or attached to 'address' if that's where we target form.setError for coordinate issues.
+                  The FormMessage under address field will show messages for 'address' or custom errors set on 'address'.
+              */}
               {form.formState.errors.latitude && <FormMessage>{form.formState.errors.latitude.message}</FormMessage>}
               {form.formState.errors.longitude && <FormMessage>{form.formState.errors.longitude.message}</FormMessage>}
+
 
               <FormField control={form.control} name="description" render={({ field }) => (
                 <FormItem><FormLabel>Description (Optional)</FormLabel><FormControl><Input placeholder="Notes about this place" {...field} /></FormControl><FormMessage /></FormItem>
@@ -327,3 +331,5 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
     </div>
   );
 }
+
+    
