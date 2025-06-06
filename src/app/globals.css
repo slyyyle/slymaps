@@ -101,14 +101,10 @@
 
 /* Ensure Mapbox AddressAutofill suggestions appear above Dialog components */
 @layer utilities {
-  .mapbox-search-results-container {
+  .mapbox-search-box-menu, /* This is often the main container for the suggestions dropdown */
+  .mapbox-search-suggestion-list, /* This is often the <ul> element itself */
+  .mapboxgl-ctrl-geocoder--suggestions, /* For mapbox-gl-geocoder, if used elsewhere */
+  .mapbox-search-results-container { /* A more generic fallback */
     z-index: 100 !important; /* ShadCN Dialog is z-50, so this should be higher */
-  }
-  /* Fallback or alternative class name often used for suggestions */
-  .mapboxgl-ctrl-geocoder--suggestions {
-     z-index: 100 !important;
-  }
-  .mapbox-search-suggestion-list { /* This is another common class from the library */
-    z-index: 100 !important;
   }
 }
