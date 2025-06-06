@@ -85,8 +85,16 @@ export function AppShell() {
       const apiUrl = `https://api.pugetsound.onebusaway.org/api/where/stops-for-location.json?key=${ONEBUSAWAY_API_KEY}&lat=${lat}&lon=${lon}&latSpan=${latSpan}&lonSpan=${lonSpan}&includeReferences=false`;
       const response = await fetch(apiUrl);
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.text || `Failed to fetch OBA stops (status ${response.status})`);
+        let errorMessage = `Failed to fetch OBA stops (status ${response.status})`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
+        } catch (e) {
+          try {
+            errorMessage = (await response.text()) || errorMessage;
+          } catch (textErr) { /* Do nothing */ }
+        }
+        throw new Error(errorMessage);
       }
       const data = await response.json();
       if (data.data && data.data.list) {
@@ -109,7 +117,10 @@ export function AppShell() {
       }
     } catch (error) {
       console.error("Error fetching OBA stops:", error);
-      toast({ title: "Error Fetching Transit Stops", description: (error as Error).message, variant: "destructive" });
+      let description = "An unknown error occurred.";
+      if (error instanceof Error) description = error.message;
+      else if (typeof error === 'string') description = error;
+      toast({ title: "Error Fetching Transit Stops", description, variant: "destructive" });
       setObaStopsData([]);
     }
   }, [toast]);
@@ -121,8 +132,16 @@ export function AppShell() {
     try {
       const response = await fetch(`https://api.pugetsound.onebusaway.org/api/where/arrivals-and-departures-for-stop/${stopId}.json?key=${ONEBUSAWAY_API_KEY}&minutesBefore=0&minutesAfter=60&includeReferences=false`);
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.text || `Failed to fetch arrivals (status ${response.status})`);
+        let errorMessage = `Failed to fetch arrivals (status ${response.status})`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
+        } catch (e) {
+           try {
+            errorMessage = (await response.text()) || errorMessage;
+          } catch (textErr) { /* Do nothing */ }
+        }
+        throw new Error(errorMessage);
       }
       const data = await response.json();
       const arrivals: ObaArrivalDeparture[] = data.data?.entry?.arrivalsAndDepartures.map((ad: any) => ({
@@ -141,7 +160,10 @@ export function AppShell() {
       setObaStopArrivals(arrivals);
     } catch (error) {
       console.error(`Error fetching OBA arrivals for stop ${stopId}:`, error);
-      toast({ title: "Error Fetching Arrivals", description: (error as Error).message, variant: "destructive" });
+      let description = "An unknown error occurred.";
+      if (error instanceof Error) description = error.message;
+      else if (typeof error === 'string') description = error;
+      toast({ title: "Error Fetching Arrivals", description, variant: "destructive" });
       setObaStopArrivals([]);
     } finally {
       setIsLoadingArrivals(false);
@@ -214,26 +236,35 @@ export function AppShell() {
     setObaRouteGeometry(null); 
     setCurrentOBARouteDisplayData(null);
     setObaVehicleLocations([]);
-    const query = await fetch(
-      `https://api.mapbox.com/directions/v5/mapbox/${mode}/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?steps=true&geometries=geojson&access_token=${MAPBOX_ACCESS_TOKEN}`
-    );
-    const json = await query.json();
-    if (json.routes && json.routes.length > 0) {
-      const data = json.routes[0];
-      const newRoute: RouteType = {
-        id: `route-${Date.now()}`,
-        geometry: data.geometry,
-        legs: data.legs,
-        distance: data.distance,
-        duration: data.duration,
-      };
-      setRoute(newRoute);
-      handleFlyTo({longitude: (start.longitude + end.longitude)/2, latitude: (start.latitude + end.latitude)/2}, 12);
-    } else {
-      console.error("Directions API error:", json.message);
-      toast({ title: "Error Fetching Directions", description: json.message || "Could not find a route.", variant: "destructive" });
+    try {
+        const query = await fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/${mode}/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?steps=true&geometries=geojson&access_token=${MAPBOX_ACCESS_TOKEN}`
+        );
+        const json = await query.json();
+        if (json.routes && json.routes.length > 0) {
+        const data = json.routes[0];
+        const newRoute: RouteType = {
+            id: `route-${Date.now()}`,
+            geometry: data.geometry,
+            legs: data.legs,
+            distance: data.distance,
+            duration: data.duration,
+        };
+        setRoute(newRoute);
+        handleFlyTo({longitude: (start.longitude + end.longitude)/2, latitude: (start.latitude + end.latitude)/2}, 12);
+        } else {
+        console.error("Directions API error:", json.message);
+        toast({ title: "Error Fetching Directions", description: json.message || "Could not find a route.", variant: "destructive" });
+        }
+    } catch (error) {
+        console.error("Error fetching directions:", error);
+        let description = "An unknown error occurred while fetching directions.";
+        if (error instanceof Error) description = error.message;
+        else if (typeof error === 'string') description = error;
+        toast({ title: "Error Fetching Directions", description, variant: "destructive" });
+    } finally {
+        setIsLoadingRoute(false);
     }
-    setIsLoadingRoute(false);
   }, [handleFlyTo, toast]);
 
   const fetchVehiclesForObaRoute = useCallback(async (routeId: string) => {
@@ -243,14 +274,22 @@ export function AppShell() {
     try {
       const response = await fetch(`https://api.pugetsound.onebusaway.org/api/where/vehicles-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includeStatus=true&includeTrip=true`);
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.text || `Failed to fetch OBA vehicles (status ${response.status})`);
+        let errorMessage = `Failed to fetch OBA vehicles (status ${response.status})`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
+        } catch (e) {
+           try {
+            errorMessage = (await response.text()) || errorMessage;
+          } catch (textErr) { /* Do nothing */ }
+        }
+        throw new Error(errorMessage);
       }
       const data = await response.json();
       if (data.data && data.data.list && data.data.list.length > 0) {
         const vehicles: ObaVehicleLocation[] = data.data.list.map((v: any) => ({
           id: v.vehicleId,
-          routeId: v.trip?.routeId || routeId, // Fallback to requested routeId
+          routeId: v.trip?.routeId || routeId, 
           latitude: v.location.lat,
           longitude: v.location.lon,
           heading: v.heading,
@@ -266,7 +305,10 @@ export function AppShell() {
       }
     } catch (error) {
       console.error(`Error fetching OBA vehicles for route ${routeId}:`, error);
-      toast({ title: "Error Fetching Vehicles", description: (error as Error).message, variant: "destructive" });
+      let description = "An unknown error occurred.";
+      if (error instanceof Error) description = error.message;
+      else if (typeof error === 'string') description = error;
+      toast({ title: "Error Fetching Vehicles", description, variant: "destructive" });
       setObaVehicleLocations([]);
     } finally {
       setIsLoadingObaVehicles(false);
@@ -281,14 +323,22 @@ export function AppShell() {
     setIsLoadingObaRouteGeometry(true);
     setObaRouteGeometry(null);
     setCurrentOBARouteDisplayData(null);
-    setObaVehicleLocations([]); // Clear previous vehicles
+    setObaVehicleLocations([]); 
     setRoute(null); 
 
     try {
       const response = await fetch(`https://api.pugetsound.onebusaway.org/api/where/stops-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includePolylines=true&includeReferences=true`);
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.text || `Failed to fetch OBA route path (status ${response.status})`);
+        let errorMessage = `Failed to fetch OBA route path (status ${response.status})`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
+        } catch (e) {
+            try {
+                errorMessage = (await response.text()) || errorMessage;
+            } catch (textErr) { /* Do nothing */ }
+        }
+        throw new Error(errorMessage);
       }
       const data = await response.json();
       
@@ -345,8 +395,7 @@ export function AppShell() {
       
       if (routeDetails && routeStops.length > 0) {
         setCurrentOBARouteDisplayData({ routeInfo: routeDetails, stops: routeStops });
-        // Fetch vehicles after route details are set
-        fetchVehiclesForObaRoute(routeId);
+        await fetchVehiclesForObaRoute(routeId); // Await this call
       } else {
         setCurrentOBARouteDisplayData(null); 
         setObaVehicleLocations([]);
@@ -361,10 +410,12 @@ export function AppShell() {
          toast({ title: "No Route Path Data", description: `No polyline data found for route ${routeId}.`, variant: "default" });
       }
 
-
     } catch (error) {
       console.error(`Error fetching OBA route path for ${routeId}:`, error);
-      toast({ title: "Error Fetching Route Path", description: (error as Error).message, variant: "destructive" });
+      let description = "An unknown error occurred.";
+      if (error instanceof Error) description = error.message;
+      else if (typeof error === 'string') description = error;
+      toast({ title: "Error Fetching Route Path", description, variant: "destructive" });
       setObaRouteGeometry(null);
       setCurrentOBARouteDisplayData(null);
       setObaVehicleLocations([]);
@@ -374,14 +425,15 @@ export function AppShell() {
   }, [toast, handleFlyTo, fetchVehiclesForObaRoute]);
 
   const allPois = React.useMemo(() => {
-    const combined = [...INITIAL_POIS, ...customPois, ...obaStopsData];
+    // Custom POIs removed from this display logic for now as add/edit is disabled
+    const combined = [...INITIAL_POIS, /*...customPois,*/ ...obaStopsData];
     const poiMap = new Map<string, PointOfInterest | CustomPOI>();
     INITIAL_POIS.forEach(poi => poiMap.set(poi.id, poi));
-    customPois.forEach(poi => poiMap.set(poi.id, poi)); 
+    // customPois.forEach(poi => poiMap.set(poi.id, poi)); 
     obaStopsData.forEach(poi => poiMap.set(poi.id, poi)); 
     
     return Array.from(poiMap.values());
-  }, [customPois, obaStopsData]);
+  }, [/*customPois,*/ obaStopsData]);
 
   return (
     <div className="relative h-screen w-screen flex flex-col overflow-hidden">
@@ -398,8 +450,8 @@ export function AppShell() {
                 mapStyles={MAP_STYLES}
                 currentMapStyle={currentMapStyle}
                 onMapStyleChange={setCurrentMapStyle}
-                customPois={customPois}
-                onDeleteCustomPoi={handleDeleteCustomPoi}
+                customPois={customPois} // Keep passing for display/delete
+                onDeleteCustomPoi={handleDeleteCustomPoi} // Keep for delete
                 onGetDirections={fetchDirections}
                 isLoadingRoute={isLoadingRoute}
                 currentRoute={route}
@@ -415,6 +467,9 @@ export function AppShell() {
                 isLoadingObaRouteGeometry={isLoadingObaRouteGeometry}
                 currentOBARouteDisplayData={currentOBARouteDisplayData}
                 isLoadingObaVehicles={isLoadingObaVehicles}
+                // mapboxAccessToken={MAPBOX_ACCESS_TOKEN} // No longer needed for CustomPoiEditor
+                // onAddCustomPoi={() => {}} // No longer needed
+                // onUpdateCustomPoi={() => {}} // No longer needed
               />
             </SheetContent>
           </Sheet>
@@ -455,3 +510,5 @@ export function AppShell() {
     </div>
   );
 }
+
+    
