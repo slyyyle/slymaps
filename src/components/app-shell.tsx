@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { Icons } from '@/components/icons';
 import { INITIAL_VIEW_STATE, INITIAL_POIS, MAP_STYLES, MAPBOX_ACCESS_TOKEN, ONEBUSAWAY_API_KEY } from '@/lib/constants';
-import type { PointOfInterest, CustomPOI, MapStyle, Route as RouteType, Coordinates, TransitMode, ObaArrivalDeparture, ObaPolyline, ObaRouteGeometry } from '@/types';
+import type { PointOfInterest, CustomPOI, MapStyle, Route as RouteType, Coordinates, TransitMode, ObaArrivalDeparture, ObaPolyline, ObaRouteGeometry, ObaRoute, CurrentOBARouteDisplayData } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 
 const SearchBar = dynamic(() => import('@/components/search-bar').then(mod => mod.SearchBar), { 
@@ -32,13 +32,13 @@ export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [destination, setDestination] = useState<Coordinates | null>(null);
   
-  // For Mapbox Directions
   const [route, setRoute] = useState<RouteType | null>(null);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
   
-  // For OBA Route Paths
   const [obaRouteGeometry, setObaRouteGeometry] = useState<ObaRouteGeometry | null>(null);
   const [isLoadingObaRouteGeometry, setIsLoadingObaRouteGeometry] = useState(false);
+  const [currentOBARouteDisplayData, setCurrentOBARouteDisplayData] = useState<CurrentOBARouteDisplayData | null>(null);
+
 
   const { toast } = useToast();
 
@@ -74,6 +74,7 @@ export function AppShell() {
     const lonSpan = Math.abs(bounds.getNorthEast().lng - bounds.getSouthWest().lng);
 
     if (latSpan > 0.05 || lonSpan > 0.05) { 
+        setObaStopsData([]); // Clear stops if zoomed out too far
         return;
     }
 
@@ -89,13 +90,15 @@ export function AppShell() {
         const fetchedStops: PointOfInterest[] = data.data.list.map((stop: any) => ({
           id: stop.id,
           name: stop.name,
-          type: 'Bus Stop',
+          type: 'Bus Stop', // OBA stops are always 'Bus Stop' for our type system
           latitude: stop.lat,
           longitude: stop.lon,
           isObaStop: true,
           direction: stop.direction,
           code: stop.code,
           routeIds: stop.routeIds || [],
+          locationType: stop.locationType,
+          wheelchairBoarding: stop.wheelchairBoarding,
         }));
         setObaStopsData(fetchedStops);
       } else {
@@ -149,13 +152,16 @@ export function AppShell() {
       latitude: coords.latitude,
       zoom,
       transitionDuration: 1500, 
+      transitionInterpolator: undefined, // Let Mapbox handle interpolation or use a specific interpolator if needed
     }));
   }, []);
 
   const handleSelectPoi = useCallback((poi: PointOfInterest | CustomPOI | null) => {
     setSelectedPoi(poi);
-    setRoute(null); 
-    setObaRouteGeometry(null); // Clear OBA route path when selecting a new POI
+    // Do not clear route or OBA geometry here, allow them to persist if user clicks a stop on a displayed route
+    // setRoute(null); 
+    // setObaRouteGeometry(null);
+    // setCurrentOBARouteDisplayData(null); 
     if (poi?.isObaStop && poi.id) {
       fetchArrivalsForStop(poi.id);
     } else {
@@ -173,7 +179,7 @@ export function AppShell() {
       const map = mapRef.current;
       const handleIdle = () => fetchObaStops(map);
       map.on('idle', handleIdle);
-      map.on('load', () => fetchObaStops(map)); // Also fetch on initial load
+      map.on('load', () => fetchObaStops(map));
       return () => {
         map.off('idle', handleIdle);
         map.off('load', handleIdle); 
@@ -186,6 +192,7 @@ export function AppShell() {
     setDestination(coords);
     setRoute(null); 
     setObaRouteGeometry(null);
+    setCurrentOBARouteDisplayData(null);
     if (name) {
       toast({ title: "Location Found", description: `Navigating to ${name}`});
     }
@@ -214,7 +221,8 @@ export function AppShell() {
     }
     setIsLoadingRoute(true);
     setRoute(null);
-    setObaRouteGeometry(null); // Clear OBA route when fetching Mapbox directions
+    setObaRouteGeometry(null); 
+    setCurrentOBARouteDisplayData(null);
     const query = await fetch(
       `https://api.mapbox.com/directions/v5/mapbox/${mode}/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?steps=true&geometries=geojson&access_token=${MAPBOX_ACCESS_TOKEN}`
     );
@@ -229,7 +237,6 @@ export function AppShell() {
         duration: data.duration,
       };
       setRoute(newRoute);
-      // Fly to midpoint of route
       handleFlyTo({longitude: (start.longitude + end.longitude)/2, latitude: (start.latitude + end.latitude)/2}, 12);
     } else {
       console.error("Directions API error:", json.message);
@@ -245,51 +252,89 @@ export function AppShell() {
     }
     setIsLoadingObaRouteGeometry(true);
     setObaRouteGeometry(null);
-    setRoute(null); // Clear Mapbox route when fetching OBA route path
+    setCurrentOBARouteDisplayData(null);
+    setRoute(null); 
 
     try {
-      const response = await fetch(`https://api.pugetsound.onebusaway.org/api/where/stops-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includePolylines=true`);
+      const response = await fetch(`https://api.pugetsound.onebusaway.org/api/where/stops-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includePolylines=true&includeReferences=true`);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.text || `Failed to fetch OBA route path (status ${response.status})`);
       }
       const data = await response.json();
       
+      let routePath: ObaRouteGeometry | null = null;
       if (data.data && data.data.entry && data.data.entry.polylines && data.data.entry.polylines.length > 0) {
         const allCoordinates: number[][] = [];
         data.data.entry.polylines.forEach((encodedPolyline: ObaPolyline) => {
-          // @mapbox/polyline decodes to [lat, lon]
           const decoded = polyline.decode(encodedPolyline.points);
-          // GeoJSON expects [lon, lat]
           decoded.forEach(coordPair => allCoordinates.push([coordPair[1], coordPair[0]]));
         });
 
         if (allCoordinates.length > 0) {
-          const routePath: ObaRouteGeometry = {
+          routePath = {
             type: "Feature",
-            geometry: {
-              type: "LineString",
-              coordinates: allCoordinates,
-            },
+            geometry: { type: "LineString", coordinates: allCoordinates },
             properties: { routeId: routeId },
           };
           setObaRouteGeometry(routePath);
-          // Fly to the start of the OBA route path if mapRef and path exist
-          if (mapRef.current && routePath.geometry.coordinates.length > 0) {
+        }
+      }
+
+      let routeDetails: ObaRoute | null = null;
+      if (data.data && data.data.references && data.data.references.routes && data.data.references.routes.length > 0) {
+        const refRoute = data.data.references.routes[0];
+        routeDetails = {
+          id: refRoute.id,
+          shortName: refRoute.shortName,
+          longName: refRoute.longName,
+          description: refRoute.description,
+          agencyId: refRoute.agencyId,
+          url: refRoute.url,
+          color: refRoute.color,
+          textColor: refRoute.textColor,
+          type: refRoute.type,
+        };
+      }
+
+      let routeStops: PointOfInterest[] = [];
+      if (data.data && data.data.list && Array.isArray(data.data.list)) {
+          routeStops = data.data.list.map((stop: any) => ({
+            id: stop.id,
+            name: stop.name,
+            type: 'Bus Stop',
+            latitude: stop.lat,
+            longitude: stop.lon,
+            isObaStop: true,
+            direction: stop.direction,
+            code: stop.code,
+            routeIds: stop.routeIds || [], // OBA `stops-for-route` might not fill this for all routes on stop
+            locationType: stop.locationType,
+            wheelchairBoarding: stop.wheelchairBoarding,
+          }));
+      }
+      
+      if (routeDetails && routeStops.length > 0) {
+        setCurrentOBARouteDisplayData({ routeInfo: routeDetails, stops: routeStops });
+      } else {
+        setCurrentOBARouteDisplayData(null);
+      }
+
+      if (routePath && routePath.geometry.coordinates.length > 0) {
+         if (mapRef.current) {
             const firstCoord = routePath.geometry.coordinates[0];
             handleFlyTo({ longitude: firstCoord[0], latitude: firstCoord[1] }, 13);
           }
-        } else {
-          toast({ title: "Route Path Empty", description: `No coordinates found for route ${routeId}.`, variant: "default" });
-        }
-      } else {
-        toast({ title: "No Route Path Data", description: `No polyline data found for route ${routeId}.`, variant: "default" });
-        setObaRouteGeometry(null);
+      } else if (!routePath) {
+         toast({ title: "No Route Path Data", description: `No polyline data found for route ${routeId}.`, variant: "default" });
       }
+
+
     } catch (error) {
       console.error(`Error fetching OBA route path for ${routeId}:`, error);
       toast({ title: "Error Fetching Route Path", description: (error as Error).message, variant: "destructive" });
       setObaRouteGeometry(null);
+      setCurrentOBARouteDisplayData(null);
     } finally {
       setIsLoadingObaRouteGeometry(false);
     }
@@ -297,7 +342,6 @@ export function AppShell() {
 
   const allPois = React.useMemo(() => {
     const combined = [...INITIAL_POIS, ...customPois, ...obaStopsData];
-    // Create a Map to ensure uniqueness by ID
     const uniquePois = Array.from(new Map(combined.map(item => [item.id, item])).values());
     return uniquePois;
   }, [customPois, obaStopsData]);
@@ -330,10 +374,12 @@ export function AppShell() {
                 mapboxAccessToken={MAPBOX_ACCESS_TOKEN}
                 oneBusAwayApiKey={ONEBUSAWAY_API_KEY}
                 selectedPoi={selectedPoi}
+                onSelectPoi={handleSelectPoi}
                 obaStopArrivals={obaStopArrivals}
                 isLoadingArrivals={isLoadingArrivals}
                 onSelectRouteForPath={handleSelectRouteForPath}
                 isLoadingObaRouteGeometry={isLoadingObaRouteGeometry}
+                currentOBARouteDisplayData={currentOBARouteDisplayData}
               />
             </SheetContent>
           </Sheet>
@@ -349,6 +395,7 @@ export function AppShell() {
               setDestination(null);
               setRoute(null);
               setObaRouteGeometry(null);
+              setCurrentOBARouteDisplayData(null);
             }}
           />
       </div>
@@ -366,6 +413,7 @@ export function AppShell() {
         onFlyTo={handleFlyTo}
         obaStopArrivals={obaStopArrivals}
         isLoadingArrivals={isLoadingArrivals}
+        onSelectRouteForPath={handleSelectRouteForPath}
       />
     </div>
   );

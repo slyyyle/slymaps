@@ -9,7 +9,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Icons } from '@/components/icons';
-import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture, ObaRouteGeometry } from '@/types';
+import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture, ObaRouteGeometry, CurrentOBARouteDisplayData } from '@/types';
 import { CustomPoiEditor } from '@/components/custom-poi-editor';
 import { StyleSelector } from '@/components/style-selector';
 import { DirectionsResult } from '@/components/directions-result';
@@ -43,10 +43,12 @@ interface SidebarControlsProps {
   mapboxAccessToken: string;
   oneBusAwayApiKey: string;
   selectedPoi: PointOfInterest | CustomPOI | null;
+  onSelectPoi: (poi: PointOfInterest | CustomPOI | null) => void;
   obaStopArrivals: ObaArrivalDeparture[];
   isLoadingArrivals: boolean;
   onSelectRouteForPath: (routeId: string) => void;
   isLoadingObaRouteGeometry: boolean;
+  currentOBARouteDisplayData: CurrentOBARouteDisplayData | null;
 }
 
 export function SidebarControls({
@@ -66,12 +68,14 @@ export function SidebarControls({
   mapboxAccessToken,
   oneBusAwayApiKey,
   selectedPoi,
+  onSelectPoi,
   obaStopArrivals,
   isLoadingArrivals,
   onSelectRouteForPath,
   isLoadingObaRouteGeometry,
+  currentOBARouteDisplayData,
 }: SidebarControlsProps) {
-  const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>("directions");
+  const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>("onebusaway-explorer");
 
   return (
     <>
@@ -112,6 +116,9 @@ export function SidebarControls({
                 isLoadingArrivals={isLoadingArrivals}
                 onSelectRoute={onSelectRouteForPath}
                 isLoadingRoutePath={isLoadingObaRouteGeometry}
+                currentOBARouteDisplayData={currentOBARouteDisplayData}
+                onSelectPoiFromList={onSelectPoi}
+                onFlyTo={onFlyTo}
               />
             </AccordionContent>
           </AccordionItem>
@@ -126,7 +133,10 @@ export function SidebarControls({
                 onAdd={onAddCustomPoi}
                 onUpdate={onUpdateCustomPoi}
                 onDelete={onDeleteCustomPoi}
-                onSelectPoi={(poi) => onFlyTo({latitude: poi.latitude, longitude: poi.longitude})}
+                onSelectPoi={(poi) => {
+                  onSelectPoi(poi); // Ensure the POI is selected in AppShell
+                  onFlyTo({latitude: poi.latitude, longitude: poi.longitude});
+                }}
               />
             </AccordionContent>
           </AccordionItem>

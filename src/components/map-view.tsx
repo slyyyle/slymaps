@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Icons, IconName } from '@/components/icons';
 import Image from 'next/image';
 import { Skeleton } from './ui/skeleton';
-import { Button } from './ui/button'; // Added for route selection in popup
+import { Button } from './ui/button';
 
 interface MapViewProps {
   mapRef: React.RefObject<MapRef>;
@@ -21,13 +21,12 @@ interface MapViewProps {
   selectedPoi: PointOfInterest | CustomPOI | null;
   onSelectPoi: (poi: PointOfInterest | CustomPOI | null) => void;
   mapStyleUrl: string;
-  mapboxDirectionsRoute: MapboxRouteType | null; // For Mapbox Directions
-  obaRouteGeometry: ObaRouteGeometry | null; // For OBA route paths
+  mapboxDirectionsRoute: MapboxRouteType | null;
+  obaRouteGeometry: ObaRouteGeometry | null;
   onFlyTo: (coords: Coordinates, zoom?: number) => void;
   obaStopArrivals: ObaArrivalDeparture[];
   isLoadingArrivals: boolean;
-  // Add onSelectRouteForPath if making routes in popup clickable, similar to sidebar
-  // onSelectRouteForPath?: (routeId: string) => void; 
+  onSelectRouteForPath: (routeId: string) => void;
 }
 
 const getIconForPoiType = (poi: PointOfInterest | CustomPOI): IconName => {
@@ -54,7 +53,7 @@ const getStatusColor = (status?: string) => {
   if (status.toLowerCase().includes("scheduled") || status.toLowerCase().includes("on_time")) return "bg-green-500";
   if (status.toLowerCase().includes("delayed")) return "bg-orange-500";
   if (status.toLowerCase().includes("canceled")) return "bg-red-500";
-  return "bg-yellow-500"; // For 'early' or other statuses
+  return "bg-yellow-500"; 
 };
 
 export function MapView({
@@ -70,6 +69,7 @@ export function MapView({
   onFlyTo,
   obaStopArrivals,
   isLoadingArrivals,
+  onSelectRouteForPath,
 }: MapViewProps) {
   const [internalViewState, setInternalViewState] = useState<Partial<ViewState>>(INITIAL_VIEW_STATE);
   const [cursor, setCursor] = useState<string>('grab');
@@ -132,7 +132,7 @@ export function MapView({
       cursor={cursor}
       onMouseDown={() => setCursor('grabbing')}
       onMouseUp={() => setCursor('grab')}
-      onClick={() => onSelectPoi(null)} // Deselect POI on map click
+      onClick={() => onSelectPoi(null)} 
       interactiveLayerIds={['clusters', 'unclustered-point', 'mapbox-directions-route', 'oba-route-path']}
       onLoad={(e) => {
         if (mapRef && !mapRef.current) {
@@ -169,7 +169,7 @@ export function MapView({
           longitude={selectedPoi.longitude}
           latitude={selectedPoi.latitude}
           onClose={() => onSelectPoi(null)}
-          closeOnClick={false} // Keep popup open when map is clicked, deselect handled by map's onClick
+          closeOnClick={false}
           anchor="top"
           offset={25}
           className="font-body"
@@ -210,8 +210,17 @@ export function MapView({
                       {obaStopArrivals.map((arrival, index) => (
                         <li key={`${arrival.tripId}-${arrival.scheduledArrivalTime}-${index}`} className="flex justify-between items-center gap-2">
                           <div className="flex items-center gap-1.5">
-                            {/* Route short name in popup is not clickable for now to keep it simple, use sidebar */}
-                            <Badge variant="secondary" className="font-semibold w-12 text-center truncate">{arrival.routeShortName}</Badge>
+                            <Button 
+                              variant="link" 
+                              size="sm"
+                              className="p-0 h-auto font-semibold"
+                              onClick={() => onSelectRouteForPath(arrival.routeId)}
+                              title={`Show path for route ${arrival.routeShortName}`}
+                            >
+                               <Badge variant="secondary" className="font-semibold w-12 text-center truncate hover:bg-primary/20">
+                                {arrival.routeShortName}
+                              </Badge>
+                            </Button>
                             <span className="truncate flex-1" title={arrival.tripHeadsign}>{arrival.tripHeadsign}</span>
                           </div>
                           <div className="flex items-center gap-1.5">

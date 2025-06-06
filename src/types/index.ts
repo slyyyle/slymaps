@@ -1,3 +1,4 @@
+
 export interface PointOfInterest {
   id: string;
   name: string;
@@ -12,6 +13,8 @@ export interface PointOfInterest {
   direction?: string; // e.g., "N", "S", "W", "E", "NB", "SB"
   code?: string; // Stop code
   routeIds?: string[]; // List of route IDs serving this stop
+  locationType?: number; // OBA specific: 0 for stop, 1 for station
+  wheelchairBoarding?: string; // OBA specific
 }
 
 export interface CustomPOI extends PointOfInterest {
@@ -85,4 +88,21 @@ export interface ObaRouteGeometry {
   properties: {
     routeId: string;
   };
+}
+
+export interface ObaRoute {
+  id: string;
+  shortName: string;
+  longName?: string;
+  description?: string;
+  agencyId: string;
+  url?: string;
+  color?: string;
+  textColor?: string;
+  type?: number; // OBA route type (e.g., 3 for Bus)
+}
+
+export interface CurrentOBARouteDisplayData {
+  routeInfo: ObaRoute;
+  stops: PointOfInterest[];
 }
