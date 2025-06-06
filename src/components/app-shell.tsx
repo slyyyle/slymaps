@@ -43,7 +43,7 @@ export function AppShell() {
         variant: "destructive",
       });
     }
-    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE") {
+    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE" || ONEBUSAWAY_API_KEY === "") {
       console.error("OneBusAway API Key is missing. Please set NEXT_PUBLIC_ONEBUSAWAY_API_KEY environment variable.");
       toast({
         title: "Configuration Error",
@@ -54,7 +54,7 @@ export function AppShell() {
   }, [toast]);
 
   const fetchObaStops = useCallback(async (currentMap: MapRef) => {
-    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE") return;
+    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE" || ONEBUSAWAY_API_KEY === "") return;
 
     const map = currentMap.getMap();
     const bounds = map.getBounds();
@@ -65,10 +65,7 @@ export function AppShell() {
     const latSpan = Math.abs(bounds.getNorthEast().lat - bounds.getSouthWest().lat);
     const lonSpan = Math.abs(bounds.getNorthEast().lng - bounds.getSouthWest().lng);
 
-    // Limit query span to avoid excessive data/performance issues
-    if (latSpan > 0.05 || lonSpan > 0.05) { // Approx 5km x 5km. Adjust as needed.
-        // console.log("Map span too large for OBA stop fetch or clearing stops.");
-        // setObaStopsData([]); // Optionally clear stops if zoomed out too far
+    if (latSpan > 0.05 || lonSpan > 0.05) { 
         return;
     }
 
@@ -104,7 +101,7 @@ export function AppShell() {
   }, [toast]);
 
   const fetchArrivalsForStop = useCallback(async (stopId: string) => {
-    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE") return;
+    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE" || ONEBUSAWAY_API_KEY === "") return;
     setIsLoadingArrivals(true);
     setObaStopArrivals([]);
     try {
@@ -125,7 +122,7 @@ export function AppShell() {
         status: ad.status,
         vehicleId: ad.vehicleId,
         distanceFromStop: ad.distanceFromStop,
-        lastUpdateTime: ad.lastKnownLocationUpdateTime, // Assuming this field if available, or just lastUpdateTime
+        lastUpdateTime: ad.lastKnownLocationUpdateTime, 
       })) || [];
       setObaStopArrivals(arrivals);
     } catch (error) {
@@ -137,19 +134,29 @@ export function AppShell() {
     }
   }, [toast]);
 
+  const handleFlyTo = useCallback((coords: Coordinates, zoom: number = 15) => {
+    setViewState(prev => ({
+      ...prev,
+      longitude: coords.longitude,
+      latitude: coords.latitude,
+      zoom,
+      transitionDuration: 1500, 
+    }));
+  }, []);
+
   const handleSelectPoi = useCallback((poi: PointOfInterest | CustomPOI | null) => {
     setSelectedPoi(poi);
-    setRoute(null); // Clear route when a new POI is selected
+    setRoute(null); 
     if (poi?.isObaStop && poi.id) {
       fetchArrivalsForStop(poi.id);
     } else {
-      setObaStopArrivals([]); // Clear arrivals if not an OBA stop
+      setObaStopArrivals([]); 
       setIsLoadingArrivals(false);
     }
     if (poi) {
         handleFlyTo({latitude: poi.latitude, longitude: poi.longitude}, 15);
     }
-  }, [fetchArrivalsForStop]);
+  }, [fetchArrivalsForStop, handleFlyTo]);
 
 
   useEffect(() => {
@@ -157,23 +164,13 @@ export function AppShell() {
       const map = mapRef.current;
       const handleIdle = () => fetchObaStops(map);
       map.on('idle', handleIdle);
-      // Initial fetch after map loads
       map.on('load', () => fetchObaStops(map));
       return () => {
         map.off('idle', handleIdle);
+        map.off('load', handleIdle); 
       };
     }
-  }, [fetchObaStops]); // fetchObaStops is stable due to useCallback
-
-  const handleFlyTo = useCallback((coords: Coordinates, zoom: number = 15) => {
-    setViewState(prev => ({
-      ...prev,
-      longitude: coords.longitude,
-      latitude: coords.latitude,
-      zoom,
-      transitionDuration: 1500, // Smoother transition
-    }));
-  }, []);
+  }, [fetchObaStops]);
 
   const handleSearchResult = useCallback((coords: Coordinates, name?: string) => {
     handleFlyTo(coords);
@@ -232,7 +229,6 @@ export function AppShell() {
 
   const allPois = React.useMemo(() => {
     const combined = [...INITIAL_POIS, ...customPois, ...obaStopsData];
-    // Simple deduplication based on ID, OBA stops might override initial ones if IDs clash (unlikely here)
     const uniquePois = Array.from(new Map(combined.map(item => [item.id, item])).values());
     return uniquePois;
   }, [customPois, obaStopsData]);
@@ -264,6 +260,9 @@ export function AppShell() {
                 onFlyTo={handleFlyTo}
                 mapboxAccessToken={MAPBOX_ACCESS_TOKEN}
                 oneBusAwayApiKey={ONEBUSAWAY_API_KEY}
+                selectedPoi={selectedPoi}
+                obaStopArrivals={obaStopArrivals}
+                isLoadingArrivals={isLoadingArrivals}
               />
             </SheetContent>
           </Sheet>

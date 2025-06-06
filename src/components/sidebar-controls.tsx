@@ -9,7 +9,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Icons } from '@/components/icons';
-import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode } from '@/types';
+import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture } from '@/types';
 import { CustomPoiEditor } from '@/components/custom-poi-editor';
 import { StyleSelector } from '@/components/style-selector';
 import { DirectionsResult } from '@/components/directions-result';
@@ -42,6 +42,9 @@ interface SidebarControlsProps {
   onFlyTo: (coords: Coordinates, zoom?: number) => void;
   mapboxAccessToken: string;
   oneBusAwayApiKey: string;
+  selectedPoi: PointOfInterest | CustomPOI | null;
+  obaStopArrivals: ObaArrivalDeparture[];
+  isLoadingArrivals: boolean;
 }
 
 export function SidebarControls({
@@ -60,6 +63,9 @@ export function SidebarControls({
   onFlyTo,
   mapboxAccessToken,
   oneBusAwayApiKey,
+  selectedPoi,
+  obaStopArrivals,
+  isLoadingArrivals,
 }: SidebarControlsProps) {
   const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>("directions");
 
@@ -95,7 +101,12 @@ export function SidebarControls({
               <Icons.Bus className="w-5 h-5 mr-2" /> OneBusAway Explorer
             </AccordionTrigger>
             <AccordionContent>
-              <OneBusAwayExplorer apiKey={oneBusAwayApiKey} />
+              <OneBusAwayExplorer 
+                apiKey={oneBusAwayApiKey}
+                selectedPoi={selectedPoi}
+                arrivals={obaStopArrivals}
+                isLoadingArrivals={isLoadingArrivals}
+              />
             </AccordionContent>
           </AccordionItem>
 
