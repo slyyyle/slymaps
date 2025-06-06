@@ -2,15 +2,21 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import type { ViewState } from 'react-map-gl';
+import dynamic from 'next/dynamic';
 import { MapView } from '@/components/map-view';
 import { SidebarControls } from '@/components/sidebar-controls';
-import { SearchBar } from '@/components/search-bar';
+// import { SearchBar } from '@/components/search-bar'; // Original static import
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { Icons } from '@/components/icons';
 import { INITIAL_VIEW_STATE, INITIAL_POIS, MAP_STYLES, MAPBOX_ACCESS_TOKEN } from '@/lib/constants';
 import type { PointOfInterest, CustomPOI, MapStyle, Route as RouteType, Coordinates, TransitMode } from '@/types';
 import { useToast } from "@/hooks/use-toast";
+
+const SearchBar = dynamic(() => import('@/components/search-bar').then(mod => mod.SearchBar), { 
+  ssr: false,
+  loading: () => <div className="p-2 text-sm text-muted-foreground">Loading search...</div> 
+});
 
 export function AppShell() {
   const [viewState, setViewState] = useState<Partial<ViewState>>(INITIAL_VIEW_STATE);
