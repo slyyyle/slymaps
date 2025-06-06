@@ -9,10 +9,10 @@ import { AddressAutofill, config as mapboxSearchConfig } from '@mapbox/search-js
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
-import { Card, CardContent, CardHeader } from '@/components/ui/card'; // CardDescription, CardFooter removed as not used
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Icons } from '@/components/icons';
 import type { CustomPOI } from '@/types';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { ScrollArea } from './ui/scroll-area';
 import { CAPITOL_HILL_COORDS } from '@/lib/constants';
 
@@ -70,13 +70,14 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPoi, setEditingPoi] = useState<CustomPOI | null>(null);
   const [tokenInitializing, setTokenInitializing] = useState(true);
+  const [autofillInputValue, setAutofillInputValue] = useState(''); // Local state for AddressAutofill visual input
 
   const form = useForm<PoiFormData>({
     resolver: zodResolver(poiSchema),
     defaultValues: {
       name: '',
       type: '',
-      address: '',
+      address: '', // RHF address, will be set by onRetrieve
       latitude: undefined,
       longitude: undefined,
       description: '',
@@ -99,13 +100,15 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
         form.reset({
           name: editingPoi.name,
           type: editingPoi.type,
-          address: editingPoi.address || '',
+          address: editingPoi.address || '', // Pre-fill RHF address
           latitude: editingPoi.latitude,
           longitude: editingPoi.longitude,
           description: editingPoi.description || '',
         });
+        setAutofillInputValue(editingPoi.address || ''); // Pre-fill visual input
       } else {
         form.reset({ name: '', type: '', address: '', latitude: undefined, longitude: undefined, description: '' });
+        setAutofillInputValue(''); // Clear visual input
       }
       form.clearErrors();
     }
@@ -136,10 +139,13 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
       retrievedAddress = feature.properties?.formatted_address || feature.properties?.name || '';
     }
     
-    // Set RHF values directly from the retrieved data
+    // Update RHF form state
     form.setValue('address', retrievedAddress, { shouldValidate: true });
     form.setValue('latitude', lat, { shouldValidate: true });
     form.setValue('longitude', lon, { shouldValidate: true });
+    
+    // Update the visual input of AddressAutofill
+    setAutofillInputValue(retrievedAddress); // This ensures the selected address appears in the input
 
     if (lat === undefined || lon === undefined || !retrievedAddress) {
        form.setError("address", {type: "manual", message: "Coordinates could not be determined. Please select a valid address suggestion."});
@@ -149,9 +155,7 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
   };
 
   const onSubmit: SubmitHandler<PoiFormData> = (data) => {
-    // Zod validation should have already ensured latitude and longitude are numbers if present
     if (typeof data.latitude !== 'number' || typeof data.longitude !== 'number') {
-      // This case should ideally be caught by Zod, but as a fallback:
       form.setError("address", {type: "manual", message: "Invalid coordinates. Please re-select address."});
       return;
     }
@@ -160,7 +164,7 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
       id: editingPoi ? editingPoi.id : `custom-${Date.now()}`,
       name: data.name,
       type: data.type,
-      address: data.address,
+      address: data.address, // This comes from RHF, which was set by onRetrieve
       latitude: data.latitude, 
       longitude: data.longitude,
       description: data.description,
@@ -188,6 +192,7 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
       latitude: undefined, longitude: undefined, 
       description: ''
     });
+    setAutofillInputValue(''); // Clear visual input as well
     form.clearErrors();
     setIsDialogOpen(true);
   };
@@ -256,10 +261,12 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                 <FormItem><FormLabel>Type</FormLabel><FormControl><Input placeholder="e.g., Home, Work, Cafe" {...field} /></FormControl><FormMessage /></FormItem>
               )}/>
               
+              {/* This FormField for 'address' is mainly for RHF state management and Zod validation.
+                  The actual visual input is handled by the AddressAutofill component using local state. */}
               <FormField
                 control={form.control}
                 name="address"
-                render={({ field }) => ( 
+                render={({ field }) => ( // RHF's 'address' field, updated by onRetrieve
                   <FormItem>
                     <FormLabel>Address</FormLabel>
                     <FormControl>
@@ -268,7 +275,7 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                        ) : (
                         <AddressAutofill 
                           accessToken={mapboxAccessToken} 
-                          onRetrieve={handleAddressRetrieve} // Simplified call
+                          onRetrieve={handleAddressRetrieve}
                           options={{
                             country: "US", 
                             language: "en",
@@ -276,12 +283,14 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                           }}
                         >
                           <Input
-                            {...field} 
                             placeholder="Type an address and select"
                             autoComplete="off"
+                            value={autofillInputValue} // Controlled by local state
                             onChange={(e) => {
-                              field.onChange(e); // Update RHF for 'address'
+                              setAutofillInputValue(e.target.value); // Update local state as user types
                               if (e.target.value === '') { // If user clears the input
+                                // Also clear RHF fields if autofill input is cleared
+                                form.setValue('address', '', { shouldValidate: false }); // Don't validate empty string yet
                                 form.setValue('latitude', undefined, { shouldValidate: true });
                                 form.setValue('longitude', undefined, { shouldValidate: true });
                                 form.clearErrors(['latitude', 'longitude', 'address']);
@@ -302,18 +311,17 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                         </span>
                       )}
                     </FormDescription>
+                    {/* This FormMessage will show errors for RHF's 'address' field,
+                        which includes the "Address is required" message if it's empty on submit,
+                        or custom errors set by form.setError("address", ...) */}
                     <FormMessage /> 
                   </FormItem>
                 )}
               />
               
-              {/* Zod messages for latitude/longitude will appear under their respective fields if they were separate FormItems, 
-                  or attached to 'address' if that's where we target form.setError for coordinate issues.
-                  The FormMessage under address field will show messages for 'address' or custom errors set on 'address'.
-              */}
+              {/* Display specific RHF errors for latitude and longitude if they are not caught by the 'address' field's message */}
               {form.formState.errors.latitude && <FormMessage>{form.formState.errors.latitude.message}</FormMessage>}
               {form.formState.errors.longitude && <FormMessage>{form.formState.errors.longitude.message}</FormMessage>}
-
 
               <FormField control={form.control} name="description" render={({ field }) => (
                 <FormItem><FormLabel>Description (Optional)</FormLabel><FormControl><Input placeholder="Notes about this place" {...field} /></FormControl><FormMessage /></FormItem>
@@ -331,5 +339,4 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
     </div>
   );
 }
-
     
