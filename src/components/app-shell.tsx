@@ -1,8 +1,8 @@
 
 "use client";
 
-import React, { useState, useCallback, useEffect } from 'react';
-import type { ViewState } from 'react-map-gl';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import type { ViewState, MapRef } from 'react-map-gl';
 import dynamic from 'next/dynamic';
 import { MapView } from '@/components/map-view';
 import { SidebarControls } from '@/components/sidebar-controls';
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { Icons } from '@/components/icons';
 import { INITIAL_VIEW_STATE, INITIAL_POIS, MAP_STYLES, MAPBOX_ACCESS_TOKEN, ONEBUSAWAY_API_KEY } from '@/lib/constants';
-import type { PointOfInterest, CustomPOI, MapStyle, Route as RouteType, Coordinates, TransitMode } from '@/types';
+import type { PointOfInterest, CustomPOI, MapStyle, Route as RouteType, Coordinates, TransitMode, ObaArrivalDeparture } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 
 const SearchBar = dynamic(() => import('@/components/search-bar').then(mod => mod.SearchBar), { 
@@ -19,10 +19,14 @@ const SearchBar = dynamic(() => import('@/components/search-bar').then(mod => mo
 });
 
 export function AppShell() {
+  const mapRef = useRef<MapRef | null>(null);
   const [viewState, setViewState] = useState<Partial<ViewState>>(INITIAL_VIEW_STATE);
-  const [pois, setPois] = useState<PointOfInterest[]>(INITIAL_POIS);
   const [customPois, setCustomPois] = useState<CustomPOI[]>([]);
+  const [obaStopsData, setObaStopsData] = useState<PointOfInterest[]>([]);
   const [selectedPoi, setSelectedPoi] = useState<PointOfInterest | CustomPOI | null>(null);
+  const [obaStopArrivals, setObaStopArrivals] = useState<ObaArrivalDeparture[]>([]);
+  const [isLoadingArrivals, setIsLoadingArrivals] = useState(false);
+
   const [currentMapStyle, setCurrentMapStyle] = useState<MapStyle>(MAP_STYLES[0]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [destination, setDestination] = useState<Coordinates | null>(null);
@@ -49,13 +53,125 @@ export function AppShell() {
     }
   }, [toast]);
 
+  const fetchObaStops = useCallback(async (currentMap: MapRef) => {
+    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE") return;
+
+    const map = currentMap.getMap();
+    const bounds = map.getBounds();
+    const center = map.getCenter();
+    
+    const lat = center.lat;
+    const lon = center.lng;
+    const latSpan = Math.abs(bounds.getNorthEast().lat - bounds.getSouthWest().lat);
+    const lonSpan = Math.abs(bounds.getNorthEast().lng - bounds.getSouthWest().lng);
+
+    // Limit query span to avoid excessive data/performance issues
+    if (latSpan > 0.05 || lonSpan > 0.05) { // Approx 5km x 5km. Adjust as needed.
+        // console.log("Map span too large for OBA stop fetch or clearing stops.");
+        // setObaStopsData([]); // Optionally clear stops if zoomed out too far
+        return;
+    }
+
+    try {
+      const apiUrl = `https://api.pugetsound.onebusaway.org/api/where/stops-for-location.json?key=${ONEBUSAWAY_API_KEY}&lat=${lat}&lon=${lon}&latSpan=${latSpan}&lonSpan=${lonSpan}&includeReferences=false`;
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.text || `Failed to fetch OBA stops (status ${response.status})`);
+      }
+      const data = await response.json();
+      if (data.data && data.data.list) {
+        const fetchedStops: PointOfInterest[] = data.data.list.map((stop: any) => ({
+          id: stop.id,
+          name: stop.name,
+          type: 'Bus Stop',
+          latitude: stop.lat,
+          longitude: stop.lon,
+          isObaStop: true,
+          direction: stop.direction,
+          code: stop.code,
+          routeIds: stop.routeIds || [],
+        }));
+        setObaStopsData(fetchedStops);
+      } else {
+        setObaStopsData([]);
+      }
+    } catch (error) {
+      console.error("Error fetching OBA stops:", error);
+      toast({ title: "Error Fetching Transit Stops", description: (error as Error).message, variant: "destructive" });
+      setObaStopsData([]);
+    }
+  }, [toast]);
+
+  const fetchArrivalsForStop = useCallback(async (stopId: string) => {
+    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE") return;
+    setIsLoadingArrivals(true);
+    setObaStopArrivals([]);
+    try {
+      const response = await fetch(`https://api.pugetsound.onebusaway.org/api/where/arrivals-and-departures-for-stop/${stopId}.json?key=${ONEBUSAWAY_API_KEY}&minutesBefore=0&minutesAfter=60&includeReferences=false`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.text || `Failed to fetch arrivals (status ${response.status})`);
+      }
+      const data = await response.json();
+      const arrivals: ObaArrivalDeparture[] = data.data?.entry?.arrivalsAndDepartures.map((ad: any) => ({
+        routeId: ad.routeId,
+        routeShortName: ad.routeShortName,
+        tripId: ad.tripId,
+        tripHeadsign: ad.tripHeadsign,
+        stopId: ad.stopId,
+        scheduledArrivalTime: ad.scheduledArrivalTime,
+        predictedArrivalTime: ad.predictedArrivalTime !== 0 ? ad.predictedArrivalTime : null,
+        status: ad.status,
+        vehicleId: ad.vehicleId,
+        distanceFromStop: ad.distanceFromStop,
+        lastUpdateTime: ad.lastKnownLocationUpdateTime, // Assuming this field if available, or just lastUpdateTime
+      })) || [];
+      setObaStopArrivals(arrivals);
+    } catch (error) {
+      console.error(`Error fetching OBA arrivals for stop ${stopId}:`, error);
+      toast({ title: "Error Fetching Arrivals", description: (error as Error).message, variant: "destructive" });
+      setObaStopArrivals([]);
+    } finally {
+      setIsLoadingArrivals(false);
+    }
+  }, [toast]);
+
+  const handleSelectPoi = useCallback((poi: PointOfInterest | CustomPOI | null) => {
+    setSelectedPoi(poi);
+    setRoute(null); // Clear route when a new POI is selected
+    if (poi?.isObaStop && poi.id) {
+      fetchArrivalsForStop(poi.id);
+    } else {
+      setObaStopArrivals([]); // Clear arrivals if not an OBA stop
+      setIsLoadingArrivals(false);
+    }
+    if (poi) {
+        handleFlyTo({latitude: poi.latitude, longitude: poi.longitude}, 15);
+    }
+  }, [fetchArrivalsForStop]);
+
+
+  useEffect(() => {
+    if (mapRef.current) {
+      const map = mapRef.current;
+      const handleIdle = () => fetchObaStops(map);
+      map.on('idle', handleIdle);
+      // Initial fetch after map loads
+      map.on('load', () => fetchObaStops(map));
+      return () => {
+        map.off('idle', handleIdle);
+      };
+    }
+  }, [fetchObaStops]); // fetchObaStops is stable due to useCallback
+
   const handleFlyTo = useCallback((coords: Coordinates, zoom: number = 15) => {
     setViewState(prev => ({
       ...prev,
       longitude: coords.longitude,
       latitude: coords.latitude,
       zoom,
-      transitionDuration: 2000,
+      transitionDuration: 1500, // Smoother transition
     }));
   }, []);
 
@@ -114,7 +230,12 @@ export function AppShell() {
   }, [handleFlyTo, toast]);
 
 
-  const allPois = React.useMemo(() => [...pois, ...customPois], [pois, customPois]);
+  const allPois = React.useMemo(() => {
+    const combined = [...INITIAL_POIS, ...customPois, ...obaStopsData];
+    // Simple deduplication based on ID, OBA stops might override initial ones if IDs clash (unlikely here)
+    const uniquePois = Array.from(new Map(combined.map(item => [item.id, item])).values());
+    return uniquePois;
+  }, [customPois, obaStopsData]);
 
   return (
     <div className="relative h-screen w-screen flex flex-col overflow-hidden">
@@ -162,14 +283,17 @@ export function AppShell() {
       </div>
 
       <MapView
+        mapRef={mapRef}
         viewState={viewState}
         onViewStateChange={setViewState}
         pois={allPois}
         selectedPoi={selectedPoi}
-        onSelectPoi={setSelectedPoi}
+        onSelectPoi={handleSelectPoi}
         mapStyleUrl={currentMapStyle.url}
         route={route}
         onFlyTo={handleFlyTo}
+        obaStopArrivals={obaStopArrivals}
+        isLoadingArrivals={isLoadingArrivals}
       />
     </div>
   );
