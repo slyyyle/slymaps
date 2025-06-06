@@ -3,6 +3,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { ViewState, MapRef } from 'react-map-gl';
+import { FlyToInterpolator } from 'react-map-gl'; // Import FlyToInterpolator
 import dynamic from 'next/dynamic';
 import polyline from '@mapbox/polyline';
 import { MapView } from '@/components/map-view';
@@ -151,17 +152,13 @@ export function AppShell() {
       longitude: coords.longitude,
       latitude: coords.latitude,
       zoom,
-      transitionDuration: 1500, 
-      transitionInterpolator: undefined, // Let Mapbox handle interpolation or use a specific interpolator if needed
+      transitionDuration: 1500,
+      transitionInterpolator: new FlyToInterpolator(), // Use FlyToInterpolator
     }));
   }, []);
 
   const handleSelectPoi = useCallback((poi: PointOfInterest | CustomPOI | null) => {
     setSelectedPoi(poi);
-    // Do not clear route or OBA geometry here, allow them to persist if user clicks a stop on a displayed route
-    // setRoute(null); 
-    // setObaRouteGeometry(null);
-    // setCurrentOBARouteDisplayData(null); 
     if (poi?.isObaStop && poi.id) {
       fetchArrivalsForStop(poi.id);
     } else {
@@ -179,7 +176,7 @@ export function AppShell() {
       const map = mapRef.current;
       const handleIdle = () => fetchObaStops(map);
       map.on('idle', handleIdle);
-      map.on('load', () => fetchObaStops(map));
+      map.on('load', () => fetchObaStops(map)); // Also fetch on initial load
       return () => {
         map.off('idle', handleIdle);
         map.off('load', handleIdle); 
@@ -268,7 +265,7 @@ export function AppShell() {
         const allCoordinates: number[][] = [];
         data.data.entry.polylines.forEach((encodedPolyline: ObaPolyline) => {
           const decoded = polyline.decode(encodedPolyline.points);
-          decoded.forEach(coordPair => allCoordinates.push([coordPair[1], coordPair[0]]));
+          decoded.forEach(coordPair => allCoordinates.push([coordPair[1], coordPair[0]])); // OBA is lat,lon; GeoJSON is lon,lat
         });
 
         if (allCoordinates.length > 0) {
@@ -308,7 +305,7 @@ export function AppShell() {
             isObaStop: true,
             direction: stop.direction,
             code: stop.code,
-            routeIds: stop.routeIds || [], // OBA `stops-for-route` might not fill this for all routes on stop
+            routeIds: stop.routeIds || [], 
             locationType: stop.locationType,
             wheelchairBoarding: stop.wheelchairBoarding,
           }));
@@ -317,7 +314,7 @@ export function AppShell() {
       if (routeDetails && routeStops.length > 0) {
         setCurrentOBARouteDisplayData({ routeInfo: routeDetails, stops: routeStops });
       } else {
-        setCurrentOBARouteDisplayData(null);
+        setCurrentOBARouteDisplayData(null); // Ensure it's cleared if data is incomplete
       }
 
       if (routePath && routePath.geometry.coordinates.length > 0) {
@@ -325,7 +322,7 @@ export function AppShell() {
             const firstCoord = routePath.geometry.coordinates[0];
             handleFlyTo({ longitude: firstCoord[0], latitude: firstCoord[1] }, 13);
           }
-      } else if (!routePath) {
+      } else if (!routePath) { // Only toast if path is explicitly missing, not if routeDetails/stops are just missing.
          toast({ title: "No Route Path Data", description: `No polyline data found for route ${routeId}.`, variant: "default" });
       }
 
@@ -342,8 +339,13 @@ export function AppShell() {
 
   const allPois = React.useMemo(() => {
     const combined = [...INITIAL_POIS, ...customPois, ...obaStopsData];
-    const uniquePois = Array.from(new Map(combined.map(item => [item.id, item])).values());
-    return uniquePois;
+    // Create a Map to ensure uniqueness by ID, preferring OBA stops if IDs overlap
+    const poiMap = new Map<string, PointOfInterest | CustomPOI>();
+    INITIAL_POIS.forEach(poi => poiMap.set(poi.id, poi));
+    customPois.forEach(poi => poiMap.set(poi.id, poi)); // Custom POIs might override initial ones if IDs match
+    obaStopsData.forEach(poi => poiMap.set(poi.id, poi)); // OBA stops take precedence for any ID conflicts
+    
+    return Array.from(poiMap.values());
   }, [customPois, obaStopsData]);
 
   return (
