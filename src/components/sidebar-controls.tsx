@@ -6,14 +6,13 @@ import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
+// Removed: import { Button } from '@/components/ui/button';
+// Removed: import { Separator } from '@/components/ui/separator';
 import { Icons } from '@/components/icons';
-import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture, ObaRouteGeometry, CurrentOBARouteDisplayData } from '@/types';
-// Removed: import { CustomPoiEditor } from '@/components/custom-poi-editor'; // Will be dynamically imported
+import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture, CurrentOBARouteDisplayData } from '@/types';
 import { StyleSelector } from '@/components/style-selector';
 import { DirectionsResult } from '@/components/directions-result';
-import { Card, CardContent, CardHeader, CardTitle as ShadCnCardTitle } from './ui/card'; 
+// Removed: import { Card, CardContent, CardHeader, CardTitle as ShadCnCardTitle } from './ui/card'; 
 import { SheetHeader, SheetTitle } from '@/components/ui/sheet'; 
 
 const DirectionsForm = dynamic(() => import('@/components/directions-form').then(mod => mod.DirectionsForm), {
@@ -36,8 +35,8 @@ interface SidebarControlsProps {
   currentMapStyle: MapStyle;
   onMapStyleChange: (style: MapStyle) => void;
   customPois: CustomPOI[];
-  onAddCustomPoi: (poi: CustomPOI) => void;
-  onUpdateCustomPoi: (poi: CustomPOI) => void;
+  // onAddCustomPoi: (poi: CustomPOI) => void; // Removed
+  // onUpdateCustomPoi: (poi: CustomPOI) => void; // Removed
   onDeleteCustomPoi: (poiId: string) => void;
   onGetDirections: (start: Coordinates, end: Coordinates, mode: TransitMode) => Promise<void>;
   isLoadingRoute: boolean;
@@ -45,7 +44,7 @@ interface SidebarControlsProps {
   destination: Coordinates | null;
   setDestination: (dest: Coordinates | null) => void;
   onFlyTo: (coords: Coordinates, zoom?: number) => void;
-  mapboxAccessToken: string;
+  // mapboxAccessToken: string; // No longer needed directly by SidebarControls for CustomPoiEditor
   oneBusAwayApiKey: string;
   selectedPoi: PointOfInterest | CustomPOI | null;
   onSelectPoi: (poi: PointOfInterest | CustomPOI | null) => void;
@@ -61,8 +60,8 @@ export function SidebarControls({
   currentMapStyle,
   onMapStyleChange,
   customPois,
-  onAddCustomPoi,
-  onUpdateCustomPoi,
+  // onAddCustomPoi, // Removed
+  // onUpdateCustomPoi, // Removed
   onDeleteCustomPoi,
   onGetDirections,
   isLoadingRoute,
@@ -70,7 +69,7 @@ export function SidebarControls({
   destination,
   setDestination,
   onFlyTo,
-  mapboxAccessToken,
+  // mapboxAccessToken, // Removed
   oneBusAwayApiKey,
   selectedPoi,
   onSelectPoi,
@@ -103,7 +102,7 @@ export function SidebarControls({
                 destination={destination}
                 setDestination={setDestination}
                 onFlyTo={onFlyTo}
-                mapboxAccessToken={mapboxAccessToken}
+                mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || ''} // Passed directly as DirectionsForm needs it
               />
               {currentRoute && <DirectionsResult route={currentRoute} />}
             </AccordionContent>
@@ -135,14 +134,11 @@ export function SidebarControls({
             <AccordionContent>
               <CustomPoiEditor
                 customPois={customPois}
-                onAdd={onAddCustomPoi}
-                onUpdate={onUpdateCustomPoi}
                 onDelete={onDeleteCustomPoi}
                 onSelectPoi={(poi) => {
-                  onSelectPoi(poi); // Ensure the POI is selected in AppShell
+                  onSelectPoi(poi); 
                   onFlyTo({latitude: poi.latitude, longitude: poi.longitude});
                 }}
-                mapboxAccessToken={mapboxAccessToken} // Pass token here
               />
             </AccordionContent>
           </AccordionItem>

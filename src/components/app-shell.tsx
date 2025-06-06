@@ -91,7 +91,7 @@ export function AppShell() {
         const fetchedStops: PointOfInterest[] = data.data.list.map((stop: any) => ({
           id: stop.id,
           name: stop.name,
-          type: 'Bus Stop', // OBA stops are always 'Bus Stop' for our type system
+          type: 'Bus Stop', 
           latitude: stop.lat,
           longitude: stop.lon,
           isObaStop: true,
@@ -176,7 +176,7 @@ export function AppShell() {
       const map = mapRef.current;
       const handleIdle = () => fetchObaStops(map);
       map.on('idle', handleIdle);
-      map.on('load', () => fetchObaStops(map)); // Also fetch on initial load
+      map.on('load', () => fetchObaStops(map)); 
       return () => {
         map.off('idle', handleIdle);
         map.off('load', handleIdle); 
@@ -195,16 +195,8 @@ export function AppShell() {
     }
   }, [handleFlyTo, toast]);
 
-  const handleAddCustomPoi = useCallback((poi: CustomPOI) => {
-    setCustomPois(prev => [...prev, poi]);
-    toast({ title: "Custom POI Added", description: `${poi.name} has been saved.`});
-  }, [toast]);
+  // handleAddCustomPoi and handleUpdateCustomPoi removed as per request
   
-  const handleUpdateCustomPoi = useCallback((updatedPoi: CustomPOI) => {
-    setCustomPois(prev => prev.map(p => p.id === updatedPoi.id ? updatedPoi : p));
-    toast({ title: "Custom POI Updated", description: `${updatedPoi.name} has been updated.`});
-  }, [toast]);
-
   const handleDeleteCustomPoi = useCallback((poiId: string) => {
     setCustomPois(prev => prev.filter(p => p.id !== poiId));
     setSelectedPoi(prev => prev?.id === poiId ? null : prev);
@@ -265,7 +257,7 @@ export function AppShell() {
         const allCoordinates: number[][] = [];
         data.data.entry.polylines.forEach((encodedPolyline: ObaPolyline) => {
           const decoded = polyline.decode(encodedPolyline.points);
-          decoded.forEach(coordPair => allCoordinates.push([coordPair[1], coordPair[0]])); // OBA is lat,lon; GeoJSON is lon,lat
+          decoded.forEach(coordPair => allCoordinates.push([coordPair[1], coordPair[0]])); 
         });
 
         if (allCoordinates.length > 0) {
@@ -314,7 +306,7 @@ export function AppShell() {
       if (routeDetails && routeStops.length > 0) {
         setCurrentOBARouteDisplayData({ routeInfo: routeDetails, stops: routeStops });
       } else {
-        setCurrentOBARouteDisplayData(null); // Ensure it's cleared if data is incomplete
+        setCurrentOBARouteDisplayData(null); 
       }
 
       if (routePath && routePath.geometry.coordinates.length > 0) {
@@ -322,7 +314,7 @@ export function AppShell() {
             const firstCoord = routePath.geometry.coordinates[0];
             handleFlyTo({ longitude: firstCoord[0], latitude: firstCoord[1] }, 13);
           }
-      } else if (!routePath) { // Only toast if path is explicitly missing, not if routeDetails/stops are just missing.
+      } else if (!routePath) { 
          toast({ title: "No Route Path Data", description: `No polyline data found for route ${routeId}.`, variant: "default" });
       }
 
@@ -339,11 +331,10 @@ export function AppShell() {
 
   const allPois = React.useMemo(() => {
     const combined = [...INITIAL_POIS, ...customPois, ...obaStopsData];
-    // Create a Map to ensure uniqueness by ID, preferring OBA stops if IDs overlap
     const poiMap = new Map<string, PointOfInterest | CustomPOI>();
     INITIAL_POIS.forEach(poi => poiMap.set(poi.id, poi));
-    customPois.forEach(poi => poiMap.set(poi.id, poi)); // Custom POIs might override initial ones if IDs match
-    obaStopsData.forEach(poi => poiMap.set(poi.id, poi)); // OBA stops take precedence for any ID conflicts
+    customPois.forEach(poi => poiMap.set(poi.id, poi)); 
+    obaStopsData.forEach(poi => poiMap.set(poi.id, poi)); 
     
     return Array.from(poiMap.values());
   }, [customPois, obaStopsData]);
@@ -364,8 +355,8 @@ export function AppShell() {
                 currentMapStyle={currentMapStyle}
                 onMapStyleChange={setCurrentMapStyle}
                 customPois={customPois}
-                onAddCustomPoi={handleAddCustomPoi}
-                onUpdateCustomPoi={handleUpdateCustomPoi}
+                // onAddCustomPoi={handleAddCustomPoi} // Removed
+                // onUpdateCustomPoi={handleUpdateCustomPoi} // Removed
                 onDeleteCustomPoi={handleDeleteCustomPoi}
                 onGetDirections={fetchDirections}
                 isLoadingRoute={isLoadingRoute}
@@ -373,7 +364,7 @@ export function AppShell() {
                 destination={destination}
                 setDestination={setDestination}
                 onFlyTo={handleFlyTo}
-                mapboxAccessToken={MAPBOX_ACCESS_TOKEN}
+                // mapboxAccessToken={MAPBOX_ACCESS_TOKEN} // Removed
                 oneBusAwayApiKey={ONEBUSAWAY_API_KEY}
                 selectedPoi={selectedPoi}
                 onSelectPoi={handleSelectPoi}
@@ -420,5 +411,3 @@ export function AppShell() {
     </div>
   );
 }
-
-    
