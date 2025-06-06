@@ -16,6 +16,7 @@ import type { CustomPOI, Coordinates } from '@/types';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { ScrollArea } from './ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
+import { CAPITOL_HILL_COORDS } from '@/lib/constants';
 
 const poiSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -240,7 +241,15 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
                        {!mapboxAccessToken ? (
                           <Input placeholder="Mapbox token missing" disabled />
                        ) : (
-                        <AddressAutofill accessToken={mapboxAccessToken} onRetrieve={handleAddressRetrieve} options={{country: "US", language: "en"}}>
+                        <AddressAutofill 
+                          accessToken={mapboxAccessToken} 
+                          onRetrieve={handleAddressRetrieve} 
+                          options={{
+                            country: "US", 
+                            language: "en",
+                            proximity: [CAPITOL_HILL_COORDS.longitude, CAPITOL_HILL_COORDS.latitude]
+                          }}
+                        >
                           <Input
                             placeholder="Type an address and select from suggestions"
                             value={addressInputValue} // Controlled by local state for AddressAutofill
@@ -286,3 +295,4 @@ export function CustomPoiEditor({ customPois, onAdd, onUpdate, onDelete, onSelec
     </div>
   );
 }
+
