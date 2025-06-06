@@ -1,13 +1,12 @@
-
 "use client";
 
 import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Icons } from '@/components/icons';
-import type { PointOfInterest, CustomPOI, ObaArrivalDeparture, CurrentOBARouteDisplayData, Coordinates, ObaRoute } from '@/types';
+import type { PointOfInterest, ObaArrivalDeparture, CurrentOBARouteDisplayData, Coordinates, ObaRoute } from '@/types';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
 import { Input } from './ui/input';
@@ -15,7 +14,7 @@ import { Label } from './ui/label';
 
 interface OneBusAwayExplorerProps {
   apiKey: string;
-  selectedPoi: PointOfInterest | CustomPOI | null;
+  selectedPoi: PointOfInterest | null;
   arrivals: ObaArrivalDeparture[];
   isLoadingArrivals: boolean;
   onSelectRoute: (routeId: string) => void;

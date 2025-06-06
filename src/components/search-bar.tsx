@@ -72,6 +72,7 @@ export function SearchBar({ accessToken, onResult, onClear }: SearchBarProps) {
 
   return (
     <form onSubmit={handleSubmit} className="relative">
+      {/* @ts-expect-error - AddressAutofill has type compatibility issues with React 18 */}
       <AddressAutofill accessToken={accessToken} onRetrieve={handleRetrieve} options={{ country: "US", language: "en" }}>
         <Input
           placeholder="Enter destination address..."

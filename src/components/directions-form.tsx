@@ -204,22 +204,25 @@ export function DirectionsForm({ onGetDirections, isLoading, destination, setDes
           )}
 
           {startInputMode === 'manual' && (
-            <AddressAutofill accessToken={mapboxAccessToken} onRetrieve={handleStartAddressSelect} options={{country: "US", language: "en"}}>
-              <Input
-                placeholder="Enter start address"
-                value={startAddressInputValue}
-                onChange={(e) => {
-                  setStartAddressInputValue(e.target.value);
-                  // If user types, clear any previously set start lat/lng from address search
-                  if (e.target.value === '') {
-                     form.resetField('startLat');
-                     form.resetField('startLng');
-                  }
-                }}
-                autoComplete="street-address"
-                className="w-full"
-              />
-            </AddressAutofill>
+            <>
+              {/* @ts-expect-error - AddressAutofill has type compatibility issues with React 18 */}
+              <AddressAutofill accessToken={mapboxAccessToken} onRetrieve={handleStartAddressSelect} options={{country: "US", language: "en"}}>
+                <Input
+                  placeholder="Enter start address"
+                  value={startAddressInputValue}
+                  onChange={(e) => {
+                    setStartAddressInputValue(e.target.value);
+                    // If user types, clear any previously set start lat/lng from address search
+                    if (e.target.value === '') {
+                       form.resetField('startLat');
+                       form.resetField('startLng');
+                    }
+                  }}
+                  autoComplete="street-address"
+                  className="w-full"
+                />
+              </AddressAutofill>
+            </>
           )}
            {/* Hidden fields for validation, RHF will pick them up */}
           <FormField control={form.control} name="startLat" render={({ field }) => <input type="hidden" {...field} value={field.value ?? ''} />} />
@@ -241,6 +244,7 @@ export function DirectionsForm({ onGetDirections, isLoading, destination, setDes
                 }}>Clear map selection</Button>
              </div>
            )}
+          {/* @ts-expect-error - AddressAutofill has type compatibility issues with React 18 */}
           <AddressAutofill accessToken={mapboxAccessToken} onRetrieve={handleDestinationAddressSelect} options={{country: "US", language: "en"}}>
             <Input
               placeholder="Enter destination address"

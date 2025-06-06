@@ -1,0 +1,227 @@
+// OpenStreetMap Overpass API Service
+// Fetches real POI data to replace mock data
+
+export interface OSMElement {
+  type: 'node' | 'way' | 'relation';
+  id: number;
+  lat?: number;
+  lon?: number;
+  tags?: Record<string, string>;
+  center?: { lat: number; lon: number };
+}
+
+export interface OSMPoiData {
+  name?: string;
+  category?: string;
+  subclass?: string;
+  opening_hours?: string;
+  phone?: string;
+  website?: string;
+  operator?: string;
+  brand?: string;
+  address?: string;
+  cuisine?: string;
+  amenity?: string;
+  shop?: string;
+  tourism?: string;
+  coordinates: { lat: number; lon: number };
+}
+
+class OSMService {
+  private baseUrl = 'https://overpass-api.de/api/interpreter';
+  
+  /**
+   * Build Overpass QL query to get POI data around coordinates
+   */
+  private buildQuery(lat: number, lon: number, radius: number = 50): string {
+    return `
+      [out:json][timeout:25];
+      (
+        node["name"]["amenity"](around:${radius},${lat},${lon});
+        node["name"]["shop"](around:${radius},${lat},${lon});
+        node["name"]["tourism"](around:${radius},${lat},${lon});
+        node["name"]["leisure"](around:${radius},${lat},${lon});
+        way["name"]["amenity"](around:${radius},${lat},${lon});
+        way["name"]["shop"](around:${radius},${lat},${lon});
+        way["name"]["tourism"](around:${radius},${lat},${lon});
+        way["name"]["leisure"](around:${radius},${lat},${lon});
+      );
+      out center;
+    `;
+  }
+
+  /**
+   * Normalize OSM tags to our POI format
+   */
+  private normalizeOSMData(element: OSMElement): OSMPoiData | null {
+    const tags = element.tags || {};
+    const name = tags.name;
+    
+    if (!name) return null;
+
+    // Get coordinates
+    let coordinates: { lat: number; lon: number };
+    if (element.type === 'node' && element.lat && element.lon) {
+      coordinates = { lat: element.lat, lon: element.lon };
+    } else if (element.center) {
+      coordinates = element.center;
+    } else {
+      return null;
+    }
+
+    // Determine category and subclass
+    let category = 'place';
+    let subclass = '';
+
+    if (tags.amenity) {
+      category = this.mapAmenityToCategory(tags.amenity);
+      subclass = tags.amenity;
+    } else if (tags.shop) {
+      category = 'store';
+      subclass = tags.shop;
+    } else if (tags.tourism) {
+      category = tags.tourism;
+      subclass = tags.tourism;
+    } else if (tags.leisure) {
+      category = 'entertainment';
+      subclass = tags.leisure;
+    }
+
+    // Build address from components
+    const addressParts = [
+      tags['addr:housenumber'],
+      tags['addr:street'],
+      tags['addr:city'],
+      tags['addr:state'],
+      tags['addr:postcode']
+    ].filter(Boolean);
+    
+    const address = addressParts.length > 0 
+      ? addressParts.join(', ')
+      : `${coordinates.lat.toFixed(4)}, ${coordinates.lon.toFixed(4)}`;
+
+    return {
+      name,
+      category,
+      subclass,
+      opening_hours: tags.opening_hours,
+      phone: tags.phone || tags['contact:phone'],
+      website: tags.website || tags['contact:website'],
+      operator: tags.operator,
+      brand: tags.brand,
+      address,
+      cuisine: tags.cuisine,
+      amenity: tags.amenity,
+      shop: tags.shop,
+      tourism: tags.tourism,
+      coordinates
+    };
+  }
+
+  /**
+   * Map OSM amenity tags to our category system
+   */
+  private mapAmenityToCategory(amenity: string): string {
+    const mapping: Record<string, string> = {
+      // Food & Drink
+      'restaurant': 'restaurant',
+      'cafe': 'cafe',
+      'bar': 'bar',
+      'pub': 'bar',
+      'fast_food': 'fast_food',
+      'food_court': 'food_court',
+      'ice_cream': 'cafe',
+      'bakery': 'cafe',
+      
+      // Services
+      'bank': 'bank',
+      'atm': 'atm',
+      'fuel': 'gas_station',
+      'charging_station': 'gas_station',
+      'pharmacy': 'pharmacy',
+      'hospital': 'hospital',
+      'clinic': 'hospital',
+      'dentist': 'hospital',
+      'veterinary': 'hospital',
+      
+      // Transportation
+      'bus_station': 'bus_station',
+      'parking': 'parking',
+      'taxi': 'taxi_stand',
+      
+      // Entertainment
+      'cinema': 'cinema',
+      'theatre': 'theater',
+      'library': 'library',
+      
+      // Education
+      'school': 'school',
+      'university': 'university',
+      'college': 'university',
+      'kindergarten': 'school',
+      
+      // Default
+      'place_of_worship': 'place'
+    };
+    
+    return mapping[amenity] || amenity;
+  }
+
+  /**
+   * Fetch POI data around specific coordinates
+   */
+  async fetchPOIData(lat: number, lon: number, radius: number = 50): Promise<OSMPoiData[]> {
+    try {
+      const query = this.buildQuery(lat, lon, radius);
+      
+      const response = await fetch(this.baseUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `data=${encodeURIComponent(query)}`
+      });
+
+      if (!response.ok) {
+        throw new Error(`OSM API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const elements: OSMElement[] = data.elements || [];
+      
+      return elements
+        .map(element => this.normalizeOSMData(element))
+        .filter((poi): poi is OSMPoiData => poi !== null)
+        .slice(0, 20); // Limit to 20 results
+        
+    } catch (error) {
+      console.warn('Failed to fetch OSM data:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Find the closest matching POI to given coordinates and name
+   */
+  async findMatchingPOI(name: string, lat: number, lon: number): Promise<OSMPoiData | null> {
+    try {
+      const pois = await this.fetchPOIData(lat, lon, 100); // Wider search
+      
+      // Find closest match by name similarity and distance
+      const matches = pois.filter(poi => 
+        poi.name?.toLowerCase().includes(name.toLowerCase()) ||
+        name.toLowerCase().includes(poi.name?.toLowerCase() || '')
+      );
+
+      if (matches.length === 0) return null;
+
+      // Return the first match (closest by default due to query)
+      return matches[0];
+    } catch (error) {
+      console.warn('Failed to find matching POI:', error);
+      return null;
+    }
+  }
+}
+
+export const osmService = new OSMService(); 

@@ -1,4 +1,3 @@
-
 // @ts-nocheck
 "use client";
 
@@ -6,23 +5,19 @@ import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-// Removed: import { Button } from '@/components/ui/button';
-// Removed: import { Separator } from '@/components/ui/separator';
 import { Icons } from '@/components/icons';
-import type { MapStyle, CustomPOI, Route as RouteType, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture, CurrentOBARouteDisplayData, ObaRoute } from '@/types';
+import type { MapStyle, Route as RouteType, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture, CurrentOBARouteDisplayData, ObaRoute } from '@/types';
 import { StyleSelector } from '@/components/style-selector';
 import { DirectionsResult } from '@/components/directions-result';
-// Removed: import { Card, CardContent, CardHeader, CardTitle as ShadCnCardTitle } from './ui/card'; 
 import { SheetHeader, SheetTitle } from '@/components/ui/sheet'; 
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 const DirectionsForm = dynamic(() => import('@/components/directions-form').then(mod => mod.DirectionsForm), {
   ssr: false,
   loading: () => <div className="p-2 text-sm text-muted-foreground">Loading directions form...</div>
-});
-
-const CustomPoiEditor = dynamic(() => import('@/components/custom-poi-editor').then(mod => mod.CustomPoiEditor), {
-  ssr: false,
-  loading: () => <div className="p-2 text-sm text-muted-foreground">Loading POI editor...</div>
 });
 
 const OneBusAwayExplorer = dynamic(() => import('@/components/onebusaway-explorer').then(mod => mod.OneBusAwayExplorer), {
@@ -34,8 +29,8 @@ interface SidebarControlsProps {
   mapStyles: MapStyle[];
   currentMapStyle: MapStyle;
   onMapStyleChange: (style: MapStyle) => void;
-  customPois: CustomPOI[];
-  onDeleteCustomPoi: (poiId: string) => void;
+  customPois: any[]; // Keeping for backward compatibility but not using
+  onDeleteCustomPoi: (poiId: string) => void; // Keeping for backward compatibility but not using
   onGetDirections: (start: Coordinates, end: Coordinates, mode: TransitMode) => Promise<void>;
   isLoadingRoute: boolean;
   currentRoute: RouteType | null;
@@ -43,8 +38,8 @@ interface SidebarControlsProps {
   setDestination: (dest: Coordinates | null) => void;
   onFlyTo: (coords: Coordinates, zoom?: number) => void;
   oneBusAwayApiKey: string;
-  selectedPoi: PointOfInterest | CustomPOI | null;
-  onSelectPoi: (poi: PointOfInterest | CustomPOI | null) => void;
+  selectedPoi: PointOfInterest | null;
+  onSelectPoi: (poi: PointOfInterest | null) => void;
   obaStopArrivals: ObaArrivalDeparture[];
   isLoadingArrivals: boolean;
   onSelectRouteForPath: (routeId: string) => void;
@@ -52,14 +47,18 @@ interface SidebarControlsProps {
   currentOBARouteDisplayData: CurrentOBARouteDisplayData | null;
   isLoadingObaVehicles: boolean;
   obaReferencedRoutes: Record<string, ObaRoute>;
+  onChangeLightPreset?: (preset: 'day' | 'dusk' | 'dawn' | 'night') => void; // New prop for lighting control
+  currentLightPreset?: 'day' | 'dusk' | 'dawn' | 'night'; // New prop for current lighting state
+  isAutoLighting?: boolean; // New prop for auto lighting state
+  onToggleAutoLighting?: (auto: boolean) => void; // New prop for toggling auto lighting
 }
 
 export function SidebarControls({
   mapStyles,
   currentMapStyle,
   onMapStyleChange,
-  customPois,
-  onDeleteCustomPoi,
+  // customPois, // Removed
+  // onDeleteCustomPoi, // Removed
   onGetDirections,
   isLoadingRoute,
   currentRoute,
@@ -76,8 +75,21 @@ export function SidebarControls({
   currentOBARouteDisplayData,
   isLoadingObaVehicles,
   obaReferencedRoutes,
+  onChangeLightPreset,
+  currentLightPreset = 'day',
+  isAutoLighting = true,
+  onToggleAutoLighting,
 }: SidebarControlsProps) {
   const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>("onebusaway-explorer");
+
+  const isStandardStyle = currentMapStyle.url.includes('mapbox://styles/mapbox/standard');
+
+  const lightingOptions = [
+    { value: 'day', label: 'Day', icon: '☀️', description: 'Bright daylight with clear visibility' },
+    { value: 'dusk', label: 'Dusk', icon: '🌆', description: 'Golden hour with warm lighting' },
+    { value: 'dawn', label: 'Dawn', icon: '🌅', description: 'Early morning with soft light' },
+    { value: 'night', label: 'Night', icon: '🌙', description: 'Dark atmosphere with city lights' },
+  ] as const;
 
   return (
     <>
@@ -127,23 +139,67 @@ export function SidebarControls({
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="custom-pois">
-            <AccordionTrigger className="font-headline text-base">
-              <Icons.MapPin className="w-5 h-5 mr-2" /> Custom POIs
-            </AccordionTrigger>
-            <AccordionContent>
-               <CustomPoiEditor
-                customPois={customPois}
-                onDelete={onDeleteCustomPoi}
-                onSelectPoi={(poi) => {
-                  onSelectPoi(poi); 
-                  if (poi.latitude && poi.longitude) {
-                    onFlyTo({latitude: poi.latitude, longitude: poi.longitude});
-                  }
-                }}
-              />
-            </AccordionContent>
-          </AccordionItem>
+          {isStandardStyle && onChangeLightPreset && onToggleAutoLighting && (
+            <AccordionItem value="lighting-3d">
+              <AccordionTrigger className="font-headline text-base">
+                <Icons.Lightbulb className="w-5 h-5 mr-2" /> Lighting & 3D Effects
+              </AccordionTrigger>
+              <AccordionContent>
+                <Card>
+                  <CardHeader className="p-3">
+                    <CardTitle className="text-sm font-headline">Dynamic Lighting</CardTitle>
+                    <CardDescription className="text-xs">
+                      Experience realistic 3D lighting and shadows
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-3 pt-0 space-y-3">
+                    {/* Auto/Manual Toggle */}
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="auto-lighting" className="text-sm font-medium">
+                        {isAutoLighting ? '🕐 Automatic Lighting' : '🎨 Manual Control'}
+                      </Label>
+                      <Switch
+                        id="auto-lighting"
+                        checked={isAutoLighting}
+                        onCheckedChange={onToggleAutoLighting}
+                      />
+                    </div>
+                    
+                    {/* Manual Controls */}
+                    <div className={`grid grid-cols-2 gap-2 ${isAutoLighting ? 'opacity-50 pointer-events-none' : ''}`}>
+                      {lightingOptions.map((option) => (
+                        <Button
+                          key={option.value}
+                          variant={currentLightPreset === option.value ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => onChangeLightPreset(option.value)}
+                          className="flex flex-col items-center gap-1 h-auto py-2 px-2"
+                          title={isAutoLighting ? "Enable manual control to use this preset" : option.description}
+                          disabled={isAutoLighting}
+                        >
+                          <span className="text-lg">{option.icon}</span>
+                          <span className="text-xs font-medium">{option.label}</span>
+                        </Button>
+                      ))}
+                    </div>
+                    
+                    {/* Status Display */}
+                    <div className="mt-3 p-2 bg-muted/50 rounded-md">
+                      <p className="text-xs text-muted-foreground">
+                        ✨ <strong>Current:</strong> {lightingOptions.find(opt => opt.value === currentLightPreset)?.description}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {isAutoLighting 
+                          ? '🕐 Lighting updates automatically based on current time' 
+                          : '🎨 Lighting set to manual control - use buttons above'
+                        }
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </AccordionContent>
+            </AccordionItem>
+          )}
           
           <AccordionItem value="map-style">
             <AccordionTrigger className="font-headline text-base">
@@ -158,6 +214,14 @@ export function SidebarControls({
                   if (newStyle) onMapStyleChange(newStyle);
                 }}
               />
+              {isStandardStyle && (
+                <div className="mt-3 p-2 bg-primary/10 rounded-md">
+                  <p className="text-xs text-primary font-medium">🚀 Mapbox Standard v3 Active</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Enhanced 3D buildings, dynamic lighting, and interactive POIs enabled
+                  </p>
+                </div>
+              )}
             </AccordionContent>
           </AccordionItem>
         </Accordion>

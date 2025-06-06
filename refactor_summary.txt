@@ -1,0 +1,84 @@
+# AI Prompt: Refactor Mapbox View for Style-Specific Logic
+
+## 1. High-Level Goal
+
+Refactor a React application using Mapbox GL JS v3 to correctly handle major architectural differences between two Mapbox "Standard" styles. The current implementation improperly mixes logic for both styles in a single component, leading to runtime errors. The goal is to create a robust, maintainable architecture by separating the logic for each style into its own component.
+
+## 2. The Problem & Technical Context
+
+The application contains a primary map component, `src/components/map-view.tsx`, which is designed to display a map using styles from Mapbox GL JS v3.
+
+**Current State:**
+- The component successfully handles the `mapbox://styles/mapbox/standard` style. This includes complex interactions with the `buildings` featureset to allow users to click and hover over 3D buildings, which are then highlighted using `map.setFeatureState()`. It also manages dynamic lighting presets.
+- An option was added to switch the style to `mapbox://styles/mapbox/standard-satellite`.
+- To handle the style switch, the `MapView` component is filled with conditional logic (`if/then` checks) attempting to enable/disable building-related features based on the current map style URL.
+
+**The Core Issue:**
+This approach has failed. The `standard-satellite` style does not support the `buildings` featureset at all. When the satellite style is active, the component's code still attempts to reference this non-existent featureset, causing the application to throw errors like:
+`"Error: The featureset 'buildings' does not exist in the map's style and cannot be queried for features."`
+
+The conditional logic has become overly complex and is causing race conditions with React's lifecycle, making the code unmaintainable and buggy.
+
+## 3. The Refactoring Plan: A Step-by-Step Guide
+
+Your task is to refactor the codebase to isolate the style-specific logic. You will transform the single, monolithic `MapView` into three distinct components: a lean dispatcher and two specialized view components.
+
+### Step 1: Create a New Directory Structure
+
+1.  Inside `src/components/`, create a new directory named `map`.
+    - **Path:** `src/components/map/`
+
+### Step 2: Create the `StandardMapView`
+
+1.  **Move the existing `src/components/map-view.tsx` file.**
+2.  Place it inside the new directory and rename it to `standard-map-view.tsx`.
+    - **New Path:** `src/components/map/standard-map-view.tsx`
+3.  This component will now be exclusively responsible for the `mapbox://styles/mapbox/standard` style. It should retain all its original code for 3D building interactions, lighting, and POI popups.
+
+### Step 3: Create the `SatelliteMapView`
+
+1.  **Create a copy** of `src/components/map/standard-map-view.tsx`.
+2.  Name the new file `satellite-map-view.tsx`.
+    - **Path:** `src/components/map/satellite-map-view.tsx`
+3.  **Critically, you must strip out all building-related logic from this new satellite component.** This is the most important part of the refactor. Remove the following:
+    - All `useState` hooks for building interactions (e.g., `selectedBuildingId`, `hoveredBuildingId`).
+    - All event handlers and `map.addInteraction` calls related to `'building-click'`, `'building-hover'`, or the `'buildings'` featureset.
+    - All `useEffect` hooks that have dependencies on building-related state.
+    - All helper functions that manage building state (e.g., `clearSelectedBuilding`, `handleBuildingClick`).
+    - All `map.setConfigProperty` calls for building-specific properties like `colorBuildingHighlight`, `colorBuildingSelect`, and `show3dObjects`.
+4.  The final `SatelliteMapView` should only contain the logic that works for both styles: map initialization, POI popups, and the lighting preset controls.
+
+### Step 4: Create the Dispatcher Component
+
+1.  **Go back to the original `src/components/map-view.tsx` file.**
+2.  **Delete all of its content.**
+3.  **Rewrite it as a "dispatcher" component.** Its sole responsibility is to decide which specialized map view to render.
+4.  It must accept all the props that the original `MapView` did (including `mapStyleUrl`) and pass them down.
+5.  Implement conditional rendering based on `mapStyleUrl`.
+
+    **Example Logic:**
+    ```tsx
+    import { StandardMapView } from './map/standard-map-view';
+    import { SatelliteMapView } from './map/satellite-map-view';
+    import { MapViewProps } from '../types'; // Adjust import as necessary
+
+    const MapView = (props: MapViewProps) => {
+      if (props.mapStyleUrl === 'mapbox://styles/mapbox/standard') {
+        return <StandardMapView {...props} />;
+      } else if (props.mapStyleUrl === 'mapbox://styles/mapbox/standard-satellite') {
+        return <SatelliteMapView {...props} />;
+      }
+      // Optional: handle default or error case
+      return <div>Invalid Map Style</div>;
+    };
+
+    export default MapView;
+    ```
+
+### Step 5: Finalize and Clean Up
+
+1.  Review the parent component (`src/app/app-shell.tsx` or similar) that uses `MapView`.
+2.  Identify any state that was being passed down to manage building interactions. This state is now obsolete at the parent level.
+3.  **Move this state down** into `src/components/map/standard-map-view.tsx`, where it is now locally managed.
+4.  Update all imports across the application to point to the new component locations.
+5.  Ensure the refactored application compiles and runs without errors, and that switching between the two map styles works seamlessly.

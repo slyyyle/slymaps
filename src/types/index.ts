@@ -17,10 +17,7 @@ export interface PointOfInterest {
   wheelchairBoarding?: string; // OBA specific
 }
 
-export interface CustomPOI extends PointOfInterest {
-  isCustom: true;
-  address?: string; // For user-added POIs
-}
+
 
 export interface MapStyle {
   id: string;
@@ -36,12 +33,12 @@ export interface RouteStep {
   };
   distance: number; // in meters
   duration: number; // in seconds
-  geometry?: any; // GeoJSON geometry for this step
+  geometry?: GeoJSON.Geometry; // GeoJSON geometry for this step
 }
 
 export interface Route {
   id: string;
-  geometry: any; // GeoJSON LineString for Mapbox Directions
+  geometry: GeoJSON.LineString; // GeoJSON LineString for Mapbox Directions
   legs: {
     steps: RouteStep[];
     summary: string;
@@ -136,6 +133,6 @@ export interface ObaReferences {
   agencies: ObaAgency[];
   routes: ObaRoute[];
   stops: PointOfInterest[]; // OBA stop structure is similar enough to PointOfInterest
-  trips?: any[]; // Define if needed
-  situations?: any[]; // Define if needed
+  trips?: unknown[]; // Define if needed
+  situations?: unknown[]; // Define if needed
 }

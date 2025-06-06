@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -11,8 +10,8 @@ import { SidebarControls } from '@/components/sidebar-controls';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { Icons } from '@/components/icons';
-import { INITIAL_VIEW_STATE, INITIAL_POIS, MAP_STYLES, MAPBOX_ACCESS_TOKEN, ONEBUSAWAY_API_KEY } from '@/lib/constants';
-import type { PointOfInterest, CustomPOI, MapStyle, Route as RouteType, Coordinates, TransitMode, ObaArrivalDeparture, ObaPolyline, ObaRouteGeometry, ObaRoute, CurrentOBARouteDisplayData, ObaVehicleLocation, ObaReferences } from '@/types';
+import { INITIAL_VIEW_STATE, MAP_STYLES, MAPBOX_ACCESS_TOKEN, ONEBUSAWAY_API_KEY } from '@/lib/constants';
+import type { PointOfInterest, MapStyle, Route as RouteType, Coordinates, TransitMode, ObaArrivalDeparture, ObaPolyline, ObaRouteGeometry, ObaRoute, CurrentOBARouteDisplayData, ObaVehicleLocation, ObaAgency } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 
 const SearchBar = dynamic(() => import('@/components/search-bar').then(mod => mod.SearchBar), { 
@@ -23,13 +22,11 @@ const SearchBar = dynamic(() => import('@/components/search-bar').then(mod => mo
 export function AppShell() {
   const mapRef = useRef<MapRef | null>(null);
   const [viewState, setViewState] = useState<Partial<ViewState>>(INITIAL_VIEW_STATE);
-  const [customPois, setCustomPois] = useState<CustomPOI[]>([]);
   const [obaStopsData, setObaStopsData] = useState<PointOfInterest[]>([]);
-  const [selectedPoi, setSelectedPoi] = useState<PointOfInterest | CustomPOI | null>(null);
+  const [selectedPoi, setSelectedPoi] = useState<PointOfInterest | null>(null);
   const [obaStopArrivals, setObaStopArrivals] = useState<ObaArrivalDeparture[]>([]);
   const [isLoadingArrivals, setIsLoadingArrivals] = useState(false);
   const [obaReferencedRoutes, setObaReferencedRoutes] = useState<Record<string, ObaRoute>>({});
-
 
   const [currentMapStyle, setCurrentMapStyle] = useState<MapStyle>(MAP_STYLES[0]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -43,7 +40,8 @@ export function AppShell() {
   const [currentOBARouteDisplayData, setCurrentOBARouteDisplayData] = useState<CurrentOBARouteDisplayData | null>(null);
   const [obaVehicleLocations, setObaVehicleLocations] = useState<ObaVehicleLocation[]>([]);
   const [isLoadingObaVehicles, setIsLoadingObaVehicles] = useState(false);
-
+  const [currentLightPreset, setCurrentLightPreset] = useState<'day' | 'dusk' | 'dawn' | 'night'>('day');
+  const [isAutoLighting, setIsAutoLighting] = useState<boolean>(true);
 
   const { toast } = useToast();
 
@@ -71,6 +69,8 @@ export function AppShell() {
 
     const map = currentMap.getMap();
     const bounds = map.getBounds();
+    if (!bounds) return;
+    
     const center = map.getCenter();
     
     const lat = center.lat;
@@ -91,11 +91,11 @@ export function AppShell() {
         try {
           const errorData = await response.json();
           errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
-        } catch (e) {
+        } catch {
           try {
             const textResponse = await response.text();
             if (textResponse) errorMessage = textResponse;
-          } catch (textErr) { /* Do nothing */ }
+          } catch { /* Do nothing */ }
         }
         throw new Error(errorMessage);
       }
@@ -149,11 +149,11 @@ export function AppShell() {
         try {
           const errorData = await response.json();
           errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
-        } catch (e) {
+        } catch {
            try {
             const textResponse = await response.text();
             if (textResponse) errorMessage = textResponse;
-          } catch (textErr) { /* Do nothing */ }
+          } catch { /* Do nothing */ }
         }
         throw new Error(errorMessage);
       }
@@ -196,7 +196,7 @@ export function AppShell() {
     }));
   }, []);
 
-  const handleSelectPoi = useCallback((poi: PointOfInterest | CustomPOI | null) => {
+  const handleSelectPoi = useCallback((poi: PointOfInterest | null) => {
     setSelectedPoi(poi);
     if (poi?.isObaStop && poi.id) {
       fetchArrivalsForStop(poi.id);
@@ -235,11 +235,7 @@ export function AppShell() {
     }
   }, [handleFlyTo, toast]);
   
-  const handleDeleteCustomPoi = useCallback((poiId: string) => {
-    setCustomPois(prev => prev.filter(p => p.id !== poiId));
-    setSelectedPoi(prev => prev?.id === poiId ? null : prev);
-    toast({ title: "Custom POI Deleted" });
-  }, [toast]);
+
 
   const fetchDirections = useCallback(async (start: Coordinates, end: Coordinates, mode: TransitMode) => {
     if (!MAPBOX_ACCESS_TOKEN) {
@@ -294,11 +290,11 @@ export function AppShell() {
         try {
           const errorData = await response.json();
           errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
-        } catch (e) {
+        } catch {
            try {
             const textResponse = await response.text();
             if (textResponse) errorMessage = textResponse;
-          } catch (textErr) { /* Do nothing */ }
+          } catch { /* Do nothing */ }
         }
         throw new Error(errorMessage);
       }
@@ -360,11 +356,11 @@ export function AppShell() {
         try {
           const errorData = await response.json();
           errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
-        } catch (e) {
+        } catch {
             try {
                 const textResponse = await response.text();
                 if (textResponse) errorMessage = textResponse; 
-            } catch (textErr) { /* Do nothing, stick with initial errorMessage */ }
+            } catch { /* Do nothing, stick with initial errorMessage */ }
         }
         throw new Error(errorMessage);
       }
@@ -480,13 +476,86 @@ export function AppShell() {
   }, [toast, handleFlyTo, fetchVehiclesForObaRoute, obaReferencedRoutes]);
 
   const allPois = React.useMemo(() => {
-    const combined = [...INITIAL_POIS, ...obaStopsData];
-    const poiMap = new Map<string, PointOfInterest | CustomPOI>();
-    INITIAL_POIS.forEach(poi => poiMap.set(poi.id, poi));
-    obaStopsData.forEach(poi => poiMap.set(poi.id, poi)); 
-    
-    return Array.from(poiMap.values());
+    return obaStopsData;
   }, [obaStopsData]);
+
+  // Initialize with current time-based lighting (only if auto lighting is enabled)
+  useEffect(() => {
+    if (!isAutoLighting) return;
+    
+    const now = new Date();
+    const hour = now.getHours();
+    
+    let lightPreset: 'day' | 'dusk' | 'dawn' | 'night';
+    if (hour >= 6 && hour < 8) {
+      lightPreset = 'dawn';
+    } else if (hour >= 8 && hour < 18) {
+      lightPreset = 'day';
+    } else if (hour >= 18 && hour < 20) {
+      lightPreset = 'dusk';
+    } else {
+      lightPreset = 'night';
+    }
+    
+    setCurrentLightPreset(lightPreset);
+  }, [isAutoLighting]);
+
+  // Function to manually change lighting
+  const handleChangeLightPreset = useCallback((preset: 'day' | 'dusk' | 'dawn' | 'night') => {
+    if (!mapRef.current || isAutoLighting) return;
+    
+    try {
+      const map = mapRef.current.getMap();
+      const isStandardStyle = currentMapStyle.url.includes('mapbox://styles/mapbox/standard');
+      
+      if (isStandardStyle) {
+        map.setConfigProperty('basemap', 'lightPreset', preset);
+        setCurrentLightPreset(preset);
+        console.log(`🌟 Lighting manually changed to: ${preset}`);
+      }
+    } catch (error) {
+      console.warn('Failed to change lighting preset:', error);
+    }
+  }, [currentMapStyle.url, isAutoLighting]);
+
+  // Function to toggle auto lighting
+  const handleToggleAutoLighting = useCallback((auto: boolean) => {
+    setIsAutoLighting(auto);
+    
+    if (auto) {
+      // When switching to auto, immediately update to current time-based lighting
+      const now = new Date();
+      const hour = now.getHours();
+      
+      let lightPreset: 'day' | 'dusk' | 'dawn' | 'night';
+      if (hour >= 6 && hour < 8) {
+        lightPreset = 'dawn';
+      } else if (hour >= 8 && hour < 18) {
+        lightPreset = 'day';
+      } else if (hour >= 18 && hour < 20) {
+        lightPreset = 'dusk';
+      } else {
+        lightPreset = 'night';
+      }
+      
+      if (mapRef.current) {
+        try {
+          const map = mapRef.current.getMap();
+          const isStandardStyle = currentMapStyle.url.includes('mapbox://styles/mapbox/standard');
+          
+          if (isStandardStyle) {
+            map.setConfigProperty('basemap', 'lightPreset', lightPreset);
+            setCurrentLightPreset(lightPreset);
+            console.log(`🕐 Auto lighting enabled - updated to: ${lightPreset}`);
+          }
+        } catch (error) {
+          console.warn('Failed to update lighting when enabling auto:', error);
+        }
+      }
+    } else {
+      console.log('🎨 Manual lighting control enabled');
+    }
+  }, [currentMapStyle.url]);
 
   return (
     <div className="relative h-screen w-screen flex flex-col overflow-hidden">
@@ -503,8 +572,8 @@ export function AppShell() {
                 mapStyles={MAP_STYLES}
                 currentMapStyle={currentMapStyle}
                 onMapStyleChange={setCurrentMapStyle}
-                customPois={customPois} 
-                onDeleteCustomPoi={handleDeleteCustomPoi} 
+                customPois={[]} 
+                onDeleteCustomPoi={() => {}} 
                 onGetDirections={fetchDirections}
                 isLoadingRoute={isLoadingRoute}
                 currentRoute={route}
@@ -521,6 +590,10 @@ export function AppShell() {
                 currentOBARouteDisplayData={currentOBARouteDisplayData}
                 isLoadingObaVehicles={isLoadingObaVehicles}
                 obaReferencedRoutes={obaReferencedRoutes}
+                currentLightPreset={currentLightPreset}
+                onChangeLightPreset={handleChangeLightPreset}
+                isAutoLighting={isAutoLighting}
+                onToggleAutoLighting={handleToggleAutoLighting}
               />
             </SheetContent>
           </Sheet>
@@ -557,6 +630,9 @@ export function AppShell() {
         isLoadingArrivals={isLoadingArrivals}
         onSelectRouteForPath={handleSelectRouteForPath}
         obaVehicleLocations={obaVehicleLocations}
+        isAutoLighting={isAutoLighting}
+        onChangeLightPreset={handleChangeLightPreset}
+        currentLightPreset={currentLightPreset}
       />
     </div>
   );
