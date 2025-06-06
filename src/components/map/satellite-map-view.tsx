@@ -12,6 +12,9 @@ import Image from 'next/image';
 import { Skeleton } from '../ui/skeleton';
 import { Button } from '../ui/button';
 import type { MapViewProps } from '../map-view';
+import { EnhancedPoiPopup } from '@/components/enhanced-poi-popup';
+import { LightingControl } from './lighting-control';
+import { formatObaTime, getTimeBasedLightingPreset, getStatusColor } from '@/lib/time-utils';
 
 // This is the dedicated view for the Mapbox Standard Satellite style.
 // It does NOT include any building-related interactions or features.
@@ -35,18 +38,9 @@ const getIconForPoiType = (poi: PointOfInterest): IconName => {
   }
 };
 
-const formatObaTime = (epochTime: number | null | undefined): string => {
-  if (!epochTime) return 'N/A';
-  return new Date(epochTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-};
 
-const getStatusColor = (status?: string) => {
-  if (!status) return "bg-gray-500";
-  if (status.toLowerCase().includes("scheduled") || status.toLowerCase().includes("on_time")) return "bg-green-500";
-  if (status.toLowerCase().includes("delayed")) return "bg-orange-500";
-  if (status.toLowerCase().includes("canceled")) return "bg-red-500";
-  return "bg-yellow-500"; 
-};
+
+
 
 const isStandardStyle = (styleUrl: string): boolean => {
   return styleUrl.includes('mapbox://styles/mapbox/standard');
@@ -74,6 +68,8 @@ export function SatelliteMapView({
   obaVehicleLocations,
   isAutoLighting = true,
   currentLightPreset = 'day',
+  onChangeLightPreset,
+  onToggleAutoLighting,
 }: MapViewProps) {
   const [internalViewState, setInternalViewState] = useState<Partial<ViewState>>(INITIAL_VIEW_STATE);
   const [selectedVehicle, setSelectedVehicle] = useState<ObaVehicleLocation | null>(null);
@@ -104,14 +100,7 @@ export function SatelliteMapView({
   const updateLightingBasedOnTime = useCallback((map: any) => {
     if (!isStandardStyle(mapStyleUrl) || !isAutoLighting) return;
 
-    const now = new Date();
-    const hour = now.getHours();
-    let lightPreset: 'day' | 'dusk' | 'dawn' | 'night';
-    
-    if (hour >= 6 && hour < 8) lightPreset = 'dawn';
-    else if (hour >= 8 && hour < 18) lightPreset = 'day';
-    else if (hour >= 18 && hour < 20) lightPreset = 'dusk';
-    else lightPreset = 'night';
+    const lightPreset = getTimeBasedLightingPreset();
 
     if (lightPreset !== currentLightPreset) {
       try {
@@ -258,6 +247,17 @@ export function SatelliteMapView({
       <GeolocateControl position="top-right" />
       <FullscreenControl position="top-right" />
       <NavigationControl position="top-right" />
+      
+      {/* Lighting Control */}
+      <div className="absolute top-1/2 -translate-y-1/2 right-4 z-10">
+        <LightingControl
+          currentLightPreset={currentLightPreset}
+          isAutoLighting={isAutoLighting}
+          onChangeLightPreset={onChangeLightPreset || (() => {})}
+          onToggleAutoLighting={onToggleAutoLighting || (() => {})}
+          isStandardStyle={isStandardStyle(mapStyleUrl)}
+        />
+      </div>
 
       {pois.map(poi => {
         const IconComponent = Icons[getIconForPoiType(poi)] || Icons.MapPin;
@@ -410,62 +410,25 @@ export function SatelliteMapView({
           latitude={selectedMapboxPoi.latitude}
           onClose={() => setSelectedMapboxPoi(null)}
           closeOnClick={false}
+          closeButton={false}
           anchor="top"
           offset={25}
-          className="font-body"
-          maxWidth="320px"
+          className="mapboxgl-popup-content-no-padding"
+          maxWidth="500px"
+          style={{
+            padding: 0,
+            background: 'transparent',
+            boxShadow: 'none',
+            border: 'none'
+          }}
         >
-          <Card className="border-none shadow-none">
-            <CardHeader className="p-3">
-              <CardTitle className="text-base font-headline">{selectedMapboxPoi.name}</CardTitle>
-              <CardDescription className="text-xs capitalize">
-                {selectedMapboxPoi.subclass || selectedMapboxPoi.category}
-                {selectedMapboxPoi.properties?.brand && ` • ${selectedMapboxPoi.properties.brand}`}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-3 pt-0 text-sm space-y-2">
-              {selectedMapboxPoi.properties?.phone && (
-                <p className="flex items-center gap-2">
-                  <Icons.Info className="h-4 w-4 text-muted-foreground" />
-                  <a href={`tel:${selectedMapboxPoi.properties.phone}`} className="text-blue-600 hover:underline">
-                    {selectedMapboxPoi.properties.phone}
-                  </a>
-                </p>
-              )}
-              {selectedMapboxPoi.properties?.website && (
-                <p className="flex items-center gap-2">
-                  <Icons.Info className="h-4 w-4 text-muted-foreground" />
-                  <a 
-                    href={selectedMapboxPoi.properties.website} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline truncate"
-                  >
-                    Visit Website
-                  </a>
-                </p>
-              )}
-              {selectedMapboxPoi.properties?.address && (
-                <p className="text-xs text-muted-foreground">
-                  {selectedMapboxPoi.properties.address}
-                </p>
-              )}
-              <div className="pt-2 border-t">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onFlyTo({
-                    latitude: selectedMapboxPoi.latitude,
-                    longitude: selectedMapboxPoi.longitude
-                  }, 16)}
-                  className="w-full"
-                >
-                  <Icons.Geolocate className="h-4 w-4 mr-2" />
-                  Center on Map
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <EnhancedPoiPopup
+            poi={selectedMapboxPoi}
+            onClose={() => setSelectedMapboxPoi(null)}
+            onDirections={(lat, lng) => console.log(`Directions to: ${lat}, ${lng}`)}
+            onFlyTo={onFlyTo}
+            currentLightPreset={currentLightPreset}
+          />
         </Popup>
       )}
 

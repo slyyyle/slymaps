@@ -139,67 +139,7 @@ export function SidebarControls({
             </AccordionContent>
           </AccordionItem>
 
-          {isStandardStyle && onChangeLightPreset && onToggleAutoLighting && (
-            <AccordionItem value="lighting-3d">
-              <AccordionTrigger className="font-headline text-base">
-                <Icons.Lightbulb className="w-5 h-5 mr-2" /> Lighting & 3D Effects
-              </AccordionTrigger>
-              <AccordionContent>
-                <Card>
-                  <CardHeader className="p-3">
-                    <CardTitle className="text-sm font-headline">Dynamic Lighting</CardTitle>
-                    <CardDescription className="text-xs">
-                      Experience realistic 3D lighting and shadows
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-3 pt-0 space-y-3">
-                    {/* Auto/Manual Toggle */}
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="auto-lighting" className="text-sm font-medium">
-                        {isAutoLighting ? '🕐 Automatic Lighting' : '🎨 Manual Control'}
-                      </Label>
-                      <Switch
-                        id="auto-lighting"
-                        checked={isAutoLighting}
-                        onCheckedChange={onToggleAutoLighting}
-                      />
-                    </div>
-                    
-                    {/* Manual Controls */}
-                    <div className={`grid grid-cols-2 gap-2 ${isAutoLighting ? 'opacity-50 pointer-events-none' : ''}`}>
-                      {lightingOptions.map((option) => (
-                        <Button
-                          key={option.value}
-                          variant={currentLightPreset === option.value ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => onChangeLightPreset(option.value)}
-                          className="flex flex-col items-center gap-1 h-auto py-2 px-2"
-                          title={isAutoLighting ? "Enable manual control to use this preset" : option.description}
-                          disabled={isAutoLighting}
-                        >
-                          <span className="text-lg">{option.icon}</span>
-                          <span className="text-xs font-medium">{option.label}</span>
-                        </Button>
-                      ))}
-                    </div>
-                    
-                    {/* Status Display */}
-                    <div className="mt-3 p-2 bg-muted/50 rounded-md">
-                      <p className="text-xs text-muted-foreground">
-                        ✨ <strong>Current:</strong> {lightingOptions.find(opt => opt.value === currentLightPreset)?.description}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {isAutoLighting 
-                          ? '🕐 Lighting updates automatically based on current time' 
-                          : '🎨 Lighting set to manual control - use buttons above'
-                        }
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </AccordionContent>
-            </AccordionItem>
-          )}
+
           
           <AccordionItem value="map-style">
             <AccordionTrigger className="font-headline text-base">

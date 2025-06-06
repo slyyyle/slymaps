@@ -14,6 +14,8 @@ import { Button } from '../ui/button';
 import type { MapViewProps } from '../map-view';
 import { EnhancedPoiPopup } from '@/components/enhanced-poi-popup';
 import { PoiCategoryFilter, type PoiFilterSettings } from '@/components/poi-category-filter';
+import { LightingControl } from './lighting-control';
+import { formatObaTime, getTimeBasedLightingPreset, getStatusColor } from '@/lib/time-utils';
 
 // This is the dedicated view for the Mapbox Standard style.
 // It assumes that all features of the Standard style, including the 'buildings' featureset, are available.
@@ -37,18 +39,9 @@ const getIconForPoiType = (poi: PointOfInterest): IconName => {
   }
 };
 
-const formatObaTime = (epochTime: number | null | undefined): string => {
-  if (!epochTime) return 'N/A';
-  return new Date(epochTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-};
 
-const getStatusColor = (status?: string) => {
-  if (!status) return "bg-gray-500";
-  if (status.toLowerCase().includes("scheduled") || status.toLowerCase().includes("on_time")) return "bg-green-500";
-  if (status.toLowerCase().includes("delayed")) return "bg-orange-500";
-  if (status.toLowerCase().includes("canceled")) return "bg-red-500";
-  return "bg-yellow-500"; 
-};
+
+
 
 const isStandardStyle = (styleUrl: string): boolean => {
   return styleUrl.includes('mapbox://styles/mapbox/standard');
@@ -76,6 +69,8 @@ export function StandardMapView({
   obaVehicleLocations,
   isAutoLighting = true,
   currentLightPreset = 'day',
+  onChangeLightPreset,
+  onToggleAutoLighting,
 }: MapViewProps) {
   const [internalViewState, setInternalViewState] = useState<Partial<ViewState>>(INITIAL_VIEW_STATE);
   const [selectedVehicle, setSelectedVehicle] = useState<ObaVehicleLocation | null>(null);
@@ -131,9 +126,7 @@ export function StandardMapView({
   }, [mapRef]);
 
   const handleDirectionsToPoi = useCallback((lat: number, lng: number) => {
-    // This could integrate with your existing directions system
     console.log(`🗺️ Directions requested to: ${lat}, ${lng}`);
-    // You could call onFlyTo or trigger a directions API call here
     onFlyTo({ latitude: lat, longitude: lng }, 16);
   }, [onFlyTo]);
 
@@ -157,14 +150,7 @@ export function StandardMapView({
   const updateLightingBasedOnTime = useCallback((map: any) => {
     if (!isStandardStyle(mapStyleUrl) || !isAutoLighting) return;
 
-    const now = new Date();
-    const hour = now.getHours();
-    let lightPreset: 'day' | 'dusk' | 'dawn' | 'night';
-    
-    if (hour >= 6 && hour < 8) lightPreset = 'dawn';
-    else if (hour >= 8 && hour < 18) lightPreset = 'day';
-    else if (hour >= 18 && hour < 20) lightPreset = 'dusk';
-    else lightPreset = 'night';
+    const lightPreset = getTimeBasedLightingPreset();
 
     if (lightPreset !== currentLightPreset) {
       try {
@@ -180,7 +166,7 @@ export function StandardMapView({
     if (!isStandardStyle(mapStyleUrl)) return;
 
     try {
-        map.setConfigProperty('basemap', 'show3dObjects', true);
+      map.setConfigProperty('basemap', 'show3dObjects', true);
       map.setConfigProperty('basemap', 'showPointOfInterestLabels', true);
       map.setConfigProperty('basemap', 'showTransitLabels', true);
       map.setConfigProperty('basemap', 'showPlaceLabels', true);
@@ -188,7 +174,7 @@ export function StandardMapView({
       
       map.setConfigProperty('basemap', 'colorBuildingHighlight', '#ffdd44');
       map.setConfigProperty('basemap', 'colorBuildingSelect', '#0080ff');
-        console.log('🏢 Building color configuration applied');
+      console.log('🏢 Building color configuration applied');
       
       map.setMaxBounds(PACIFIC_NORTHWEST_BOUNDS);
       updateLightingBasedOnTime(map);
@@ -249,38 +235,38 @@ export function StandardMapView({
         handler: ({ feature }: any) => map.setFeatureState(feature, { highlight: false })
       });
 
-      // Building Interactions
-        map.addInteraction('building-click', {
-          type: 'click',
-          target: { featuresetId: 'buildings', importId: 'basemap' },
-          handler: ({ feature }: any) => {
-            clearSelectedBuilding();
-            try {
-              map.setFeatureState(feature, { select: true });
-              selectedBuildingRef.current = feature;
-              console.log('🏢 Building selected:', feature.properties || 'Building');
-            } catch (error) {
-              console.log('Building feature state not supported:', error);
-            }
+            // Building Interactions
+      map.addInteraction('building-click', {
+        type: 'click',
+        target: { featuresetId: 'buildings', importId: 'basemap' },
+        handler: ({ feature }: any) => {
+          clearSelectedBuilding();
+          try {
+            map.setFeatureState(feature, { select: true });
+            selectedBuildingRef.current = feature;
+            console.log('🏢 Building selected:', feature.properties || 'Building');
+          } catch (error) {
+            console.log('Building feature state not supported:', error);
           }
-        });
-        map.addInteraction('building-hover', {
-          type: 'mouseenter',
-          target: { featuresetId: 'buildings', importId: 'basemap' },
+        }
+      });
+      map.addInteraction('building-hover', {
+        type: 'mouseenter',
+        target: { featuresetId: 'buildings', importId: 'basemap' },
         handler: ({ feature }: any) => map.setFeatureState(feature, { highlight: true })
-        });
-        map.addInteraction('building-leave', {
-          type: 'mouseleave',
-          target: { featuresetId: 'buildings', importId: 'basemap' },
+      });
+      map.addInteraction('building-leave', {
+        type: 'mouseleave',
+        target: { featuresetId: 'buildings', importId: 'basemap' },
         handler: ({ feature }: any) => map.setFeatureState(feature, { highlight: false })
-        });
+      });
       console.log('🏢 Building interactions enabled');
 
       // Map click to clear all selections
       map.addInteraction('map-click', {
         type: 'click',
         handler: () => {
-            clearSelectedBuilding();
+          clearSelectedBuilding();
           setSelectedMapboxPoi(null);
           setSelectedVehicle(null);
           onSelectPoi(null);
@@ -346,6 +332,17 @@ export function StandardMapView({
       <GeolocateControl position="top-right" />
       <FullscreenControl position="top-right" />
       <NavigationControl position="top-right" />
+      
+      {/* Lighting Control */}
+      <div className="absolute top-1/2 -translate-y-1/2 right-4 z-10">
+        <LightingControl
+          currentLightPreset={currentLightPreset}
+          isAutoLighting={isAutoLighting}
+          onChangeLightPreset={onChangeLightPreset || (() => {})}
+          onToggleAutoLighting={onToggleAutoLighting || (() => {})}
+          isStandardStyle={isStandardStyle(mapStyleUrl)}
+        />
+      </div>
       
       {/* POI Filter Button */}
       <div className="absolute top-4 left-4">
@@ -526,10 +523,17 @@ export function StandardMapView({
           latitude={selectedMapboxPoi.latitude}
           onClose={() => setSelectedMapboxPoi(null)}
           closeOnClick={false}
+          closeButton={false}
           anchor="top"
           offset={25}
-          className="font-body"
+          className="mapboxgl-popup-content-no-padding"
           maxWidth="500px"
+          style={{
+            padding: 0,
+            background: 'transparent',
+            boxShadow: 'none',
+            border: 'none'
+          }}
         >
           <EnhancedPoiPopup
             poi={selectedMapboxPoi}

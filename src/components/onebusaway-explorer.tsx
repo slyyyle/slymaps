@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Icons } from '@/components/icons';
 import type { PointOfInterest, ObaArrivalDeparture, CurrentOBARouteDisplayData, Coordinates, ObaRoute } from '@/types';
+import { isValidApiKey } from '@/lib/error-utils';
+import { formatObaTime, getStatusColor } from '@/lib/time-utils';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
 import { Input } from './ui/input';
@@ -26,18 +28,9 @@ interface OneBusAwayExplorerProps {
   obaReferencedRoutes: Record<string, ObaRoute>;
 }
 
-const formatObaTime = (epochTime: number | null | undefined): string => {
-  if (!epochTime) return 'N/A';
-  return new Date(epochTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-};
 
-const getStatusColor = (status?: string) => {
-  if (!status) return "bg-gray-500"; 
-  if (status.toLowerCase().includes("scheduled") || status.toLowerCase().includes("on time")) return "bg-green-500";
-  if (status.toLowerCase().includes("delayed")) return "bg-orange-500";
-  if (status.toLowerCase().includes("canceled")) return "bg-red-500";
-  return "bg-yellow-500"; 
-};
+
+
 
 
 export function OneBusAwayExplorer({ 
@@ -55,7 +48,7 @@ export function OneBusAwayExplorer({
 }: OneBusAwayExplorerProps) {
   const [routeIdQuery, setRouteIdQuery] = useState('');
 
-  if (!apiKey || apiKey === "YOUR_ONEBUSAWAY_API_KEY_HERE" || apiKey === "") {
+  if (!isValidApiKey(apiKey)) {
     return (
       <Card>
         <CardHeader>

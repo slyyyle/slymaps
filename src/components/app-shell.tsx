@@ -13,6 +13,9 @@ import { Icons } from '@/components/icons';
 import { INITIAL_VIEW_STATE, MAP_STYLES, MAPBOX_ACCESS_TOKEN, ONEBUSAWAY_API_KEY } from '@/lib/constants';
 import type { PointOfInterest, MapStyle, Route as RouteType, Coordinates, TransitMode, ObaArrivalDeparture, ObaPolyline, ObaRouteGeometry, ObaRoute, CurrentOBARouteDisplayData, ObaVehicleLocation, ObaAgency } from '@/types';
 import { useToast } from "@/hooks/use-toast";
+import { getErrorMessage, handleApiError, isValidApiKey } from '@/lib/error-utils';
+import { log } from '@/lib/logging';
+import { getTimeBasedLightingPreset } from '@/lib/time-utils';
 
 const SearchBar = dynamic(() => import('@/components/search-bar').then(mod => mod.SearchBar), { 
   ssr: false,
@@ -47,15 +50,15 @@ export function AppShell() {
 
   useEffect(() => {
     if (!MAPBOX_ACCESS_TOKEN) {
-      console.error("Mapbox Access Token is missing. Please set NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN environment variable.");
+      log.error("Mapbox Access Token is missing. Please set NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN environment variable.");
       toast({
         title: "Configuration Error",
         description: "Mapbox Access Token is missing. Maps may not function correctly.",
         variant: "destructive",
       });
     }
-    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE" || ONEBUSAWAY_API_KEY === "") {
-      console.error("OneBusAway API Key is missing. Please set NEXT_PUBLIC_ONEBUSAWAY_API_KEY environment variable.");
+    if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
+      log.error("OneBusAway API Key is missing. Please set NEXT_PUBLIC_ONEBUSAWAY_API_KEY environment variable.");
       toast({
         title: "Configuration Error",
         description: "OneBusAway API Key is missing. Real-time transit features will be unavailable.",
@@ -65,7 +68,7 @@ export function AppShell() {
   }, [toast]);
 
   const fetchObaStops = useCallback(async (currentMap: MapRef) => {
-    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE" || ONEBUSAWAY_API_KEY === "") return;
+    if (!isValidApiKey(ONEBUSAWAY_API_KEY)) return;
 
     const map = currentMap.getMap();
     const bounds = map.getBounds();
@@ -86,18 +89,9 @@ export function AppShell() {
     try {
       const apiUrl = `https://api.pugetsound.onebusaway.org/api/where/stops-for-location.json?key=${ONEBUSAWAY_API_KEY}&lat=${lat}&lon=${lon}&latSpan=${latSpan}&lonSpan=${lonSpan}&includeReferences=true`;
       const response = await fetch(apiUrl);
-      let errorMessage = `Failed to fetch OBA stops (status ${response.status})`;
+      
       if (!response.ok) {
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
-        } catch {
-          try {
-            const textResponse = await response.text();
-            if (textResponse) errorMessage = textResponse;
-          } catch { /* Do nothing */ }
-        }
-        throw new Error(errorMessage);
+        await handleApiError(response, "fetch OBA stops");
       }
       const data = await response.json();
       if (data.data && data.data.list) {
@@ -128,34 +122,22 @@ export function AppShell() {
         setObaStopsData([]);
       }
     } catch (error) {
-      console.error("Error fetching OBA stops:", error);
-      let description = "An unknown error occurred while fetching transit stops.";
-      if (error instanceof Error) description = error.message;
-      else if (typeof error === 'string') description = error;
-      else description = String(error);
+      log.error("Error fetching OBA stops:", error);
+      const description = getErrorMessage(error, "An unknown error occurred while fetching transit stops.");
       toast({ title: "Error Fetching Transit Stops", description, variant: "destructive" });
       setObaStopsData([]);
     }
   }, [toast]);
 
   const fetchArrivalsForStop = useCallback(async (stopId: string) => {
-    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE" || ONEBUSAWAY_API_KEY === "") return;
+    if (!isValidApiKey(ONEBUSAWAY_API_KEY)) return;
     setIsLoadingArrivals(true);
     setObaStopArrivals([]);
     try {
       const response = await fetch(`https://api.pugetsound.onebusaway.org/api/where/arrivals-and-departures-for-stop/${stopId}.json?key=${ONEBUSAWAY_API_KEY}&minutesBefore=0&minutesAfter=60&includeReferences=false`);
-      let errorMessage = `Failed to fetch arrivals for stop ${stopId} (status ${response.status})`;
+      
       if (!response.ok) {
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
-        } catch {
-           try {
-            const textResponse = await response.text();
-            if (textResponse) errorMessage = textResponse;
-          } catch { /* Do nothing */ }
-        }
-        throw new Error(errorMessage);
+        await handleApiError(response, `fetch arrivals for stop ${stopId}`);
       }
       const data = await response.json();
       const arrivals: ObaArrivalDeparture[] = data.data?.entry?.arrivalsAndDepartures.map((ad: any) => ({
@@ -174,10 +156,7 @@ export function AppShell() {
       setObaStopArrivals(arrivals);
     } catch (error) {
       console.error(`Error fetching OBA arrivals for stop ${stopId}:`, error);
-      let description = "An unknown error occurred while fetching arrivals.";
-      if (error instanceof Error) description = error.message;
-      else if (typeof error === 'string') description = error;
-      else description = String(error);
+      const description = getErrorMessage(error, "An unknown error occurred while fetching arrivals.");
       toast({ title: "Error Fetching Arrivals", description: `Stop ID ${stopId}: ${description}`, variant: "destructive" });
       setObaStopArrivals([]);
     } finally {
@@ -269,10 +248,7 @@ export function AppShell() {
         }
     } catch (error) {
         console.error("Error fetching directions:", error);
-        let description = "An unknown error occurred while fetching directions.";
-        if (error instanceof Error) description = error.message;
-        else if (typeof error === 'string') description = error;
-        else description = String(error);
+        const description = getErrorMessage(error, "An unknown error occurred while fetching directions.");
         toast({ title: "Error Fetching Directions", description, variant: "destructive" });
     } finally {
         setIsLoadingRoute(false);
@@ -280,23 +256,14 @@ export function AppShell() {
   }, [handleFlyTo, toast]);
 
   const fetchVehiclesForObaRoute = useCallback(async (routeId: string) => {
-    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE" || ONEBUSAWAY_API_KEY === "") return;
+    if (!isValidApiKey(ONEBUSAWAY_API_KEY)) return;
     setIsLoadingObaVehicles(true);
     setObaVehicleLocations([]);
     try {
       const response = await fetch(`https://api.pugetsound.onebusaway.org/api/where/vehicles-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includeStatus=true&includeTrip=true`);
-      let errorMessage = `Failed to fetch OBA vehicles for route ${routeId} (status ${response.status})`;
+      
       if (!response.ok) {
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
-        } catch {
-           try {
-            const textResponse = await response.text();
-            if (textResponse) errorMessage = textResponse;
-          } catch { /* Do nothing */ }
-        }
-        throw new Error(errorMessage);
+        await handleApiError(response, `fetch OBA vehicles for route ${routeId}`);
       }
       const data = await response.json();
       if (data.data && data.data.list && data.data.list.length > 0) {
@@ -318,10 +285,7 @@ export function AppShell() {
       }
     } catch (error) {
       console.error(`Error fetching OBA vehicles for route ${routeId}:`, error);
-      let description = "An unknown error occurred while fetching vehicles.";
-      if (error instanceof Error) description = error.message;
-      else if (typeof error === 'string') description = error;
-      else description = String(error);
+      const description = getErrorMessage(error, "An unknown error occurred while fetching vehicles.");
       toast({ title: "Error Fetching Vehicles", description: `Route ID ${routeId}: ${description}`, variant: "destructive" });
       setObaVehicleLocations([]);
     } finally {
@@ -339,7 +303,7 @@ export function AppShell() {
       return;
     }
 
-    if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE" || ONEBUSAWAY_API_KEY === "") {
+    if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
       toast({ title: "Configuration Error", description: "OneBusAway API Key is missing. Cannot fetch route path.", variant: "destructive" });
       return;
     }
@@ -462,10 +426,7 @@ export function AppShell() {
 
     } catch (error) {
       console.error(`Error fetching OBA route path for ${routeId}:`, error);
-      let description = "An unknown error occurred while fetching route path.";
-      if (error instanceof Error) description = error.message;
-      else if (typeof error === 'string') description = error;
-      else description = String(error);
+      const description = getErrorMessage(error, "An unknown error occurred while fetching route path.");
       toast({ title: "Error Fetching Route Path", description: `Route ID ${routeId}: ${description}`, variant: "destructive" });
       setObaRouteGeometry(null);
       setCurrentOBARouteDisplayData(null);
@@ -481,7 +442,10 @@ export function AppShell() {
 
   // Initialize with current time-based lighting (only if auto lighting is enabled)
   useEffect(() => {
-    if (!isAutoLighting) return;
+    if (!isAutoLighting) {
+      log.ui('Auto lighting disabled - keeping current preset');
+      return;
+    }
     
     const now = new Date();
     const hour = now.getHours();
@@ -497,12 +461,13 @@ export function AppShell() {
       lightPreset = 'night';
     }
     
+            log.time(`Auto lighting enabled - setting time-based preset: ${lightPreset}`);
     setCurrentLightPreset(lightPreset);
   }, [isAutoLighting]);
 
   // Function to manually change lighting
   const handleChangeLightPreset = useCallback((preset: 'day' | 'dusk' | 'dawn' | 'night') => {
-    if (!mapRef.current || isAutoLighting) return;
+    if (!mapRef.current) return;
     
     try {
       const map = mapRef.current.getMap();
@@ -511,32 +476,21 @@ export function AppShell() {
       if (isStandardStyle) {
         map.setConfigProperty('basemap', 'lightPreset', preset);
         setCurrentLightPreset(preset);
-        console.log(`🌟 Lighting manually changed to: ${preset}`);
+        log.lighting3d(`Lighting manually changed to: ${preset}`);
       }
     } catch (error) {
-      console.warn('Failed to change lighting preset:', error);
+              log.warning('Failed to change lighting preset:', error);
     }
-  }, [currentMapStyle.url, isAutoLighting]);
+  }, [currentMapStyle.url]);
 
   // Function to toggle auto lighting
   const handleToggleAutoLighting = useCallback((auto: boolean) => {
+    log.control(`Setting auto lighting to: ${auto}`);
     setIsAutoLighting(auto);
     
     if (auto) {
       // When switching to auto, immediately update to current time-based lighting
-      const now = new Date();
-      const hour = now.getHours();
-      
-      let lightPreset: 'day' | 'dusk' | 'dawn' | 'night';
-      if (hour >= 6 && hour < 8) {
-        lightPreset = 'dawn';
-      } else if (hour >= 8 && hour < 18) {
-        lightPreset = 'day';
-      } else if (hour >= 18 && hour < 20) {
-        lightPreset = 'dusk';
-      } else {
-        lightPreset = 'night';
-      }
+      const lightPreset = getTimeBasedLightingPreset();
       
       if (mapRef.current) {
         try {
@@ -631,8 +585,9 @@ export function AppShell() {
         onSelectRouteForPath={handleSelectRouteForPath}
         obaVehicleLocations={obaVehicleLocations}
         isAutoLighting={isAutoLighting}
-        onChangeLightPreset={handleChangeLightPreset}
         currentLightPreset={currentLightPreset}
+        onChangeLightPreset={handleChangeLightPreset}
+        onToggleAutoLighting={handleToggleAutoLighting}
       />
     </div>
   );

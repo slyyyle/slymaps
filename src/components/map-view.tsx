@@ -24,6 +24,7 @@ export interface MapViewProps {
   obaVehicleLocations: ObaVehicleLocation[];
   isAutoLighting?: boolean;
   onChangeLightPreset?: (preset: 'day' | 'dusk' | 'dawn' | 'night') => void;
+  onToggleAutoLighting?: (auto: boolean) => void;
   currentLightPreset?: 'day' | 'dusk' | 'dawn' | 'night';
 }
 

@@ -361,9 +361,16 @@ export default function TestDataFlowPage() {
                         </div>
                         <div><strong>Price:</strong> {'💰'.repeat(testResults.foursquare.price)}</div>
                         <div><strong>Status:</strong> 
-                          <Badge variant={testResults.foursquare.hours.open_now ? "default" : "destructive"} className="ml-2">
-                            {testResults.foursquare.hours.open_now ? "Open Now" : "Closed"}
-                          </Badge>
+                                            <Badge 
+                    variant="outline" 
+                    className={`ml-2 border ${
+                      testResults.foursquare.hours.open_now 
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700' 
+                        : 'border-rose-300 bg-rose-50 text-rose-700'
+                    }`}
+                  >
+                    {testResults.foursquare.hours.open_now ? "Open Now" : "Closed"}
+                  </Badge>
                         </div>
                         <div><strong>Photos:</strong> {testResults.foursquare.photos.length} available</div>
                         <div><strong>Tips:</strong> {testResults.foursquare.tips.length} user reviews</div>

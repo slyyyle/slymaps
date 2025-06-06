@@ -114,15 +114,15 @@ const getPriceLevel = (level?: number) => {
 const getGradientBackground = (preset: 'day' | 'dusk' | 'dawn' | 'night' = 'day') => {
   switch (preset) {
     case 'day':
-      return 'bg-gradient-to-br from-blue-300 via-yellow-100 to-sky-200';
+      return 'bg-gradient-to-br from-blue-300 via-orange-200 to-yellow-100';
     case 'dusk':
-      return 'bg-gradient-to-br from-orange-400 via-purple-300 to-blue-400';
+      return 'bg-gradient-to-br from-orange-300 via-purple-200 to-blue-300';
     case 'dawn':
-      return 'bg-gradient-to-br from-pink-400 via-rose-300 to-orange-200';
+      return 'bg-gradient-to-br from-pink-300 via-rose-200 to-orange-100';
     case 'night':
-      return 'bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950';
+      return 'bg-gradient-to-br from-slate-900 via-blue-950 to-gray-700';
     default:
-      return 'bg-gradient-to-br from-blue-300 via-yellow-100 to-sky-200';
+      return 'bg-gradient-to-br from-blue-300 via-orange-200 to-yellow-100';
   }
 };
 
@@ -198,6 +198,92 @@ export function EnhancedPoiPopup({ poi, onClose, onDirections, onFlyTo, currentL
   const gradientClass = getGradientBackground(currentLightPreset);
   const isNightMode = currentLightPreset === 'night';
 
+  if (loading) {
+    return (
+      <Card className={`border-none shadow-lg w-full max-w-lg ${gradientClass}`}>
+        <CardHeader className="p-4 pb-2">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 ${isNightMode ? 'bg-white/20' : 'bg-primary/10'} rounded-lg`}>
+                <IconComponent className={`h-6 w-6 ${isNightMode ? 'text-white' : 'text-primary'}`} />
+              </div>
+              <div>
+                <CardTitle className={`text-lg font-bold leading-tight ${isNightMode ? 'text-white' : ''}`}>
+                  {poi.name}
+                </CardTitle>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="outline" className="text-xs bg-gray-100 border-gray-200 text-gray-700 rounded-none px-2.5 py-0.5">
+                    <div className="flex items-center gap-1">
+                      <div className="flex space-x-1">
+                        <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                        <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                        <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce"></div>
+                      </div>
+                    </div>
+                  </Badge>
+                </div>
+                {poi.properties?.brand && (
+                  <CardDescription className={`text-xs ${isNightMode ? 'text-gray-300' : 'text-muted-foreground'} mt-1`}>
+                    {poi.properties.brand}
+                  </CardDescription>
+                )}
+              </div>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={onClose} 
+              className={`h-8 w-8 p-0 ${isNightMode ? 'text-white hover:bg-white/20' : ''}`}
+            >
+              <Icons.X className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-4 pt-0">
+          <Tabs value="" className="w-full">
+            <TabsList className={`grid w-full grid-cols-3 ${isNightMode ? 'bg-white/20' : ''}`}>
+              <TabsTrigger 
+                value="overview" 
+                disabled 
+                className={`text-xs opacity-50 cursor-not-allowed ${isNightMode ? 'text-gray-400' : 'text-gray-500'}`}
+              >
+                Overview
+              </TabsTrigger>
+              <TabsTrigger 
+                value="details" 
+                disabled 
+                className={`text-xs opacity-50 cursor-not-allowed ${isNightMode ? 'text-gray-400' : 'text-gray-500'}`}
+              >
+                Details
+              </TabsTrigger>
+              <TabsTrigger 
+                value="reviews" 
+                disabled 
+                className={`text-xs opacity-50 cursor-not-allowed ${isNightMode ? 'text-gray-400' : 'text-gray-500'}`}
+              >
+                Reviews
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="overview" className="mt-4">
+              <div className="flex items-center justify-center py-8">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                  </div>
+                  <span className={isNightMode ? 'text-gray-300' : ''}>Loading...</span>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className={`border-none shadow-lg w-full max-w-lg ${gradientClass}`}>
       <CardHeader className="p-4 pb-2">
@@ -210,10 +296,26 @@ export function EnhancedPoiPopup({ poi, onClose, onDirections, onFlyTo, currentL
               <CardTitle className={`text-lg font-bold leading-tight ${isNightMode ? 'text-white' : ''}`}>
                 {poi.name}
               </CardTitle>
-              <CardDescription className={`text-sm capitalize ${isNightMode ? 'text-gray-300' : ''}`}>
-                {poi.subclass || poi.category}
-                {poi.properties?.brand && ` • ${poi.properties.brand}`}
-              </CardDescription>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="outline" className="text-xs bg-gray-100 border-gray-200 text-gray-700 capitalize rounded-none px-2.5 py-0.5">
+                  {poi.subclass || poi.category}
+                </Badge>
+                <Badge 
+                  variant="outline" 
+                  className={`text-xs border px-2.5 py-0.5 ${
+                    enrichedData?.opening_hours?.open_now === true
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700' 
+                      : 'border-rose-300 bg-rose-50 text-rose-700'
+                  }`}
+                >
+                  {enrichedData?.opening_hours?.open_now === true ? "Open" : "Closed"}
+                </Badge>
+              </div>
+              {poi.properties?.brand && (
+                <CardDescription className={`text-xs ${isNightMode ? 'text-gray-300' : 'text-muted-foreground'} mt-1`}>
+                  {poi.properties.brand}
+                </CardDescription>
+              )}
             </div>
           </div>
           <Button 
@@ -227,41 +329,38 @@ export function EnhancedPoiPopup({ poi, onClose, onDirections, onFlyTo, currentL
         </div>
         
         {/* Quick Info Bar */}
-        <div className="flex items-center gap-2 mt-2">
-          {enrichedData?.rating && (
-            <div className="flex items-center gap-1">
-              <Icons.Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-              <span className={`text-sm font-medium ${isNightMode ? 'text-white' : ''}`}>
-                {enrichedData.rating.toFixed(1)}
-              </span>
-              <span className={`text-xs ${isNightMode ? 'text-gray-300' : 'text-muted-foreground'}`}>
-                ({enrichedData.user_ratings_total})
-              </span>
-            </div>
-          )}
-          {enrichedData?.price_level && (
-            <Badge variant="outline" className="text-xs">
-              {getPriceLevel(enrichedData.price_level)}
-            </Badge>
-          )}
-          {enrichedData?.opening_hours?.open_now !== undefined && (
-            <Badge variant={enrichedData.opening_hours.open_now ? "default" : "destructive"} className="text-xs">
-              {enrichedData.opening_hours.open_now ? "Open" : "Closed"}
-            </Badge>
-          )}
-        </div>
+        {(enrichedData?.rating || enrichedData?.price_level) && (
+          <div className="flex items-center gap-2 mt-2">
+            {enrichedData?.rating && (
+              <div className="flex items-center gap-1">
+                <Icons.Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                <span className={`text-sm font-medium ${isNightMode ? 'text-white' : ''}`}>
+                  {enrichedData.rating.toFixed(1)}
+                </span>
+                <span className={`text-xs ${isNightMode ? 'text-gray-300' : 'text-muted-foreground'}`}>
+                  ({enrichedData.user_ratings_total})
+                </span>
+              </div>
+            )}
+            {enrichedData?.price_level && (
+              <Badge variant="outline" className="text-xs">
+                {getPriceLevel(enrichedData.price_level)}
+              </Badge>
+            )}
+          </div>
+        )}
       </CardHeader>
 
       <CardContent className="p-4 pt-0">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className={`grid w-full grid-cols-3 ${isNightMode ? 'bg-white/20' : ''}`}>
-            <TabsTrigger value="overview" className={`text-xs ${isNightMode ? 'data-[state=active]:bg-white/30 data-[state=active]:text-white' : ''}`}>
+            <TabsTrigger value="overview" className={`text-xs ${isNightMode ? 'data-[state=active]:bg-white/30 data-[state=active]:text-white text-gray-300' : 'text-gray-600 data-[state=active]:text-foreground'}`}>
               Overview
             </TabsTrigger>
-            <TabsTrigger value="details" className={`text-xs ${isNightMode ? 'data-[state=active]:bg-white/30 data-[state=active]:text-white' : ''}`}>
+            <TabsTrigger value="details" className={`text-xs ${isNightMode ? 'data-[state=active]:bg-white/30 data-[state=active]:text-white text-gray-300' : 'text-gray-600 data-[state=active]:text-foreground'}`}>
               Details
             </TabsTrigger>
-            <TabsTrigger value="reviews" className={`text-xs ${isNightMode ? 'data-[state=active]:bg-white/30 data-[state=active]:text-white' : ''}`}>
+            <TabsTrigger value="reviews" className={`text-xs ${isNightMode ? 'data-[state=active]:bg-white/30 data-[state=active]:text-white text-gray-300' : 'text-gray-600 data-[state=active]:text-foreground'}`}>
               Reviews
             </TabsTrigger>
           </TabsList>
@@ -347,13 +446,6 @@ export function EnhancedPoiPopup({ poi, onClose, onDirections, onFlyTo, currentL
                 
                 {/* Beautiful Mini Table */}
                 <div className={`border rounded-lg overflow-hidden ${isNightMode ? 'border-white/30' : ''}`}>
-                  <div className={`px-3 py-2 text-xs font-medium border-b ${
-                    isNightMode 
-                      ? 'bg-white/10 text-gray-300 border-white/20' 
-                      : 'bg-muted/50 text-muted-foreground'
-                  }`}>
-                    Weekly Schedule
-                  </div>
                   <div className={`divide-y ${isNightMode ? 'divide-white/20' : ''}`}>
                     {parsedHours.schedule.map((dayInfo, index) => {
                       const isToday = new Date().getDay() === (index + 1) % 7;
@@ -371,24 +463,24 @@ export function EnhancedPoiPopup({ poi, onClose, onDirections, onFlyTo, currentL
                           <span className={`font-medium ${
                             isToday 
                               ? isNightMode 
-                                ? 'text-blue-400' 
-                                : 'text-primary'
+                                ? 'text-blue-200' 
+                                : 'text-blue-700'
                               : isNightMode 
                                 ? 'text-white' 
                                 : 'text-foreground'
                           }`}>
                             {dayInfo.day}
                             {isToday && (
-                              <span className={`ml-1 ${isNightMode ? 'text-blue-400' : 'text-primary'}`}>
+                              <span className={`ml-1 ${isNightMode ? 'text-blue-200' : 'text-blue-700'}`}>
                                 (Today)
                               </span>
                             )}
                           </span>
                           <span className={`${
                             dayInfo.isClosed 
-                              ? 'text-red-400' 
+                              ? 'text-rose-500' 
                               : dayInfo.isOpen 
-                                ? 'text-green-400' 
+                                ? 'text-emerald-600' 
                                 : isNightMode 
                                   ? 'text-gray-300' 
                                   : 'text-muted-foreground'
@@ -449,21 +541,20 @@ export function EnhancedPoiPopup({ poi, onClose, onDirections, onFlyTo, currentL
             
             <Separator className={isNightMode ? 'bg-white/20' : ''} />
             
-            {/* Technical Data */}
-            <div className="space-y-2">
-              <h4 className={`text-sm font-medium ${isNightMode ? 'text-white' : ''}`}>
-                Technical Info
-              </h4>
-              <div className={`text-xs space-y-1 ${isNightMode ? 'text-gray-300' : 'text-muted-foreground'}`}>
-                <div>Category: {poi.category}</div>
-                {poi.subclass && <div>Subclass: {poi.subclass}</div>}
-                <div>Coordinates: {poi.latitude.toFixed(6)}, {poi.longitude.toFixed(6)}</div>
-                <div>Source: Mapbox Standard Style</div>
-                {enrichedData?.osm_data && (
-                  <div className="text-green-400">✅ Enhanced with OpenStreetMap data</div>
-                )}
-              </div>
+            {/* Coordinates */}
+            <div className="flex items-center gap-2">
+              <Icons.MapPin className={`h-4 w-4 ${isNightMode ? 'text-gray-300' : 'text-muted-foreground'}`} />
+              <span className={`text-xs ${isNightMode ? 'text-gray-300' : 'text-muted-foreground'}`}>
+                {poi.latitude.toFixed(6)}, {poi.longitude.toFixed(6)}
+              </span>
             </div>
+            
+            {/* Data Source Indicator */}
+            {enrichedData?.osm_data && (
+              <div className="text-xs text-emerald-500">
+                ✅ Enhanced with OpenStreetMap data
+              </div>
+            )}
           </TabsContent>
           
           <TabsContent value="reviews" className="mt-4">

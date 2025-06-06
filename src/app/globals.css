@@ -107,4 +107,17 @@
   .mapbox-search-results-container { /* A more generic fallback */
     z-index: 100 !important; /* ShadCN Dialog is z-50, so this should be higher */
   }
+  
+  /* Remove default Mapbox popup styling for custom popups */
+  .mapboxgl-popup-content-no-padding .mapboxgl-popup-content {
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+  
+  .mapboxgl-popup-content-no-padding .mapboxgl-popup-tip {
+    display: none !important;
+  }
 }
