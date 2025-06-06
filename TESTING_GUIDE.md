@@ -115,7 +115,7 @@ This document outlines the current features of the Seattle Transit Compass appli
         *   [ ] If no OBA stop is selected, a message prompts the user to select one.
         *   [ ] If no arrivals, an appropriate message is shown.
 
-**Phase 2: Route Exploration (IN PROGRESS)**
+**Phase 2: Route Exploration (COMPLETED - Core Features)**
 
 1.  **Display Route Path on Map (from Arrivals List):**
     *   [ ] In the map popup's arrival list, clicking a route short name badge:
@@ -127,7 +127,7 @@ This document outlines the current features of the Seattle Transit Compass appli
     *   [ ] In the "OneBusAway Explorer" sidebar's arrival list, clicking a route short name button:
         *   [ ] Same behavior as above (fetches and draws route path).
 2.  **Sidebar "OneBusAway Explorer" - Route View:**
-    *   [ ] When a route path is successfully fetched and displayed on the map:
+    *   [ ] When a route path is successfully fetched and displayed on the map (either from arrivals list or direct search):
         *   [ ] The "OneBusAway Explorer" section updates to show "Route Details".
         *   [ ] Displays the selected route's short name and description.
         *   [ ] Lists all stops for that route in a scrollable list.
@@ -138,14 +138,19 @@ This document outlines the current features of the Seattle Transit Compass appli
             *   [ ] The map popup for that stop appears.
             *   [ ] Real-time arrivals for *that newly selected stop* are fetched and displayed in its popup and in the sidebar (which should switch back to "Real-Time Arrivals" view for that stop).
     *   [ ] Check for error handling if OBA `stops-for-route` API call fails.
-
-**Next for Phase 2 (To Be Implemented):**
-
-*   [ ] **Direct Route Search in Sidebar:**
-    *   [ ] Add an input field in "OneBusAway Explorer" to search for routes by number/name.
-    *   [ ] On search submission/selection:
-        *   [ ] Call `handleSelectRouteForPath` (or a similar new function) to fetch and display the route path and its stops (similar to clicking a route from arrivals).
-        *   [ ] Update the "OneBusAway Explorer" to show the Route Details view for the searched route.
+3.  **Direct Route Search in Sidebar:**
+    *   [ ] "OneBusAway Explorer" has a "Find Route" card.
+    *   [ ] User can input a OneBusAway Route ID (e.g., `1_100226`).
+    *   [ ] Clicking "Show Route Path":
+        *   [ ] Triggers fetching of the route's path and stops (using `stops-for-route`).
+        *   [ ] Displays a loading indicator.
+        *   [ ] If successful:
+            *   [ ] Route path is drawn on the map.
+            *   [ ] "Route Details" card in the sidebar is populated with the route's info and its stops.
+            *   [ ] Map flies to the start of the route path.
+        *   [ ] If unsuccessful (e.g., invalid ID, API error):
+            *   [ ] A toast notification explains the error.
+            *   [ ] Route details/path are not displayed or are cleared.
 
 **Future for Phase 2 (Optional/Later):**
 
@@ -153,10 +158,8 @@ This document outlines the current features of the Seattle Transit Compass appli
 
 **Phase 3: Enhanced Directions Integration (NOT YET STARTED)**
 
-*   [ ] (Future) Deeper integration of OBA data into the Directions feature.
+*   [ ] (Future) Deeper integration of OBA data into the Directions feature (as discussed previously).
 
 ---
 
 This Markdown file (`TESTING_GUIDE.md`) is now notionally in your project root.
-
-Now, shall we proceed with implementing the **direct route search** functionality in the "OneBusAway Explorer" sidebar section? This would involve adding an input field to search for routes (e.g., by route number or name) and then triggering the existing `handleSelectRouteForPath` function to display its path and stops.
