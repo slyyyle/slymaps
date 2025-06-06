@@ -91,7 +91,8 @@ export function AppShell() {
           errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
         } catch (e) {
           try {
-            errorMessage = (await response.text()) || errorMessage;
+            const textResponse = await response.text();
+            if (textResponse) errorMessage = textResponse;
           } catch (textErr) { /* Do nothing */ }
         }
         throw new Error(errorMessage);
@@ -117,7 +118,7 @@ export function AppShell() {
       }
     } catch (error) {
       console.error("Error fetching OBA stops:", error);
-      let description = "An unknown error occurred.";
+      let description = "An unknown error occurred while fetching transit stops.";
       if (error instanceof Error) description = error.message;
       else if (typeof error === 'string') description = error;
       toast({ title: "Error Fetching Transit Stops", description, variant: "destructive" });
@@ -132,13 +133,14 @@ export function AppShell() {
     try {
       const response = await fetch(`https://api.pugetsound.onebusaway.org/api/where/arrivals-and-departures-for-stop/${stopId}.json?key=${ONEBUSAWAY_API_KEY}&minutesBefore=0&minutesAfter=60&includeReferences=false`);
       if (!response.ok) {
-        let errorMessage = `Failed to fetch arrivals (status ${response.status})`;
+        let errorMessage = `Failed to fetch arrivals for stop ${stopId} (status ${response.status})`;
         try {
           const errorData = await response.json();
           errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
         } catch (e) {
            try {
-            errorMessage = (await response.text()) || errorMessage;
+            const textResponse = await response.text();
+            if (textResponse) errorMessage = textResponse;
           } catch (textErr) { /* Do nothing */ }
         }
         throw new Error(errorMessage);
@@ -160,10 +162,10 @@ export function AppShell() {
       setObaStopArrivals(arrivals);
     } catch (error) {
       console.error(`Error fetching OBA arrivals for stop ${stopId}:`, error);
-      let description = "An unknown error occurred.";
+      let description = "An unknown error occurred while fetching arrivals.";
       if (error instanceof Error) description = error.message;
       else if (typeof error === 'string') description = error;
-      toast({ title: "Error Fetching Arrivals", description, variant: "destructive" });
+      toast({ title: "Error Fetching Arrivals", description: `Stop ID ${stopId}: ${description}`, variant: "destructive" });
       setObaStopArrivals([]);
     } finally {
       setIsLoadingArrivals(false);
@@ -274,13 +276,14 @@ export function AppShell() {
     try {
       const response = await fetch(`https://api.pugetsound.onebusaway.org/api/where/vehicles-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includeStatus=true&includeTrip=true`);
       if (!response.ok) {
-        let errorMessage = `Failed to fetch OBA vehicles (status ${response.status})`;
+        let errorMessage = `Failed to fetch OBA vehicles for route ${routeId} (status ${response.status})`;
         try {
           const errorData = await response.json();
           errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
         } catch (e) {
            try {
-            errorMessage = (await response.text()) || errorMessage;
+            const textResponse = await response.text();
+            if (textResponse) errorMessage = textResponse;
           } catch (textErr) { /* Do nothing */ }
         }
         throw new Error(errorMessage);
@@ -305,10 +308,10 @@ export function AppShell() {
       }
     } catch (error) {
       console.error(`Error fetching OBA vehicles for route ${routeId}:`, error);
-      let description = "An unknown error occurred.";
+      let description = "An unknown error occurred while fetching vehicles.";
       if (error instanceof Error) description = error.message;
       else if (typeof error === 'string') description = error;
-      toast({ title: "Error Fetching Vehicles", description, variant: "destructive" });
+      toast({ title: "Error Fetching Vehicles", description: `Route ID ${routeId}: ${description}`, variant: "destructive" });
       setObaVehicleLocations([]);
     } finally {
       setIsLoadingObaVehicles(false);
@@ -316,8 +319,17 @@ export function AppShell() {
   }, [toast]);
 
   const handleSelectRouteForPath = useCallback(async (routeId: string) => {
+    if (!routeId || typeof routeId !== 'string' || routeId.trim() === '') {
+      toast({ title: "Invalid Route ID", description: "A valid OneBusAway Route ID is required to fetch its path.", variant: "destructive" });
+      setIsLoadingObaRouteGeometry(false); // Ensure loading state is reset
+      setCurrentOBARouteDisplayData(null);
+      setObaRouteGeometry(null);
+      setObaVehicleLocations([]);
+      return;
+    }
+
     if (!ONEBUSAWAY_API_KEY || ONEBUSAWAY_API_KEY === "YOUR_ONEBUSAWAY_API_KEY_HERE" || ONEBUSAWAY_API_KEY === "") {
-      toast({ title: "Configuration Error", description: "OneBusAway API Key is missing.", variant: "destructive" });
+      toast({ title: "Configuration Error", description: "OneBusAway API Key is missing. Cannot fetch route path.", variant: "destructive" });
       return;
     }
     setIsLoadingObaRouteGeometry(true);
@@ -329,16 +341,17 @@ export function AppShell() {
     try {
       const response = await fetch(`https://api.pugetsound.onebusaway.org/api/where/stops-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includePolylines=true&includeReferences=true`);
       if (!response.ok) {
-        let errorMessage = `Failed to fetch OBA route path (status ${response.status})`;
+        let errorMessage = `Failed to fetch OBA route path (status ${response.status}) for route ${routeId}.`;
         try {
           const errorData = await response.json();
           errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
         } catch (e) {
             try {
-                errorMessage = (await response.text()) || errorMessage;
-            } catch (textErr) { /* Do nothing */ }
+                const textResponse = await response.text();
+                if (textResponse) errorMessage = textResponse; // Only override if textResponse is non-empty
+            } catch (textErr) { /* Do nothing, stick with initial errorMessage */ }
         }
-        throw new Error(errorMessage);
+        throw new Error(errorMessage); // This error is caught by the catch block below
       }
       const data = await response.json();
       
@@ -395,7 +408,7 @@ export function AppShell() {
       
       if (routeDetails && routeStops.length > 0) {
         setCurrentOBARouteDisplayData({ routeInfo: routeDetails, stops: routeStops });
-        await fetchVehiclesForObaRoute(routeId); // Await this call
+        await fetchVehiclesForObaRoute(routeId); 
       } else {
         setCurrentOBARouteDisplayData(null); 
         setObaVehicleLocations([]);
@@ -407,15 +420,15 @@ export function AppShell() {
             handleFlyTo({ longitude: firstCoord[0], latitude: firstCoord[1] }, 13);
           }
       } else if (!routePath) { 
-         toast({ title: "No Route Path Data", description: `No polyline data found for route ${routeId}.`, variant: "default" });
+         toast({ title: "No Route Path Data", description: `No polyline data found for route ${routeId}. Path may not be available for this route.`, variant: "default" });
       }
 
     } catch (error) {
       console.error(`Error fetching OBA route path for ${routeId}:`, error);
-      let description = "An unknown error occurred.";
+      let description = "An unknown error occurred while fetching route path.";
       if (error instanceof Error) description = error.message;
       else if (typeof error === 'string') description = error;
-      toast({ title: "Error Fetching Route Path", description, variant: "destructive" });
+      toast({ title: "Error Fetching Route Path", description: `Route ID ${routeId}: ${description}`, variant: "destructive" });
       setObaRouteGeometry(null);
       setCurrentOBARouteDisplayData(null);
       setObaVehicleLocations([]);
@@ -510,5 +523,7 @@ export function AppShell() {
     </div>
   );
 }
+
+    
 
     
