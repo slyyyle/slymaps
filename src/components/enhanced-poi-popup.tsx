@@ -57,6 +57,7 @@ interface EnhancedPoiPopupProps {
   poi: MapboxPOI;
   onClose: () => void;
   onDirections: (lat: number, lng: number) => void;
+  onSetDestination: (coords: { latitude: number; longitude: number }) => void;
   onFlyTo: (coords: { latitude: number; longitude: number }, zoom?: number) => void;
   currentLightPreset?: 'day' | 'dusk' | 'dawn' | 'night';
 }
@@ -126,10 +127,10 @@ const getGradientBackground = (preset: 'day' | 'dusk' | 'dawn' | 'night' = 'day'
   }
 };
 
-export function EnhancedPoiPopup({ poi, onClose, onDirections, onFlyTo, currentLightPreset = 'day' }: EnhancedPoiPopupProps) {
+export function EnhancedPoiPopup({ poi, onClose, onDirections, onSetDestination, onFlyTo, currentLightPreset = 'day' }: EnhancedPoiPopupProps) {
   const [enrichedData, setEnrichedData] = useState<PoiData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // const [error, setError] = useState<string | null>(null); // TODO: Display error in UI
   const [activeTab, setActiveTab] = useState("overview");
   const [parsedHours, setParsedHours] = useState<ParsedHours | null>(null);
 
@@ -139,7 +140,7 @@ export function EnhancedPoiPopup({ poi, onClose, onDirections, onFlyTo, currentL
       if (!poi.name || poi.name === 'Unknown POI') return;
       
       setLoading(true);
-      setError(null);
+      // setError(null);
       
       try {
         // 🚀 PHASE 1: Fetch real OSM data
@@ -185,7 +186,7 @@ export function EnhancedPoiPopup({ poi, onClose, onDirections, onFlyTo, currentL
         console.log(`✅ OSM data loaded for: ${poi.name}`, osmData ? '(found match)' : '(no match)');
       } catch (fetchError) {
         console.error('Failed to fetch OSM data:', fetchError);
-        setError('Failed to load additional information');
+        // setError('Failed to load additional information'); // TODO: Display error in UI
       } finally {
         setLoading(false);
       }
@@ -409,7 +410,7 @@ export function EnhancedPoiPopup({ poi, onClose, onDirections, onFlyTo, currentL
             <Separator className={isNightMode ? 'bg-white/20' : ''} />
             
             {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               <Button
                 size="default"
                 variant="outline"
@@ -418,6 +419,15 @@ export function EnhancedPoiPopup({ poi, onClose, onDirections, onFlyTo, currentL
               >
                 <Icons.Navigation className="h-4 w-4 mr-2" />
                 Directions
+              </Button>
+              <Button
+                size="default"
+                variant="outline"
+                onClick={() => onSetDestination({ latitude: poi.latitude, longitude: poi.longitude })}
+                className={`w-full ${isNightMode ? 'border-white/30 text-black bg-white/90 hover:bg-white/80' : ''}`}
+              >
+                <Icons.MapPin className="h-4 w-4 mr-2" />
+                Set Dest
               </Button>
               <Button
                 size="default"

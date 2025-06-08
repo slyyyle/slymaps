@@ -1,39 +1,34 @@
-// @ts-nocheck
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Icons } from '@/components/icons';
-import type { MapStyle, Route as RouteType, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture, CurrentOBARouteDisplayData, ObaRoute } from '@/types';
+import type { MapStyle, Coordinates, TransitMode, PointOfInterest, ObaArrivalDeparture, CurrentOBARouteDisplayData, ObaRoute } from '@/types';
 import { StyleSelector } from '@/components/style-selector';
-import { DirectionsResult } from '@/components/directions-result';
-import { SheetHeader, SheetTitle } from '@/components/ui/sheet'; 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
+import { POIManager } from '@/components/poi-manager';
+import { StopInformation } from '@/components/stop-information';
+import { RouteDetails } from '@/components/route-details';
+import { FindRouteById } from '@/components/find-route-by-id';
+import { TransitBrowser } from '@/components/transit-browser';
+import { SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Button } from './ui/button';
+import { AgencyBrowser } from '@/components/agency-browser';
 
 const DirectionsForm = dynamic(() => import('@/components/directions-form').then(mod => mod.DirectionsForm), {
   ssr: false,
-  loading: () => <div className="p-2 text-sm text-muted-foreground">Loading directions form...</div>
-});
-
-const OneBusAwayExplorer = dynamic(() => import('@/components/onebusaway-explorer').then(mod => mod.OneBusAwayExplorer), {
-  ssr: false,
-  loading: () => <div className="p-2 text-sm text-muted-foreground">Loading OneBusAway Explorer...</div>
+  loading: () => <div className="p-2 text-sm text-muted-foreground">Loading...</div>
 });
 
 interface SidebarControlsProps {
   mapStyles: MapStyle[];
   currentMapStyle: MapStyle;
   onMapStyleChange: (style: MapStyle) => void;
-  customPois: any[]; // Keeping for backward compatibility but not using
-  onDeleteCustomPoi: (poiId: string) => void; // Keeping for backward compatibility but not using
+  customPois: unknown[];
+  onDeleteCustomPoi: (poiId: string) => void;
   onGetDirections: (start: Coordinates, end: Coordinates, mode: TransitMode) => Promise<void>;
   isLoadingRoute: boolean;
-  currentRoute: RouteType | null;
   destination: Coordinates | null;
   setDestination: (dest: Coordinates | null) => void;
   onFlyTo: (coords: Coordinates, zoom?: number) => void;
@@ -43,25 +38,18 @@ interface SidebarControlsProps {
   obaStopArrivals: ObaArrivalDeparture[];
   isLoadingArrivals: boolean;
   onSelectRouteForPath: (routeId: string) => void;
-  isLoadingObaRouteGeometry: boolean;
   currentOBARouteDisplayData: CurrentOBARouteDisplayData | null;
-  isLoadingObaVehicles: boolean;
+  isBusy: boolean;
   obaReferencedRoutes: Record<string, ObaRoute>;
-  onChangeLightPreset?: (preset: 'day' | 'dusk' | 'dawn' | 'night') => void; // New prop for lighting control
-  currentLightPreset?: 'day' | 'dusk' | 'dawn' | 'night'; // New prop for current lighting state
-  isAutoLighting?: boolean; // New prop for auto lighting state
-  onToggleAutoLighting?: (auto: boolean) => void; // New prop for toggling auto lighting
+  currentLocation?: Coordinates;
 }
 
 export function SidebarControls({
   mapStyles,
   currentMapStyle,
   onMapStyleChange,
-  // customPois, // Removed
-  // onDeleteCustomPoi, // Removed
   onGetDirections,
   isLoadingRoute,
-  currentRoute,
   destination,
   setDestination,
   onFlyTo,
@@ -71,106 +59,190 @@ export function SidebarControls({
   obaStopArrivals,
   isLoadingArrivals,
   onSelectRouteForPath,
-  isLoadingObaRouteGeometry,
   currentOBARouteDisplayData,
-  isLoadingObaVehicles,
+  isBusy,
   obaReferencedRoutes,
-  onChangeLightPreset,
-  currentLightPreset = 'day',
-  isAutoLighting = true,
-  onToggleAutoLighting,
+  currentLocation,
 }: SidebarControlsProps) {
-  const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>("onebusaway-explorer");
+  const [activeAccordionItem, setActiveAccordionItem] = useState<string | undefined>('transit-browser');
 
-  const isStandardStyle = currentMapStyle.url.includes('mapbox://styles/mapbox/standard');
+  const handleStyleChange = useCallback((styleId: string) => {
+    const newStyle = mapStyles.find(s => s.id === styleId);
+    if (newStyle) {
+      onMapStyleChange(newStyle);
+    }
+  }, [mapStyles, onMapStyleChange]);
 
-  const lightingOptions = [
-    { value: 'day', label: 'Day', icon: '☀️', description: 'Bright daylight with clear visibility' },
-    { value: 'dusk', label: 'Dusk', icon: '🌆', description: 'Golden hour with warm lighting' },
-    { value: 'dawn', label: 'Dawn', icon: '🌅', description: 'Early morning with soft light' },
-    { value: 'night', label: 'Night', icon: '🌙', description: 'Dark atmosphere with city lights' },
-  ] as const;
+  const renderAccordionTrigger = (title: string, icon: React.ReactNode) => (
+    <AccordionTrigger className="font-headline text-lg hover:no-underline">
+      <div className="flex items-center w-full min-w-0 mr-4">
+        <div className="flex-shrink-0 mr-3">{icon}</div>
+        <span className="truncate flex-1 text-left">{title}</span>
+      </div>
+    </AccordionTrigger>
+  );
+
+  const renderAccordionContent = (children: React.ReactNode) => (
+    <AccordionContent>
+      <div className="pr-4">
+        {children}
+      </div>
+    </AccordionContent>
+  );
+
+  const ALL_PANELS = {
+    'explore-transit': {
+      title: 'Explore Transit',
+      icon: <Icons.Globe className="w-6 h-6" />,
+      isVisible: true,
+      render: () => <AgencyBrowser />,
+    },
+    'directions': {
+      title: 'Directions',
+      icon: <Icons.Directions className="w-6 h-6" />,
+      isVisible: true,
+      render: () => (
+        <DirectionsForm
+          onGetDirections={onGetDirections}
+          isLoading={isLoadingRoute}
+          destination={destination}
+          setDestination={setDestination}
+          onFlyTo={onFlyTo}
+          mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || ''}
+        />
+      ),
+    },
+    'stop-information': {
+      title: 'Stop Information',
+      icon: <Icons.Bus className="w-6 h-6" />,
+      isVisible: true,
+      render: () => (
+        <StopInformation
+          apiKey={oneBusAwayApiKey}
+          selectedPoi={selectedPoi}
+          arrivals={obaStopArrivals}
+          isLoadingArrivals={isLoadingArrivals}
+          onSelectRoute={onSelectRouteForPath}
+          isBusy={isBusy}
+          obaReferencedRoutes={obaReferencedRoutes}
+        />
+      ),
+    },
+    'route-details': {
+      title: `Route: ${currentOBARouteDisplayData?.routeInfo.shortName || 'Details'}`,
+      icon: <Icons.Route className="w-6 h-6" />,
+      isVisible: !!currentOBARouteDisplayData,
+      render: () =>
+        currentOBARouteDisplayData && (
+          <RouteDetails
+            currentOBARouteDisplayData={currentOBARouteDisplayData}
+            onSelectPoiFromList={onSelectPoi}
+            onFlyTo={onFlyTo}
+          />
+        ),
+    },
+    'transit-browser': {
+        title: 'Browse Transit',
+        icon: <Icons.Route className="w-6 h-6" />,
+        isVisible: true,
+        render: () => (
+            <TransitBrowser
+                onRouteSelect={onSelectRouteForPath}
+                onStopSelect={(stopId, stopName, coords) => {
+                    const poi: PointOfInterest = { id: stopId, name: stopName, type: 'Bus Stop', latitude: coords.latitude, longitude: coords.longitude, isObaStop: true };
+                    onSelectPoi(poi);
+                }}
+                onFlyTo={onFlyTo}
+                currentLocation={currentLocation}
+                isLoadingRoute={isBusy}
+            />
+        )
+    },
+    'find-route-by-id': {
+        title: 'Find Route by ID',
+        icon: <Icons.Search className="w-6 h-6" />,
+        isVisible: true,
+        render: () => (
+            <FindRouteById
+                onSelectRoute={onSelectRouteForPath}
+                isBusy={isBusy}
+            />
+        )
+    },
+    'custom-pois': {
+        title: 'Custom POIs',
+        icon: <Icons.MapPin className="w-6 h-6" />,
+        isVisible: true,
+        render: () => <POIManager accessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || ''} onFlyTo={onFlyTo} />
+    },
+    'map-style': {
+      title: 'Map Style',
+      icon: <Icons.MapStyle className="w-6 h-6" />,
+      isVisible: true,
+      render: () => (
+        <StyleSelector
+          styles={mapStyles}
+          currentStyleId={currentMapStyle.id}
+          onStyleChange={handleStyleChange}
+        />
+      ),
+    },
+  };
+  
+  const activePanel = activeAccordionItem ? ALL_PANELS[activeAccordionItem as keyof typeof ALL_PANELS] : null;
 
   return (
-    <>
-      <SheetHeader className="p-4 border-b">
+    <div className="flex flex-col h-full w-full bg-background">
+      <SheetHeader className="p-4 border-b flex-shrink-0">
         <SheetTitle className="text-lg font-headline font-semibold flex items-center">
-          <Icons.Settings className="w-5 h-5 mr-2" />
-          Controls
+          <Icons.Settings className="w-5 h-5 mr-2 flex-shrink-0" />
+          <span>Controls</span>
         </SheetTitle>
       </SheetHeader>
+
       <ScrollArea className="flex-1">
-        <Accordion type="single" collapsible className="w-full p-4" value={activeAccordionItem} onValueChange={setActiveAccordionItem}>
-          <AccordionItem value="directions">
-            <AccordionTrigger className="font-headline text-base">
-              <Icons.Directions className="w-5 h-5 mr-2" /> Directions
-            </AccordionTrigger>
-            <AccordionContent>
-              <DirectionsForm
-                onGetDirections={onGetDirections}
-                isLoading={isLoadingRoute}
-                destination={destination}
-                setDestination={setDestination}
-                onFlyTo={onFlyTo}
-                mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || ''} 
-              />
-              {currentRoute && <DirectionsResult route={currentRoute} />}
-            </AccordionContent>
-          </AccordionItem>
-
-          <AccordionItem value="onebusaway-explorer">
-            <AccordionTrigger className="font-headline text-base">
-              <Icons.Bus className="w-5 h-5 mr-2" /> OneBusAway Explorer
-            </AccordionTrigger>
-            <AccordionContent>
-              <OneBusAwayExplorer 
-                apiKey={oneBusAwayApiKey}
-                selectedPoi={selectedPoi}
-                arrivals={obaStopArrivals}
-                isLoadingArrivals={isLoadingArrivals}
-                onSelectRoute={onSelectRouteForPath}
-                isLoadingRoutePath={isLoadingObaRouteGeometry}
-                currentOBARouteDisplayData={currentOBARouteDisplayData}
-                onSelectPoiFromList={onSelectPoi}
-                onFlyTo={onFlyTo}
-                isLoadingObaVehicles={isLoadingObaVehicles}
-                obaReferencedRoutes={obaReferencedRoutes}
-              />
-            </AccordionContent>
-          </AccordionItem>
-
-
-          
-          <AccordionItem value="map-style">
-            <AccordionTrigger className="font-headline text-base">
-              <Icons.MapStyle className="w-5 h-5 mr-2" /> Map Style
-            </AccordionTrigger>
-            <AccordionContent>
-              <StyleSelector
-                styles={mapStyles}
-                currentStyleId={currentMapStyle.id}
-                onStyleChange={(styleId) => {
-                  const newStyle = mapStyles.find(s => s.id === styleId);
-                  if (newStyle) onMapStyleChange(newStyle);
-                }}
-              />
-              {isStandardStyle && (
-                <div className="mt-3 p-2 bg-primary/10 rounded-md">
-                  <p className="text-xs text-primary font-medium">🚀 Mapbox Standard v3 Active</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Enhanced 3D buildings, dynamic lighting, and interactive POIs enabled
-                  </p>
-                </div>
+        <div className="p-4">
+          {activePanel ? (
+            <div className='space-y-4'>
+              <Button
+                variant="ghost"
+                onClick={() => setActiveAccordionItem(undefined)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors p-2 rounded-md hover:bg-muted/50 -ml-2"
+              >
+                <Icons.ChevronLeft className="w-4 h-4" />
+                <span>Back to All Controls</span>
+              </Button>
+              <Accordion type="single" value={activeAccordionItem} onValueChange={setActiveAccordionItem} className="w-full">
+                <AccordionItem value={activeAccordionItem as string}>
+                  {renderAccordionTrigger(activePanel.title, activePanel.icon)}
+                  {renderAccordionContent(activePanel.render())}
+                </AccordionItem>
+              </Accordion>
+            </div>
+          ) : (
+            <Accordion type="multiple" className="w-full space-y-2">
+              {Object.entries(ALL_PANELS).map(([key, panel]) =>
+                panel.isVisible ? (
+                  <AccordionItem value={key} key={key} className="border-b-0">
+                     <Button variant='outline' className="w-full" onClick={() => setActiveAccordionItem(key)}>
+                        <div className='flex items-center w-full'>
+                            {panel.icon}
+                            <span className="ml-3 text-base font-medium">{panel.title}</span>
+                            <Icons.ChevronRight className="w-4 h-4 ml-auto" />
+                        </div>
+                     </Button>
+                  </AccordionItem>
+                ) : null
               )}
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+            </Accordion>
+          )}
+        </div>
       </ScrollArea>
-      <div className="p-4 border-t mt-auto">
+      <div className="p-4 border-t mt-auto flex-shrink-0">
         <p className="text-xs text-muted-foreground text-center">
-          Seattle Transit Compass &copy; {new Date().getFullYear()}
+          SlyMaps &copy; {new Date().getFullYear()}
         </p>
       </div>
-    </>
+    </div>
   );
 }

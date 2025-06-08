@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster"
 
 
 export const metadata: Metadata = {
-  title: 'Seattle Transit Compass',
+  title: 'SlyMaps',
   description: 'Your guide to navigating Seattle with intelligent transit suggestions.',
 };
 

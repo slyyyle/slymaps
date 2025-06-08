@@ -1,4 +1,3 @@
-
 export interface PointOfInterest {
   id: string;
   name: string;
@@ -16,8 +15,6 @@ export interface PointOfInterest {
   locationType?: number; // OBA specific: 0 for stop, 1 for station
   wheelchairBoarding?: string; // OBA specific
 }
-
-
 
 export interface MapStyle {
   id: string;
@@ -135,4 +132,48 @@ export interface ObaReferences {
   stops: PointOfInterest[]; // OBA stop structure is similar enough to PointOfInterest
   trips?: unknown[]; // Define if needed
   situations?: unknown[]; // Define if needed
+}
+
+export interface ObaRouteSearchResult {
+  id: string;
+  shortName: string;
+  longName?: string;
+  description?: string;
+  agencyId: string;
+  agencyName?: string;
+  url?: string;
+  color?: string;
+  textColor?: string;
+  type?: number;
+}
+
+export interface ObaStopSearchResult {
+  id: string;
+  name: string;
+  code: string;
+  direction?: string;
+  latitude: number;
+  longitude: number;
+  routeIds: string[];
+  routes?: ObaRouteSearchResult[];
+  wheelchairBoarding?: string;
+  locationType?: number;
+}
+
+export interface ObaNearbySearchResult {
+  stops: ObaStopSearchResult[];
+  routes: ObaRouteSearchResult[];
+  searchLocation: {
+    latitude: number;
+    longitude: number;
+    radius: number;
+  };
+}
+
+export interface ObaSearchSuggestion {
+  type: 'route' | 'stop' | 'location';
+  id: string;
+  title: string;
+  subtitle?: string;
+  data: ObaRouteSearchResult | ObaStopSearchResult | Record<string, unknown>;
 }

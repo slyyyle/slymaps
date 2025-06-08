@@ -8,7 +8,7 @@ interface CacheEntry<T> {
 }
 
 class CacheService {
-  private cache = new Map<string, CacheEntry<any>>();
+  private cache = new Map<string, CacheEntry<unknown>>();
   
   // 24 hours for dev, 12 hours for production
   private defaultTTL = process.env.NODE_ENV === 'development' 

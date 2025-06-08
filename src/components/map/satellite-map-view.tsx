@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Map, { Marker, Popup, NavigationControl, FullscreenControl, GeolocateControl, Source, Layer, type ViewState } from 'react-map-gl';
 import type { PointOfInterest, ObaVehicleLocation } from '@/types';
 import { MAPBOX_ACCESS_TOKEN, INITIAL_VIEW_STATE } from '@/lib/constants';
@@ -12,22 +12,15 @@ import Image from 'next/image';
 import { Skeleton } from '../ui/skeleton';
 import { Button } from '../ui/button';
 import type { MapViewProps } from '../map-view';
-import { EnhancedPoiPopup } from '@/components/enhanced-poi-popup';
-import { LightingControl } from './lighting-control';
-import { formatObaTime, getTimeBasedLightingPreset, getStatusColor } from '@/lib/time-utils';
+import { QuickSettings } from './quick-settings';
+import { formatObaTime, getStatusColor } from '@/lib/time-utils';
 
-// This is the dedicated view for the Mapbox Standard Satellite style.
-// It does NOT include any building-related interactions or features.
+// Custom hooks
+import { useMapboxAttribution } from '@/hooks/use-mapbox-attribution';
+import { useMapStyleConfig } from '@/hooks/use-map-style-config';
 
-interface MapboxPOI {
-  id: string;
-  name: string;
-  category: string;
-  subclass?: string;
-  longitude: number;
-  latitude: number;
-  properties: any;
-}
+// This is the dedicated view for Mapbox Standard Satellite style.
+// It supports basic interactions but focuses on satellite imagery with vector overlay.
 
 const getIconForPoiType = (poi: PointOfInterest): IconName => {
   if (poi.isObaStop) return 'Bus';
@@ -36,14 +29,6 @@ const getIconForPoiType = (poi: PointOfInterest): IconName => {
     case 'work': return 'Work';
     default: return 'MapPin';
   }
-};
-
-
-
-
-
-const isStandardStyle = (styleUrl: string): boolean => {
-  return styleUrl.includes('mapbox://styles/mapbox/standard');
 };
 
 const PACIFIC_NORTHWEST_BOUNDS: [[number, number], [number, number]] = [
@@ -60,8 +45,11 @@ export function SatelliteMapView({
   onSelectPoi,
   mapStyleUrl,
   mapboxDirectionsRoute,
+  routeStartCoords,
+  routeEndCoords,
   obaRouteGeometry,
   onFlyTo,
+  // onSetDestination, // Unused in satellite view
   obaStopArrivals,
   isLoadingArrivals,
   onSelectRouteForPath,
@@ -73,157 +61,126 @@ export function SatelliteMapView({
 }: MapViewProps) {
   const [internalViewState, setInternalViewState] = useState<Partial<ViewState>>(INITIAL_VIEW_STATE);
   const [selectedVehicle, setSelectedVehicle] = useState<ObaVehicleLocation | null>(null);
-  const [selectedMapboxPoi, setSelectedMapboxPoi] = useState<MapboxPOI | null>(null);
-  const [interactionsAdded, setInteractionsAdded] = useState<boolean>(false);
+  const [isFadedTheme, setIsFadedTheme] = useState<boolean>(true);
+  const [brightness, setBrightness] = useState<number>(50);
+  const [contrast, setContrast] = useState<number>(50);
+  
+  // Debounce timer for move events
+  const moveDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Custom hooks
+  useMapboxAttribution(mapRef);
+  
+  const {
+    isStandardStyle,
+    // isSatelliteStyle, // Unused in this component
+    initializeMapConfig,
+    updateLightingBasedOnTime,
+    toggleTheme,
+    setLightPreset
+  } = useMapStyleConfig({
+    mapRef,
+    mapStyleUrl,
+    isAutoLighting,
+    currentLightPreset,
+    onChangeLightPreset
+  });
 
   useEffect(() => {
     setInternalViewState(prev => ({ ...prev, ...externalViewState }));
   }, [externalViewState]);
 
-  const handleMove = (evt: { viewState: ViewState }) => {
+  const handleMove = useCallback((evt: { viewState: ViewState }) => {
+    // Update internal state immediately for smooth visual feedback
     setInternalViewState(evt.viewState);
+    
+    // Debounce the parent callback to reduce unnecessary re-renders
+    if (moveDebounceRef.current) {
+      clearTimeout(moveDebounceRef.current);
+    }
+    
+    moveDebounceRef.current = setTimeout(() => {
     onViewStateChange(evt.viewState);
-  };
+    }, 100);
+  }, [onViewStateChange]);
   
   const handlePoiClick = (poi: PointOfInterest) => {
     onSelectPoi(poi);
     setSelectedVehicle(null);
-    setSelectedMapboxPoi(null);
   };
 
   const handleVehicleClick = (vehicle: ObaVehicleLocation) => {
     setSelectedVehicle(vehicle);
     onSelectPoi(null);
-    setSelectedMapboxPoi(null);
   };
 
-  const updateLightingBasedOnTime = useCallback((map: any) => {
-    if (!isStandardStyle(mapStyleUrl) || !isAutoLighting) return;
+  const handleMapClick = useCallback(() => {
+    onSelectPoi(null);
+    setSelectedVehicle(null);
+  }, [onSelectPoi]);
 
-    const lightPreset = getTimeBasedLightingPreset();
+  const handleDirectionsToPoi = useCallback((lat: number, lng: number) => {
+    console.log(`🗺️ Directions requested to: ${lat}, ${lng}`);
+    onFlyTo({ latitude: lat, longitude: lng }, 16);
+  }, [onFlyTo]);
 
-    if (lightPreset !== currentLightPreset) {
-      try {
-        map.setConfigProperty('basemap', 'lightPreset', lightPreset);
-        console.log(`🌅 Lighting updated to: ${lightPreset}`);
-      } catch (error) {
-        console.warn('Failed to update lighting:', error);
-      }
+  const handleToggleTheme = useCallback((useFaded: boolean) => {
+    setIsFadedTheme(useFaded);
+    if (isStandardStyle) {
+      toggleTheme(useFaded);
     }
-  }, [mapStyleUrl, currentLightPreset, isAutoLighting]);
+  }, [toggleTheme, isStandardStyle]);
 
-  const setupAdvancedLighting = useCallback((map: any) => {
-    if (!isStandardStyle(mapStyleUrl)) return;
+  const handleBrightnessChange = useCallback((newBrightness: number) => {
+    setBrightness(newBrightness);
+    console.log(`🔆 Brightness changed to: ${newBrightness}`);
+  }, []);
 
-    try {
-      map.setConfigProperty('basemap', 'showPointOfInterestLabels', true);
-      map.setConfigProperty('basemap', 'showTransitLabels', true);
-      map.setConfigProperty('basemap', 'showPlaceLabels', true);
-      map.setConfigProperty('basemap', 'showRoadLabels', true);
-      
-      map.setMaxBounds(PACIFIC_NORTHWEST_BOUNDS);
-      updateLightingBasedOnTime(map);
+  const handleContrastChange = useCallback((newContrast: number) => {
+    setContrast(newContrast);
+    console.log(`⚡ Contrast changed to: ${newContrast}`);
+  }, []);
 
-      try {
-        map.setLight({
-          anchor: 'map',
-          color: '#ffffff',
-          intensity: 0.4,
-          position: [1.5, 90, 80]
-        });
-        console.log('🌟 Enhanced ambient lighting configured');
-      } catch {
-        console.log('Enhanced lighting not supported on this style');
-      }
+  const handleResetFilters = useCallback(() => {
+    setBrightness(50);
+    setContrast(50);
+    console.log('🔄 CSS filters reset to defaults (50%)');
+  }, []);
 
-      console.log('🛰️ Advanced lighting and effects enabled for Satellite');
-    } catch (error) {
-      console.warn('Failed to setup advanced lighting:', error);
+  const handleLightPresetChange = useCallback((preset: 'day' | 'dusk' | 'dawn' | 'night') => {
+    if (isStandardStyle) {
+      setLightPreset(preset);
     }
-  }, [mapStyleUrl, updateLightingBasedOnTime]);
+    onChangeLightPreset?.(preset);
+  }, [setLightPreset, onChangeLightPreset, isStandardStyle]);
 
-  const setupMapboxInteractions = useCallback((map: any) => {
-    if (!isStandardStyle(mapStyleUrl) || interactionsAdded) return;
+  // Route layers data
+  const mapboxDirectionsRouteData = mapboxDirectionsRoute?.geometry ? {
+    type: 'Feature' as const,
+    properties: {},
+    geometry: mapboxDirectionsRoute.geometry,
+  } : null;
 
-    try {
-      setupAdvancedLighting(map);
+  const obaRoutePathData = obaRouteGeometry?.geometry ? {
+    type: 'Feature' as const,
+    properties: {},
+    geometry: obaRouteGeometry.geometry,
+  } : null;
 
-      // POI Interactions
-      map.addInteraction('poi-click', {
-        type: 'click',
-        target: { featuresetId: 'poi', importId: 'basemap' },
-        handler: ({ feature }: any) => {
-          const mapboxPoi: MapboxPOI = {
-            id: feature.id || `poi-${Date.now()}`,
-            name: feature.properties.name || 'Unknown POI',
-            category: feature.properties.category || 'place',
-            subclass: feature.properties.subclass,
-            longitude: feature.geometry.coordinates[0],
-            latitude: feature.geometry.coordinates[1],
-            properties: feature.properties
-          };
-          setSelectedMapboxPoi(mapboxPoi);
-          setSelectedVehicle(null);
-          onSelectPoi(null);
-          map.setFeatureState(feature, { select: true });
-        }
-      });
-      map.addInteraction('poi-hover', {
-        type: 'mouseenter',
-        target: { featuresetId: 'poi', importId: 'basemap' },
-        handler: ({ feature }: any) => map.setFeatureState(feature, { highlight: true })
-      });
-      map.addInteraction('poi-leave', {
-        type: 'mouseleave', 
-        target: { featuresetId: 'poi', importId: 'basemap' },
-        handler: ({ feature }: any) => map.setFeatureState(feature, { highlight: false })
-      });
-      console.log('🛰️ POI interactions enabled for Satellite');
-
-      // Map click to clear all selections
-      map.addInteraction('map-click', {
-        type: 'click',
-        handler: () => {
-          setSelectedMapboxPoi(null);
-          setSelectedVehicle(null);
-          onSelectPoi(null);
-        }
-      });
-
-      setInteractionsAdded(true);
-      console.log('✨ Mapbox v3 Advanced Features & Interactions API setup complete');
-    } catch (error) {
-      console.warn('Failed to setup Mapbox Interactions API:', error);
-    }
-  }, [mapStyleUrl, interactionsAdded, onSelectPoi, setupAdvancedLighting]);
-
-  useEffect(() => {
-    setInteractionsAdded(false);
-    setSelectedMapboxPoi(null);
-  }, [mapStyleUrl]);
-
-  useEffect(() => {
-    if (!mapRef.current || !isStandardStyle(mapStyleUrl) || !isAutoLighting) return;
-    const interval = setInterval(() => {
-      updateLightingBasedOnTime(mapRef.current?.getMap());
-    }, 30 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [mapRef, mapStyleUrl, updateLightingBasedOnTime, isAutoLighting]);
-
-  const mapboxDirectionsRouteLayer: any = {
+  const mapboxDirectionsRouteLayer: mapboxgl.AnyLayer = {
     id: 'mapbox-directions-route',
     type: 'line',
     source: 'mapbox-directions-route-source',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': 'hsl(var(--accent))', 'line-width': 6, 'line-opacity': 0.8 },
+    paint: { 'line-color': '#00FF00', 'line-width': 6, 'line-opacity': 1.0, 'line-emissive-strength': 1.0 },
   };
 
-  const obaRoutePathLayer: any = {
+  const obaRoutePathLayer: mapboxgl.AnyLayer = {
     id: 'oba-route-path',
     type: 'line',
     source: 'oba-route-path-source',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': 'hsl(var(--primary))', 'line-width': 5, 'line-opacity': 0.75, 'line-dasharray': [2, 2] },
+    paint: { 'line-color': 'hsl(207, 82%, 68%)', 'line-width': 5, 'line-opacity': 0.75, 'line-dasharray': [2, 2] },
   };
 
   return (
@@ -235,30 +192,84 @@ export function SatelliteMapView({
       style={{ width: '100%', height: '100%' }}
       mapStyle={mapStyleUrl}
       maxBounds={PACIFIC_NORTHWEST_BOUNDS}
-      onClick={() => {
-        onSelectPoi(null);
-        setSelectedVehicle(null);
-        setSelectedMapboxPoi(null);
-      }}
+      attributionControl={false}
+      logoPosition="top-left"
+      onClick={handleMapClick}
       onLoad={(e) => {
-        setupMapboxInteractions(e.target);
+        const map = e.target;
+        if (isStandardStyle) {
+          initializeMapConfig(map);
+          updateLightingBasedOnTime(map);
+        }
       }}
     >
       <GeolocateControl position="top-right" />
       <FullscreenControl position="top-right" />
       <NavigationControl position="top-right" />
       
-      {/* Lighting Control */}
-      <div className="absolute top-1/2 -translate-y-1/2 right-4 z-10">
-        <LightingControl
-          currentLightPreset={currentLightPreset}
-          isAutoLighting={isAutoLighting}
-          onChangeLightPreset={onChangeLightPreset || (() => {})}
-          onToggleAutoLighting={onToggleAutoLighting || (() => {})}
-          isStandardStyle={isStandardStyle(mapStyleUrl)}
-        />
-      </div>
+      {/* Consolidated Map Controls - Note: 3D disabled for satellite */}
+      <QuickSettings
+        currentLightPreset={currentLightPreset}
+        isAutoLighting={isAutoLighting}
+        onChangeLightPreset={handleLightPresetChange}
+        onToggleAutoLighting={onToggleAutoLighting || (() => {})}
+        is3DEnabled={false} // Disabled for satellite view
+        onToggle3D={() => {}} // No-op for satellite
+        isFadedTheme={isFadedTheme}
+        onToggleTheme={handleToggleTheme}
+        brightness={brightness}
+        contrast={contrast}
+        onBrightnessChange={handleBrightnessChange}
+        onContrastChange={handleContrastChange}
+        onReset={handleResetFilters}
+        isStandardStyle={isStandardStyle}
+      />
 
+      {/* Route Sources and Layers */}
+      {mapboxDirectionsRouteData && (
+        <Source id="mapbox-directions-route-source" type="geojson" data={mapboxDirectionsRouteData}>
+          <Layer {...mapboxDirectionsRouteLayer} />
+        </Source>
+      )}
+
+      {obaRoutePathData && (
+        <Source id="oba-route-path-source" type="geojson" data={obaRoutePathData}>
+          <Layer {...obaRoutePathLayer} />
+        </Source>
+      )}
+
+      {/* Route Start and End Markers */}
+      {routeStartCoords && (
+        <Marker
+          longitude={routeStartCoords.longitude}
+          latitude={routeStartCoords.latitude}
+          anchor="bottom"
+        >
+          <div className="relative">
+            <Icons.MapPin className="w-8 h-8 text-green-600 drop-shadow-lg" strokeWidth={2.5} />
+            <div className="absolute -top-1 -right-1 bg-green-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+              A
+            </div>
+          </div>
+        </Marker>
+      )}
+
+      {routeEndCoords && (
+        <Marker
+          longitude={routeEndCoords.longitude}
+          latitude={routeEndCoords.latitude}
+          anchor="bottom"
+        >
+          <div className="relative">
+            <Icons.MapPin className="w-8 h-8 text-red-600 drop-shadow-lg" strokeWidth={2.5} />
+            <div className="absolute -top-1 -right-1 bg-red-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+              B
+            </div>
+          </div>
+        </Marker>
+      )}
+
+      {/* POI Markers */}
       {pois.map(poi => {
         const IconComponent = Icons[getIconForPoiType(poi)] || Icons.MapPin;
         return (
@@ -279,6 +290,7 @@ export function SatelliteMapView({
         );
       })}
 
+      {/* Vehicle Markers */}
       {obaVehicleLocations.map(vehicle => (
         <Marker
           key={`vehicle-${vehicle.id}`}
@@ -296,6 +308,7 @@ export function SatelliteMapView({
         </Marker>
       ))}
 
+      {/* POI Popup */}
       {selectedPoi && (
         <Popup
           longitude={selectedPoi.longitude}
@@ -371,10 +384,25 @@ export function SatelliteMapView({
                 )}
               </CardContent>
             )}
+
+            {selectedPoi.isObaStop && (
+              <CardContent className="p-3 pt-0 border-t">
+                <Button 
+                  variant="secondary" 
+                  size="sm" 
+                  className="w-full"
+                  onClick={() => handleDirectionsToPoi(selectedPoi.latitude, selectedPoi.longitude)}
+                >
+                  <Icons.Directions className="w-4 h-4 mr-1.5" />
+                  Get Directions
+                </Button>
+              </CardContent>
+            )}
           </Card>
         </Popup>
       )}
 
+      {/* Vehicle Popup */}
       {selectedVehicle && (
         <Popup
           longitude={selectedVehicle.longitude}
@@ -388,60 +416,35 @@ export function SatelliteMapView({
         >
           <Card className="border-none shadow-none">
             <CardHeader className="p-3">
-              <CardTitle className="text-base font-headline">Vehicle {selectedVehicle.id.split('_')[1] || selectedVehicle.id}</CardTitle>
-              {selectedVehicle.tripHeadsign && (
+              <CardTitle className="text-base font-headline flex items-center gap-2">
+                <Icons.Driving className="w-5 h-5 text-teal-600" />
+                Route {selectedVehicle.routeId}
+              </CardTitle>
                 <CardDescription className="text-xs">
-                  Route {selectedVehicle.routeId.split('_')[1] || selectedVehicle.routeId} to: {selectedVehicle.tripHeadsign}
+                Vehicle ID: {selectedVehicle.id}
                 </CardDescription>
-              )}
             </CardHeader>
-            <CardContent className="p-3 pt-0 text-sm space-y-1">
-              {selectedVehicle.phase && <p>Status: <Badge variant="outline" className="text-xs">{selectedVehicle.phase.replace(/_/g, ' ')}</Badge></p>}
-              <p>Last Update: {selectedVehicle.lastUpdateTime ? formatObaTime(selectedVehicle.lastUpdateTime) : 'N/A'}</p>
-              {typeof selectedVehicle.heading === 'number' && <p>Heading: {selectedVehicle.heading}°</p>}
+            
+            <CardContent className="p-3 pt-0">
+              <div className="space-y-1 text-sm">
+                <p><strong>Direction:</strong> {selectedVehicle.tripHeadsign}</p>
+                <p><strong>Last Update:</strong> {selectedVehicle.lastUpdateTime ? new Date(selectedVehicle.lastUpdateTime * 1000).toLocaleTimeString() : 'N/A'}</p>
+              </div>
+            </CardContent>
+            
+            <CardContent className="p-3 pt-0 border-t">
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                className="w-full"
+                onClick={() => handleDirectionsToPoi(selectedVehicle.latitude, selectedVehicle.longitude)}
+              >
+                <Icons.Directions className="w-4 h-4 mr-1.5" />
+                Get Directions
+              </Button>
             </CardContent>
           </Card>
         </Popup>
-      )}
-
-      {selectedMapboxPoi && (
-        <Popup
-          longitude={selectedMapboxPoi.longitude}
-          latitude={selectedMapboxPoi.latitude}
-          onClose={() => setSelectedMapboxPoi(null)}
-          closeOnClick={false}
-          closeButton={false}
-          anchor="top"
-          offset={25}
-          className="mapboxgl-popup-content-no-padding"
-          maxWidth="500px"
-          style={{
-            padding: 0,
-            background: 'transparent',
-            boxShadow: 'none',
-            border: 'none'
-          }}
-        >
-          <EnhancedPoiPopup
-            poi={selectedMapboxPoi}
-            onClose={() => setSelectedMapboxPoi(null)}
-            onDirections={(lat, lng) => console.log(`Directions to: ${lat}, ${lng}`)}
-            onFlyTo={onFlyTo}
-            currentLightPreset={currentLightPreset}
-          />
-        </Popup>
-      )}
-
-      {mapboxDirectionsRoute && mapboxDirectionsRoute.geometry && (
-        <Source id="mapbox-directions-route-source" type="geojson" data={mapboxDirectionsRoute.geometry}>
-          <Layer {...mapboxDirectionsRouteLayer} />
-        </Source>
-      )}
-
-      {obaRouteGeometry && obaRouteGeometry.geometry && (
-         <Source id="oba-route-path-source" type="geojson" data={obaRouteGeometry}>
-          <Layer {...obaRoutePathLayer} />
-        </Source>
       )}
     </Map>
   );

@@ -1,13 +1,11 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { AddressAutofill, config as mapboxSearchConfig } from '@mapbox/search-js-react';
+import { SearchInput } from '@/components/search-input';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
@@ -16,6 +14,7 @@ import type { Coordinates, TransitMode } from '@/types';
 import { TRANSIT_MODES } from '@/lib/constants';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from '@/hooks/use-toast';
+import { log } from '@/lib/logging';
 
 const directionFormSchema = z.object({
   startLat: z.preprocess(val => typeof val === 'string' && val !== '' ? parseFloat(val) : val, z.number().min(-90).max(90)).optional().nullable(),
@@ -36,11 +35,18 @@ interface DirectionsFormProps {
   mapboxAccessToken: string;
 }
 
+interface DestinationInfo {
+  coordinates: Coordinates;
+  address: string;
+  name?: string;
+}
+
 export function DirectionsForm({ onGetDirections, isLoading, destination, setDestination, onFlyTo, mapboxAccessToken }: DirectionsFormProps) {
-  const [startInputMode, setStartInputMode] = useState<'manual' | 'gps'>('manual');
+  const [startInputMode, setStartInputMode] = useState<'gps' | 'manual'>('manual');
   const [startAddressInputValue, setStartAddressInputValue] = useState('');
   const [endAddressInputValue, setEndAddressInputValue] = useState('');
-  const [tokenInitializing, setTokenInitializing] = useState(true);
+  const [destinationInfo, setDestinationInfo] = useState<DestinationInfo | null>(null);
+  const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
 
   const { toast } = useToast();
 
@@ -50,40 +56,86 @@ export function DirectionsForm({ onGetDirections, isLoading, destination, setDes
       mode: 'walking',
       startLat: null,
       startLng: null,
-      endLat: undefined, // Will be set by destination prop or AddressAutofill
+      endLat: undefined, // Will be set by destination prop or SearchInput
       endLng: undefined,
     },
   });
 
-  useEffect(() => {
-    if (mapboxAccessToken) {
-      mapboxSearchConfig.accessToken = mapboxAccessToken;
-      setTokenInitializing(false);
+  // Reverse geocoding function following Mapbox v3 pattern
+  const reverseGeocode = useCallback(async (coords: Coordinates): Promise<DestinationInfo | null> => {
+    if (!mapboxAccessToken) return null;
+    
+    setIsReverseGeocoding(true);
+    try {
+      // Use Mapbox Geocoding API for reverse geocoding
+      const url = new URL('https://api.mapbox.com/geocoding/v5/mapbox.places');
+      const query = `${coords.longitude},${coords.latitude}.json`;
+      url.pathname += `/${query}`;
+      url.searchParams.set('access_token', mapboxAccessToken);
+      url.searchParams.set('language', 'en');
+      url.searchParams.set('limit', '1');
+      url.searchParams.set('types', 'address,poi,place');
+      
+      log.info('🔄 Reverse geocoding coordinates:', coords);
+      
+      const response = await fetch(url.toString());
+      
+      if (!response.ok) {
+        throw new Error(`Reverse geocoding API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+
+      if (data.features && data.features.length > 0) {
+        const feature = data.features[0];
+        const result: DestinationInfo = {
+          coordinates: coords,
+          address: feature.place_name || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`,
+          name: feature.text
+        };
+        
+        log.info('🎯 Reverse geocoded address:', result);
+        return result;
+      }
+    } catch (error) {
+      log.error('Reverse geocoding error:', error);
+      // Fallback to coordinates
+      return {
+        coordinates: coords,
+        address: `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`
+      };
+    } finally {
+      setIsReverseGeocoding(false);
     }
+    
+    return null;
   }, [mapboxAccessToken]);
 
+  // Effect to reverse geocode destination when it changes
   useEffect(() => {
-    if (destination) {
-      form.setValue('endLat', destination.latitude);
-      form.setValue('endLng', destination.longitude);
-      // Potentially reverse geocode to set endAddressInputValue or show "Selected on map"
-      setEndAddressInputValue(`Selected: ${destination.latitude.toFixed(4)}, ${destination.longitude.toFixed(4)}`);
+    if (destination && mapboxAccessToken) {
+      reverseGeocode(destination).then(info => {
+        if (info) {
+          setDestinationInfo(info);
+          // Update form values
+          form.setValue('endLat', destination.latitude);
+          form.setValue('endLng', destination.longitude);
+        }
+      });
     } else {
-      form.resetField('endLat');
-      form.resetField('endLng');
-      // Only clear input if it wasn't user-typed for an address search
-      // This logic might need refinement based on desired UX when clearing map-selected destination
-      // setEndAddressInputValue(''); 
+      setDestinationInfo(null);
     }
-  }, [destination, form]);
+  }, [destination, mapboxAccessToken, reverseGeocode, form]);
 
   const handleStartLocationGps = useCallback(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          form.setValue('startLat', position.coords.latitude);
-          form.setValue('startLng', position.coords.longitude);
-          onFlyTo({ latitude: position.coords.latitude, longitude: position.coords.longitude }, 15);
+          const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+          form.setValue('startLat', coords.latitude);
+          form.setValue('startLng', coords.longitude);
+          onFlyTo(coords, 18);
+          log.poi('GPS coordinates obtained for start location:', coords);
           toast({ title: "Current location set as start." });
         },
         (error) => {
@@ -108,33 +160,19 @@ export function DirectionsForm({ onGetDirections, isLoading, destination, setDes
     }
   }, [startInputMode, handleStartLocationGps, form]);
 
-  const handleStartAddressSelect = useCallback((res: any) => {
-    const feature = res.features[0];
-    if (feature) {
-      const coords: Coordinates = {
-        longitude: feature.geometry.coordinates[0],
-        latitude: feature.geometry.coordinates[1],
-      };
-      form.setValue('startLat', coords.latitude);
-      form.setValue('startLng', coords.longitude);
-      setStartAddressInputValue(feature.properties.formatted_address || feature.properties.name || '');
-      onFlyTo(coords, 15);
-    }
+  const handleStartAddressSelect = useCallback((coords: Coordinates, name: string, full_address: string) => {
+    form.setValue('startLat', coords.latitude);
+    form.setValue('startLng', coords.longitude);
+    setStartAddressInputValue(full_address);
+    onFlyTo(coords, 18);
   }, [form, onFlyTo]);
 
-  const handleDestinationAddressSelect = useCallback((res: any) => {
-    const feature = res.features[0];
-    if (feature) {
-      const coords: Coordinates = {
-        longitude: feature.geometry.coordinates[0],
-        latitude: feature.geometry.coordinates[1],
-      };
-      form.setValue('endLat', coords.latitude);
-      form.setValue('endLng', coords.longitude);
-      setEndAddressInputValue(feature.properties.formatted_address || feature.properties.name || '');
-      setDestination(coords); // Update parent state, which will flow back via 'destination' prop
-      onFlyTo(coords, 15);
-    }
+  const handleDestinationAddressSelect = useCallback((coords: Coordinates, name: string, full_address: string) => {
+    form.setValue('endLat', coords.latitude);
+    form.setValue('endLng', coords.longitude);
+    setEndAddressInputValue(full_address);
+    setDestination(coords); // Update parent state, which will flow back via 'destination' prop
+    onFlyTo(coords, 18);
   }, [form, setDestination, onFlyTo]);
   
 
@@ -168,26 +206,25 @@ export function DirectionsForm({ onGetDirections, isLoading, destination, setDes
     }
   };
 
-  if (tokenInitializing && !mapboxAccessToken) {
-    return <div className="p-2 text-sm text-muted-foreground">Initializing address search...</div>;
-  }
   if (!mapboxAccessToken) {
      return <div className="p-2 text-sm text-destructive">Address search disabled: Mapbox token missing.</div>;
   }
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="space-y-2">
-          <Label className="flex items-center"><Icons.MapPin className="mr-2 h-4 w-4 text-primary" /> Start Location</Label>
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="start-input-mode-toggle" className="text-sm">Manual</Label>
-            <Switch
-              id="start-input-mode-toggle"
-              checked={startInputMode === 'gps'}
-              onCheckedChange={(checked) => setStartInputMode(checked ? 'gps' : 'manual')}
-            />
-            <Label htmlFor="start-input-mode-toggle" className="text-sm">GPS</Label>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 overflow-hidden">
+        <div className="space-y-2 overflow-hidden">
+          <div className="flex items-center justify-between">
+            <Label className="flex items-center"><Icons.MapPin className="mr-2 h-4 w-4 text-primary" /> Start Location</Label>
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="start-input-mode-toggle" className="text-sm">Manual</Label>
+              <Switch
+                id="start-input-mode-toggle"
+                checked={startInputMode === 'gps'}
+                onCheckedChange={(checked) => setStartInputMode(checked ? 'gps' : 'manual')}
+              />
+              <Label htmlFor="start-input-mode-toggle" className="text-sm">GPS</Label>
+            </div>
           </div>
 
           {startInputMode === 'gps' && (
@@ -196,7 +233,7 @@ export function DirectionsForm({ onGetDirections, isLoading, destination, setDes
                 <Icons.Geolocate className="mr-2 h-4 w-4" /> Re-fetch Current Location
               </Button>
               {form.getValues("startLat") && form.getValues("startLng") ? (
-                <p className="text-xs text-muted-foreground">Using GPS: {form.getValues("startLat")?.toFixed(4)}, {form.getValues("startLng")?.toFixed(4)}</p>
+                <p className="text-xs text-muted-foreground truncate">Using GPS: {form.getValues("startLat")?.toFixed(4)}, {form.getValues("startLng")?.toFixed(4)}</p>
               ) : (
                 <p className="text-xs text-muted-foreground">Attempting to get GPS location...</p>
               )}
@@ -204,25 +241,26 @@ export function DirectionsForm({ onGetDirections, isLoading, destination, setDes
           )}
 
           {startInputMode === 'manual' && (
-            <>
-              {/* @ts-expect-error - AddressAutofill has type compatibility issues with React 18 */}
-              <AddressAutofill accessToken={mapboxAccessToken} onRetrieve={handleStartAddressSelect} options={{country: "US", language: "en"}}>
-                <Input
-                  placeholder="Enter start address"
-                  value={startAddressInputValue}
-                  onChange={(e) => {
-                    setStartAddressInputValue(e.target.value);
-                    // If user types, clear any previously set start lat/lng from address search
-                    if (e.target.value === '') {
-                       form.resetField('startLat');
-                       form.resetField('startLng');
-                    }
-                  }}
-                  autoComplete="street-address"
-                  className="w-full"
-                />
-              </AddressAutofill>
-            </>
+                      <SearchInput
+            accessToken={mapboxAccessToken}
+            placeholder="Enter start address"
+            value={startAddressInputValue}
+            onValueChange={(value) => {
+              setStartAddressInputValue(value);
+              // If user clears input, clear coordinates
+              if (value === '') {
+                form.resetField('startLat');
+                form.resetField('startLng');
+              }
+            }}
+            onResult={handleStartAddressSelect}
+            onClear={() => {
+              form.resetField('startLat');
+              form.resetField('startLng');
+            }}
+            autoComplete="street-address"
+            className="w-full max-w-full min-w-0 overflow-hidden"
+          />
           )}
            {/* Hidden fields for validation, RHF will pick them up */}
           <FormField control={form.control} name="startLat" render={({ field }) => <input type="hidden" {...field} value={field.value ?? ''} />} />
@@ -231,35 +269,53 @@ export function DirectionsForm({ onGetDirections, isLoading, destination, setDes
           <FormMessage /> 
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 overflow-hidden">
           <Label className="flex items-center"><Icons.MapPin className="mr-2 h-4 w-4 text-accent" /> Destination</Label>
           {destination && (
-             <div className="p-2 border rounded-md bg-muted/50 text-sm">
-                <p>Current Selection: {destination.latitude.toFixed(4)}, {destination.longitude.toFixed(4)}</p>
-                <Button variant="link" size="sm" className="p-0 h-auto text-xs" onClick={() => {
+             <div className="p-2 border rounded-md bg-muted/50 text-sm overflow-hidden">
+                {isReverseGeocoding ? (
+                  <p className="flex items-center">
+                    <Icons.Time className="mr-2 h-3 w-3 animate-spin" />
+                    Finding address...
+                  </p>
+                ) : destinationInfo ? (
+                  <>
+                    <p className="font-medium leading-tight break-words">{destinationInfo.name || 'Selected Location'}</p>
+                    <p className="text-xs text-muted-foreground leading-tight break-words">{destinationInfo.address}</p>
+                  </>
+                ) : (
+                  <p className="leading-tight break-words">Selected: {destination.latitude.toFixed(4)}, {destination.longitude.toFixed(4)}</p>
+                )}
+                <Button variant="link" size="sm" className="p-0 h-auto text-xs mt-1" onClick={() => {
                   setDestination(null); // Clears map selection
+                  setDestinationInfo(null);
                   form.resetField('endLat');
                   form.resetField('endLng');
                   setEndAddressInputValue('');
                 }}>Clear map selection</Button>
              </div>
            )}
-          {/* @ts-expect-error - AddressAutofill has type compatibility issues with React 18 */}
-          <AddressAutofill accessToken={mapboxAccessToken} onRetrieve={handleDestinationAddressSelect} options={{country: "US", language: "en"}}>
-            <Input
-              placeholder="Enter destination address"
-              value={endAddressInputValue}
-              onChange={(e) => {
-                setEndAddressInputValue(e.target.value);
-                 if (e.target.value === '' && !destination) { // only clear if no map destination
-                     form.resetField('endLat');
-                     form.resetField('endLng');
-                  }
-              }}
-              autoComplete="shipping address-line1" // Or other appropriate type
-              className="w-full"
-            />
-          </AddressAutofill>
+          <SearchInput
+            accessToken={mapboxAccessToken}
+            placeholder="Enter destination address"
+            value={endAddressInputValue}
+            onValueChange={(value) => {
+              setEndAddressInputValue(value);
+              if (value === '' && !destination) { // only clear if no map destination
+                form.resetField('endLat');
+                form.resetField('endLng');
+              }
+            }}
+            onResult={handleDestinationAddressSelect}
+            onClear={() => {
+              if (!destination) { // only clear if no map destination
+                form.resetField('endLat');
+                form.resetField('endLng');
+              }
+            }}
+            autoComplete="address-line1"
+            className="w-full max-w-full min-w-0 overflow-hidden"
+          />
           <FormField control={form.control} name="endLat" render={({ field }) => <input type="hidden" {...field} value={field.value ?? ''} />} />
           <FormField control={form.control} name="endLng" render={({ field }) => <input type="hidden" {...field} value={field.value ?? ''} />} />
           <FormMessage />
@@ -273,7 +329,7 @@ export function DirectionsForm({ onGetDirections, isLoading, destination, setDes
               <FormLabel className="flex items-center"><Icons.Route className="mr-2 h-4 w-4" /> Transit Mode</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full max-w-full">
                     <SelectValue placeholder="Select mode" />
                   </SelectTrigger>
                 </FormControl>
@@ -287,7 +343,7 @@ export function DirectionsForm({ onGetDirections, isLoading, destination, setDes
             </FormItem>
           )}
         />
-        <p className="text-xs text-muted-foreground"><Icons.Info className="inline h-3 w-3 mr-1" />Detailed public transit data relies on specialized APIs not fully integrated. Current transit options may be limited.</p>
+        <p className="text-xs text-muted-foreground overflow-hidden"><Icons.Info className="inline h-3 w-3 mr-1" />Detailed public transit data relies on specialized APIs not fully integrated. Current transit options may be limited.</p>
         <Button type="submit" disabled={isLoading} className="w-full">
           {isLoading ? <Icons.Time className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Directions className="mr-2 h-4 w-4" />}
           Get Directions

@@ -101,11 +101,30 @@
 
 /* Ensure Mapbox AddressAutofill suggestions appear above Dialog components */
 @layer utilities {
-  .mapbox-search-box-menu, /* This is often the main container for the suggestions dropdown */
-  .mapbox-search-suggestion-list, /* This is often the <ul> element itself */
-  .mapboxgl-ctrl-geocoder--suggestions, /* For mapbox-gl-geocoder, if used elsewhere */
-  .mapbox-search-results-container { /* A more generic fallback */
+  /* Custom sidebar background - medium grey for good visibility */
+  .bg-sidebar {
+    background-color: #6b7280 !important; /* Medium grey - clearly visible */
+  }
+
+  /* Enhanced Mapbox AddressAutofill dropdown styling */
+  .mapbox-address-autofill,
+  .mapbox-search-box-menu,
+  .mapbox-search-suggestion-list,
+  .mapboxgl-ctrl-geocoder--suggestions,
+  .mapbox-search-results-container,
+  [data-mapbox-search-suggest],
+  .mapbox-address-autofill-suggestions {
     z-index: 100 !important; /* ShadCN Dialog is z-50, so this should be higher */
+    pointer-events: auto !important; /* Ensure suggestions are clickable */
+    position: relative !important;
+  }
+  
+  /* Ensure suggestion items are clickable */
+  .mapbox-address-autofill-suggestions li,
+  .mapbox-search-suggestion-list li,
+  [data-mapbox-search-suggest] li {
+    pointer-events: auto !important;
+    cursor: pointer !important;
   }
   
   /* Remove default Mapbox popup styling for custom popups */
@@ -119,5 +138,134 @@
   
   .mapboxgl-popup-content-no-padding .mapboxgl-popup-tip {
     display: none !important;
+  }
+
+  /* Hide Mapbox attribution and logo completely */
+  .mapboxgl-ctrl-attrib,
+  .mapboxgl-ctrl-attribution,
+  .mapboxgl-ctrl-logo {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    left: -9999px !important;
+  }
+
+  /* Force sidebar width constraints with maximum specificity */
+  [data-radix-dialog-content] {
+    max-width: 24rem !important;
+    width: 24rem !important;
+    min-width: 24rem !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  /* Additional constraint for any sheet content */
+  [role="dialog"] {
+    max-width: 24rem !important;
+    width: 24rem !important;
+    min-width: 24rem !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Override Sheet component's default width classes */
+  .fixed.z-50[data-radix-dialog-content] {
+    width: 24rem !important;
+    max-width: 24rem !important;
+    min-width: 24rem !important;
+  }
+
+  /* Target the specific sheet variant classes */
+  .inset-y-0.right-0.h-full[data-radix-dialog-content] {
+    width: 24rem !important;
+    max-width: 24rem !important;
+    min-width: 24rem !important;
+  }
+
+  .inset-y-0.left-0.h-full[data-radix-dialog-content] {
+    width: 24rem !important;
+    max-width: 24rem !important;
+    min-width: 24rem !important;
+  }
+
+  /* Disable slide animations that cause width issues */
+  [data-radix-dialog-content] {
+    animation: none !important;
+    transform: none !important;
+    transition: none !important;
+  }
+
+  /* Override any slide-in animations */
+  [data-radix-dialog-content][data-state="open"] {
+    animation: none !important;
+    transform: translateX(0) !important;
+    transition: none !important;
+  }
+
+  /* Force immediate positioning */
+  .fixed.inset-y-0.right-0[data-radix-dialog-content] {
+    right: 0 !important;
+    transform: translateX(0) !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .fixed.inset-y-0.left-0[data-radix-dialog-content] {
+    left: 0 !important;
+    transform: translateX(0) !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Aggressive overflow prevention for all sidebar content */
+  [data-radix-dialog-content] * {
+    min-width: 0 !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    hyphens: auto !important;
+  }
+
+  [role="dialog"] * {
+    min-width: 0 !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    hyphens: auto !important;
+  }
+
+  /* Prevent any flex items from growing beyond container */
+  [data-radix-dialog-content] .flex > *,
+  [role="dialog"] .flex > * {
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Force text elements to wrap */
+  [data-radix-dialog-content] span,
+  [data-radix-dialog-content] p,
+  [data-radix-dialog-content] div,
+  [role="dialog"] span,
+  [role="dialog"] p,
+  [role="dialog"] div {
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    white-space: normal !important;
+    max-width: 100% !important;
+  }
+
+  /* Prevent buttons and badges from expanding */
+  [data-radix-dialog-content] button,
+  [data-radix-dialog-content] .badge,
+  [role="dialog"] button,
+  [role="dialog"] .badge {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex-shrink: 1 !important;
   }
 }

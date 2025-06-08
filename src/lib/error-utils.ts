@@ -29,17 +29,32 @@ export function getErrorMessage(error: unknown, fallbackMessage: string): string
 export async function handleApiError(response: Response, operation: string): Promise<never> {
   let errorMessage = `Failed to ${operation} (status ${response.status})`;
   
-  try {
-    const errorData = await response.json();
-    errorMessage = errorData?.text || errorData?.message || JSON.stringify(errorData) || errorMessage;
-  } catch {
+  // Handle rate limiting specifically
+  if (response.status === 429) {
+    errorMessage = `API rate limit exceeded. Please wait a moment before trying again.`;
+  } else {
     try {
-      const textResponse = await response.text();
-      if (textResponse) {
-        errorMessage = textResponse;
+      const errorData = await response.json();
+      const apiMessage = errorData?.text || errorData?.message;
+      
+      // Check for rate limit messages in the response
+      if (apiMessage && (
+        apiMessage.toLowerCase().includes('rate limit') ||
+        apiMessage.toLowerCase().includes('too many requests')
+      )) {
+        errorMessage = `API rate limit exceeded. Please wait a moment before trying again.`;
+      } else {
+        errorMessage = apiMessage || JSON.stringify(errorData) || errorMessage;
       }
     } catch {
-      // Use the original error message
+      try {
+        const textResponse = await response.text();
+        if (textResponse) {
+          errorMessage = textResponse;
+        }
+      } catch {
+        // Use the original error message
+      }
     }
   }
   

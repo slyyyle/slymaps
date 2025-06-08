@@ -99,7 +99,7 @@ export default function TestOSMPage() {
 
           {!loading && results.length === 0 && !error && (
             <div className="text-center py-8 text-muted-foreground">
-              Click "Test OSM Service" to fetch real POI data from OpenStreetMap
+              Click &quot;Test OSM Service&quot; to fetch real POI data from OpenStreetMap
             </div>
           )}
         </CardContent>

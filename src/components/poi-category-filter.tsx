@@ -65,7 +65,7 @@ export function PoiCategoryFilter({ onFilterChange, onClose }: PoiCategoryFilter
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [minZoom, setMinZoom] = useState(12);
 
-  const handleFilterChange = () => {
+  const handleFilterChange = React.useCallback(() => {
     onFilterChange({
       showLabels,
       showTransit,
@@ -73,11 +73,11 @@ export function PoiCategoryFilter({ onFilterChange, onClose }: PoiCategoryFilter
       selectedCategories,
       minZoom
     });
-  };
+  }, [onFilterChange, showLabels, showTransit, showPlaces, selectedCategories, minZoom]);
 
   React.useEffect(() => {
     handleFilterChange();
-  }, [showLabels, showTransit, showPlaces, selectedCategories, minZoom, handleFilterChange]);
+  }, [handleFilterChange]);
 
   const toggleCategory = (category: string) => {
     const newSelected = new Set(selectedCategories);

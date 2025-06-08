@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Icons } from '@/components/icons';
 import { log } from '@/lib/logging';
@@ -14,11 +14,11 @@ interface LightingControlProps {
 }
 
 const lightingOptions = [
-  { value: 'auto' as const, label: 'Auto', icon: '⚡' },
-  { value: 'day' as const, label: 'Day', icon: '☀️' },
-  { value: 'dusk' as const, label: 'Dusk', icon: '🌆' },
-  { value: 'dawn' as const, label: 'Dawn', icon: '🌅' },
-  { value: 'night' as const, label: 'Night', icon: '🌙' },
+  { value: 'auto' as const, label: 'Auto', icon: 'Auto' },
+  { value: 'day' as const, label: 'Day', icon: 'Sun' },
+  { value: 'dusk' as const, label: 'Dusk', icon: 'Sunset' },
+  { value: 'dawn' as const, label: 'Dawn', icon: 'Sunrise' },
+  { value: 'night' as const, label: 'Night', icon: 'Moon' },
 ];
 
 export function LightingControl({
@@ -49,7 +49,7 @@ export function LightingControl({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden flex flex-row">
       {lightingOptions.map((option, index) => {
         const isSelected = currentSelection === option.value;
         
@@ -58,14 +58,18 @@ export function LightingControl({
             key={option.value}
             onClick={() => handleOptionClick(option)}
             className={`
-              w-10 h-10 p-0 rounded-none border-0 shadow-none cursor-pointer
+              ${option.value === 'auto' ? 'w-12 px-1' : 'w-10'} h-10 p-0 rounded-none border-0 shadow-none cursor-pointer
               ${isSelected ? 'bg-blue-500 text-white hover:bg-blue-600' : 'bg-white text-gray-700 hover:bg-gray-50'}
-              ${index < lightingOptions.length - 1 ? 'border-b border-gray-200' : ''}
+              ${index < lightingOptions.length - 1 ? 'border-r border-gray-200' : ''}
             `}
             title={`${option.label} lighting`}
             type="button"
           >
-            <span className="text-base">{option.icon}</span>
+            {option.value === 'auto' ? (
+              <span className="text-xs font-semibold">{option.icon}</span>
+            ) : (
+              React.createElement(Icons[option.icon as keyof typeof Icons], { className: 'w-4 h-4' })
+            )}
           </Button>
         );
       })}

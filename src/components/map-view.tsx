@@ -16,8 +16,11 @@ export interface MapViewProps {
   onSelectPoi: (poi: PointOfInterest | null) => void;
   mapStyleUrl: string;
   mapboxDirectionsRoute: MapboxRouteType | null;
+  routeStartCoords: Coordinates | null;
+  routeEndCoords: Coordinates | null;
   obaRouteGeometry: ObaRouteGeometry | null;
   onFlyTo: (coords: Coordinates, zoom?: number) => void;
+  onSetDestination: (coords: Coordinates) => void;
   obaStopArrivals: ObaArrivalDeparture[];
   isLoadingArrivals: boolean;
   onSelectRouteForPath: (routeId: string) => void;

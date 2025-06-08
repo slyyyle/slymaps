@@ -50,6 +50,17 @@ import {
   Trees,
   Dumbbell,
   MessageSquare,
+  Sun,
+  Moon,
+  Cloud,
+  Sunset,
+  Sunrise,
+  Contrast,
+  Eye,
+  RotateCcw,
+  Circle,
+  Heart,
+  TrendingUp,
 } from 'lucide-react';
 
 export const Icons = {
@@ -108,6 +119,17 @@ export const Icons = {
   Dumbbell,
   MessageSquare,
   Navigation,
+  Sun,
+  Moon,
+  Cloud,
+  Sunset,
+  Sunrise,
+  Contrast,
+  Eye,
+  Refresh: RotateCcw,
+  Circle,
+  Heart,
+  TrendingUp,
   Lightbulb: () => (
     <svg 
       width="16" 
