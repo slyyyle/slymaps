@@ -2,7 +2,7 @@ import type {Metadata} from 'next';
 import './globals.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Toaster } from "@/components/ui/toaster"
-
+import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
   title: 'SlyMaps',
@@ -23,8 +23,10 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
-        {children}
-        <Toaster />
+        <ThemeProvider>
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

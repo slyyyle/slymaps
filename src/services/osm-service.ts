@@ -27,8 +27,47 @@ export interface OSMPoiData {
   coordinates: { lat: number; lon: number };
 }
 
+export interface NominatimPlace {
+  place_id: string;
+  licence: string;
+  osm_type: 'node' | 'way' | 'relation';
+  osm_id: string;
+  lat: string;
+  lon: string;
+  category: string;
+  type: string;
+  place_rank: string;
+  importance: string;
+  addresstype: string;
+  name?: string;
+  display_name: string;
+  address?: {
+    house_number?: string;
+    road?: string;
+    neighbourhood?: string;
+    suburb?: string;
+    city?: string;
+    county?: string;
+    state?: string;
+    postcode?: string;
+    country?: string;
+    country_code?: string;
+  };
+  boundingbox: [string, string, string, string]; // [min_lat, max_lat, min_lon, max_lon]
+}
+
+export interface GeocodingResult {
+  coordinates: { lat: number; lon: number };
+  display_name: string;
+  address?: string;
+  place_id: string;
+  type: string;
+  importance: number;
+}
+
 class OSMService {
-  private baseUrl = 'https://overpass-api.de/api/interpreter';
+  private overpassUrl = 'https://overpass-api.de/api/interpreter';
+  private nominatimUrl = 'https://nominatim.openstreetmap.org';
   
   /**
    * Build Overpass QL query to get POI data around coordinates
@@ -168,13 +207,105 @@ class OSMService {
   }
 
   /**
+   * Geocode address to coordinates using Nominatim
+   */
+  async geocodeAddress(address: string): Promise<GeocodingResult[]> {
+    try {
+      const params = new URLSearchParams({
+        q: address,
+        format: 'jsonv2',
+        addressdetails: '1',
+        limit: '5'
+      });
+
+      const response = await fetch(`${this.nominatimUrl}/search?${params}`);
+      
+      if (!response.ok) {
+        throw new Error(`Nominatim API error: ${response.status}`);
+      }
+
+      const data: NominatimPlace[] = await response.json();
+      
+      return data.map(place => ({
+        coordinates: {
+          lat: parseFloat(place.lat),
+          lon: parseFloat(place.lon)
+        },
+        display_name: place.display_name,
+        address: this.formatNominatimAddress(place.address),
+        place_id: place.place_id,
+        type: place.type,
+        importance: parseFloat(place.importance)
+      }));
+      
+    } catch (error) {
+      console.warn('Geocoding failed:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Reverse geocode coordinates to address using Nominatim
+   */
+  async reverseGeocode(lat: number, lon: number): Promise<GeocodingResult | null> {
+    try {
+      const params = new URLSearchParams({
+        lat: lat.toString(),
+        lon: lon.toString(),
+        format: 'jsonv2',
+        addressdetails: '1'
+      });
+
+      const response = await fetch(`${this.nominatimUrl}/reverse?${params}`);
+      
+      if (!response.ok) {
+        throw new Error(`Nominatim reverse API error: ${response.status}`);
+      }
+
+      const place: NominatimPlace = await response.json();
+      
+      return {
+        coordinates: { lat, lon },
+        display_name: place.display_name,
+        address: this.formatNominatimAddress(place.address),
+        place_id: place.place_id,
+        type: place.type,
+        importance: parseFloat(place.importance)
+      };
+      
+    } catch (error) {
+      console.warn('Reverse geocoding failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Format Nominatim address object to readable string
+   */
+  private formatNominatimAddress(address?: NominatimPlace['address']): string {
+    if (!address) return '';
+    
+    const parts = [
+      address.house_number,
+      address.road,
+      address.neighbourhood || address.suburb,
+      address.city,
+      address.state,
+      address.postcode,
+      address.country
+    ].filter(Boolean);
+    
+    return parts.join(', ');
+  }
+
+  /**
    * Fetch POI data around specific coordinates
    */
   async fetchPOIData(lat: number, lon: number, radius: number = 50): Promise<OSMPoiData[]> {
     try {
       const query = this.buildQuery(lat, lon, radius);
       
-      const response = await fetch(this.baseUrl, {
+      const response = await fetch(this.overpassUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',

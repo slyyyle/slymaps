@@ -4,21 +4,23 @@
  */
 
 import { ONEBUSAWAY_API_KEY } from '@/lib/constants';
-import { handleApiError, isValidApiKey } from '@/lib/error-utils';
-import { rateLimitedRequest, debouncedRateLimitedRequest } from '@/lib/rate-limiter';
+import { handleApiError, isValidApiKey } from '@/lib/errors';
+import { rateLimitedRequest, debouncedRateLimitedRequest } from '@/lib/api';
+import type { Coordinates, PointOfInterest } from '@/types/core';
 import type { 
   ObaRouteSearchResult, 
   ObaStopSearchResult, 
   ObaNearbySearchResult,
-  ObaSearchSuggestion,
-  Coordinates,
+  UnifiedSearchSuggestion,
   ObaRouteGeometry,
   ObaRoute,
   ObaArrivalDeparture,
   ObaVehicleLocation,
-  PointOfInterest,
-  ObaAgency
-} from '@/types';
+  ObaAgency,
+  ObaScheduleEntry,
+  ObaTripDetails,
+  ObaStopSchedule
+} from '@/types/oba';
 import polyline from '@mapbox/polyline';
 
 const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where';
@@ -31,20 +33,27 @@ export async function getAgenciesWithCoverage(): Promise<unknown[]> {
     throw new Error('OneBusAway API key is required');
   }
 
-  const response = await fetch(`${OBA_BASE_URL}/agencies-with-coverage.json?key=${ONEBUSAWAY_API_KEY}`);
-  
-  if (!response.ok) {
-    await handleApiError(response, 'fetch agencies with coverage');
-  }
+  const data = await rateLimitedRequest(async () => {
+    const response = await fetch(`${OBA_BASE_URL}/agencies-with-coverage.json?key=${ONEBUSAWAY_API_KEY}`);
+    
+    if (!response.ok) {
+      await handleApiError(response, 'fetch agencies with coverage');
+    }
 
-  const data = await response.json();
+    return await response.json();
+  }, 'agencies with coverage');
+
   return data.data?.list || [];
 }
 
 /**
  * Search for routes by short name (e.g., "40", "550", "Link")
  */
-export async function searchRoutesByName(query: string, limit: number = 10): Promise<ObaRouteSearchResult[]> {
+export async function searchRoutesByName(
+  query: string,
+  coordinates: Coordinates,
+  limit: number = 5
+): Promise<ObaRouteSearchResult[]> {
   if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
     throw new Error('OneBusAway API key is required');
   }
@@ -54,32 +63,21 @@ export async function searchRoutesByName(query: string, limit: number = 10): Pro
   }
 
   try {
-    // Use debounced rate limiting for search operations
     const data = await debouncedRateLimitedRequest(async () => {
-      // Get all routes for the main agency (King County Metro)
-      const response = await fetch(`${OBA_BASE_URL}/routes-for-agency/1.json?key=${ONEBUSAWAY_API_KEY}`);
-      
+      const response = await fetch(
+        `${OBA_BASE_URL}/routes-for-location.json?key=${ONEBUSAWAY_API_KEY}&lat=${coordinates.latitude}&lon=${coordinates.longitude}&query=${query}&radius=50000`
+      );
+
       if (!response.ok) {
         await handleApiError(response, 'search routes');
       }
 
       return await response.json();
     }, 300, 'route search');
-    const routes = data.data?.list || [];
-    
-    // Filter routes based on the search query
-    const filteredRoutes = routes.filter((route: Record<string, unknown>) => {
-      const shortName = (route.shortName as string)?.toLowerCase() || '';
-      const longName = (route.longName as string)?.toLowerCase() || '';
-      const description = (route.description as string)?.toLowerCase() || '';
-      const searchTerm = query.toLowerCase();
-      
-      return shortName.includes(searchTerm) || 
-             longName.includes(searchTerm) || 
-             description.includes(searchTerm);
-    }).slice(0, limit);
 
-    return filteredRoutes.map((route: Record<string, unknown>) => ({
+    const routes = data.data?.list || [];
+
+    return routes.slice(0, limit).map((route: Record<string, unknown>) => ({
       id: route.id as string,
       shortName: route.shortName as string,
       longName: route.longName as string,
@@ -100,7 +98,7 @@ export async function searchRoutesByName(query: string, limit: number = 10): Pro
 /**
  * Search for stops using the OBA search API
  */
-export async function searchStops(query: string, limit: number = 10): Promise<ObaStopSearchResult[]> {
+export async function searchStops(query: string, limit: number = 5): Promise<ObaStopSearchResult[]> {
   if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
     throw new Error('OneBusAway API key is required');
   }
@@ -110,13 +108,16 @@ export async function searchStops(query: string, limit: number = 10): Promise<Ob
   }
 
   try {
-    const response = await fetch(`${OBA_BASE_URL}/search/stop.json?input=${encodeURIComponent(query)}&maxCount=${limit}&key=${ONEBUSAWAY_API_KEY}`);
-    
-    if (!response.ok) {
-      await handleApiError(response, 'search stops');
-    }
+    const data = await debouncedRateLimitedRequest(async () => {
+      const response = await fetch(`${OBA_BASE_URL}/search/stop.json?input=${encodeURIComponent(query)}&maxCount=${limit}&key=${ONEBUSAWAY_API_KEY}`);
+      
+      if (!response.ok) {
+        await handleApiError(response, 'search stops');
+      }
 
-    const data = await response.json();
+      return await response.json();
+    }, 300, 'stop search');
+
     const stops = data.data?.list || [];
 
     return stops.map((stop: Record<string, unknown>) => ({
@@ -221,13 +222,16 @@ export async function getArrivalsForStop(stopId: string): Promise<ObaArrivalDepa
     throw new Error('OneBusAway API key is required');
   }
 
-  const response = await fetch(`${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${ONEBUSAWAY_API_KEY}&minutesBefore=0&minutesAfter=60&includeReferences=false`);
-      
-  if (!response.ok) {
-    await handleApiError(response, `fetch arrivals for stop ${stopId}`);
-  }
+  const data = await rateLimitedRequest(async () => {
+    const response = await fetch(`${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${ONEBUSAWAY_API_KEY}&minutesBefore=0&minutesAfter=60&includeReferences=false`);
+        
+    if (!response.ok) {
+      await handleApiError(response, `fetch arrivals for stop ${stopId}`);
+    }
 
-  const data = await response.json();
+    return await response.json();
+  }, `arrivals for stop ${stopId}`);
+
   const arrivals: ObaArrivalDeparture[] = data.data?.entry?.arrivalsAndDepartures.map((ad: Record<string, unknown>) => ({
     routeId: ad.routeId as string,
     routeShortName: ad.routeShortName as string,
@@ -254,14 +258,17 @@ export async function getVehiclesForRoute(routeId: string): Promise<ObaVehicleLo
     return [];
   }
 
-  const response = await fetch(`${OBA_BASE_URL}/vehicles-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includeReferences=false`);
+  const data = await rateLimitedRequest(async () => {
+    const response = await fetch(`${OBA_BASE_URL}/vehicles-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includeReferences=false`);
 
-  if (!response.ok) {
-    // This will throw an error which will be caught by the calling hook
-    await handleApiError(response, `fetch vehicles for route ${routeId}`);
-  }
+    if (!response.ok) {
+      // This will throw an error which will be caught by the calling hook
+      await handleApiError(response, `fetch vehicles for route ${routeId}`);
+    }
+    
+    return await response.json();
+  }, `vehicles for route ${routeId}`);
   
-  const data = await response.json();
   const vehicles: ObaVehicleLocation[] = data.data?.list?.map((v: Record<string, unknown>) => ({
     id: v.vehicleId as string,
     routeId: routeId,
@@ -295,13 +302,15 @@ export async function getRouteDetails(routeId: string): Promise<{
   const { routeGeometry, routeDetails: enhancedRouteDetails } = await getRouteShapes(routeId);
 
   // For backward compatibility, still fetch full API response for stops and other data
-  const response = await fetch(`${OBA_BASE_URL}/stops-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includePolylines=true&includeReferences=true`);
+  const data = await rateLimitedRequest(async () => {
+    const response = await fetch(`${OBA_BASE_URL}/stops-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includePolylines=true&includeReferences=true`);
 
-  if (!response.ok) {
-    await handleApiError(response, `fetch route details for ${routeId}`);
-  }
+    if (!response.ok) {
+      await handleApiError(response, `fetch route details for ${routeId}`);
+    }
 
-  const data = await response.json();
+    return await response.json();
+  }, `route details for ${routeId}`);
   const dataData = data?.data as Record<string, unknown>;
   const references = dataData?.references as Record<string, unknown>;
 
@@ -358,20 +367,22 @@ export async function getRouteDetails(routeId: string): Promise<{
 /**
  * Get popular/frequent routes for the region
  */
-export async function getPopularRoutes(limit: number = 20): Promise<ObaRouteSearchResult[]> {
+export async function getPopularRoutes(agencyId: string = '1', limit: number = 20): Promise<ObaRouteSearchResult[]> {
   if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
     throw new Error('OneBusAway API key is required');
   }
 
   try {
-    // Get routes for King County Metro (agency ID 1)
-    const response = await fetch(`${OBA_BASE_URL}/routes-for-agency/1.json?key=${ONEBUSAWAY_API_KEY}`);
-    
-    if (!response.ok) {
-      await handleApiError(response, 'get popular routes');
-    }
+    const data = await rateLimitedRequest(async () => {
+      // Get routes for the specified agency
+      const response = await fetch(`${OBA_BASE_URL}/routes-for-agency/${agencyId}.json?key=${ONEBUSAWAY_API_KEY}`);
+      
+      if (!response.ok) {
+        await handleApiError(response, 'get popular routes');
+      }
 
-    const data = await response.json();
+      return await response.json();
+    }, `popular routes for agency ${agencyId}`);
     const routes = data.data?.list || [];
 
     // Sort by route number (treating as numbers when possible) and return top routes
@@ -413,20 +424,28 @@ export async function getPopularRoutes(limit: number = 20): Promise<ObaRouteSear
 }
 
 /**
- * Create search suggestions from various sources
+ * Fetches search suggestions for a given query, combining results from multiple sources.
  */
 export async function getSearchSuggestions(
-  query: string
-): Promise<ObaSearchSuggestion[]> {
+  query: string,
+  coordinates?: Coordinates
+): Promise<UnifiedSearchSuggestion[]> {
+  if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
+    return [];
+  }
+
   if (!query.trim()) {
     return [];
   }
 
-  const suggestions: ObaSearchSuggestion[] = [];
-
   try {
+    const suggestions: UnifiedSearchSuggestion[] = [];
+
+    // Default to Seattle center if no coordinates provided (bbox filtering handles geographic relevance)
+    const searchCoordinates = coordinates || { latitude: 47.6062, longitude: -122.3321 };
+
     // Search routes
-    const routes = await searchRoutesByName(query, 5);
+    const routes = await searchRoutesByName(query, searchCoordinates, 5);
     routes.forEach(route => {
       suggestions.push({
         type: 'route',
@@ -444,14 +463,14 @@ export async function getSearchSuggestions(
         type: 'stop',
         id: stop.id,
         title: stop.name,
-        subtitle: `Stop ${stop.code} • ${stop.direction || 'Multiple'} bound`,
+        subtitle: `Stop #${stop.code} - ${stop.direction} bound`,
         data: stop,
       });
     });
 
-    return suggestions.slice(0, 10); // Limit total suggestions
+    return suggestions;
   } catch (error) {
-    console.error('Error getting search suggestions:', error);
+    console.error('Error fetching search suggestions:', error);
     return [];
   }
 }
@@ -634,7 +653,7 @@ export async function getRoutesForAgency(agencyId: string): Promise<ObaRouteSear
   }));
 }
 
-export async function getScheduleForRoute(routeId: string): Promise<any> {
+export async function getScheduleForRoute(routeId: string): Promise<ObaScheduleEntry> {
   if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
     throw new Error('OneBusAway API key is required');
   }
@@ -647,7 +666,7 @@ export async function getScheduleForRoute(routeId: string): Promise<any> {
   return data.data?.entry || data.data;
 }
 
-export async function getTripDetails(tripId: string): Promise<any> {
+export async function getTripDetails(tripId: string): Promise<ObaTripDetails> {
   if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
     throw new Error('OneBusAway API key is required');
   }
@@ -674,7 +693,7 @@ export async function getSituationsForAgency(agencyId: string): Promise<unknown[
   return data.data?.list || [];
 }
 
-export async function getStopSchedule(stopId: string): Promise<any> {
+export async function getStopSchedule(stopId: string): Promise<ObaStopSchedule> {
   if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
     throw new Error('OneBusAway API key is required');
   }

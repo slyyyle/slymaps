@@ -61,7 +61,10 @@ import {
   Circle,
   Heart,
   TrendingUp,
+  type LucideIcon,
 } from 'lucide-react';
+
+export type Icon = LucideIcon;
 
 export const Icons = {
   MapPin,
@@ -160,6 +163,6 @@ export const Icons = {
       <path d="m6 9 6 6 6-6"/>
     </svg>
   ),
-};
+} as const;
 
 export type IconName = keyof typeof Icons;

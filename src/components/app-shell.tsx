@@ -1,212 +1,281 @@
 "use client";
 
-import React, { useEffect } from 'react';
-import dynamic from 'next/dynamic';
-import { MapView } from '@/components/map-view';
-import { SidebarControls } from '@/components/sidebar-controls';
-import { DirectionsPopup } from '@/components/directions-popup';
+import React, { useEffect, useState } from 'react';
+import { DirectionsPopup } from '@/components/search/directions-popup';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetTrigger, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Icons } from '@/components/icons';
-import { MAPBOX_ACCESS_TOKEN, ONEBUSAWAY_API_KEY, MAP_STYLES } from '@/lib/constants';
-import type { ObaStopSearchResult, PointOfInterest, Coordinates, TransitMode } from '@/types';
-import { useToast } from "@/hooks/use-toast";
-import { isValidApiKey } from '@/lib/error-utils';
+import { MAPBOX_ACCESS_TOKEN, ONEBUSAWAY_API_KEY } from '@/lib/constants';
+import { useToast } from "@/hooks/ui/use-toast";
+import { isValidApiKey } from '@/lib/errors';
 import { log } from '@/lib/logging';
-import { useMapState } from '@/hooks/use-map-state';
-import { useTransitData } from '@/hooks/use-transit-data';
-import { useRouteNavigation } from '@/hooks/use-route-navigation';
-import { useAppLayout } from '@/hooks/use-app-layout';
+import { useDataIntegration } from '@/hooks/data/use-data-integration';
+import { useDataStore } from '@/stores/use-data-store';
+import { usePOIStore } from '@/stores/use-poi-store';
+import { useThemeStore } from '@/stores/theme-store';
+import { Toaster } from '@/components/ui/toaster';
+import { MapView } from '@/components/map/map-orchestrator';
+import { SidebarShell, type PaneType } from '@/components/sidebar/sidebar-shell';
+import { UnifiedSearchBox } from '@/components/search/unified-search';
+import type { Coordinates } from '@/types/core';
+import { useMapViewport } from '@/hooks/map/use-map-navigation';
+import { useMapStyling } from '@/hooks/map/use-map-styling';
+import { cn } from '@/lib/cn';
+import { SEARCH_CONFIG } from '@/constants/search-config';
 
-const EnhancedSearchBar = dynamic(() => import('@/components/enhanced-search-bar').then(mod => mod.EnhancedSearchBar), { 
-  ssr: false,
-  loading: () => <div className="p-2 text-sm text-muted-foreground">Loading search...</div> 
-});
+// Custom mobile detection hook
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
 
-// Text gradients that match the lighting presets
-const getTextGradient = (preset: 'day' | 'dusk' | 'dawn' | 'night' = 'day') => {
-  switch (preset) {
-    case 'day':
-      return 'bg-gradient-to-r from-blue-600 via-orange-500 to-yellow-600';
-    case 'dusk':
-      return 'bg-gradient-to-r from-orange-600 via-purple-500 to-blue-600';
-    case 'dawn':
-      return 'bg-gradient-to-r from-pink-600 via-rose-500 to-orange-600';
-    case 'night':
-      return 'bg-gradient-to-r from-slate-100 via-blue-200 to-gray-300';
-    default:
-      return 'bg-gradient-to-r from-blue-600 via-orange-500 to-yellow-600';
-  }
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 768); // md breakpoint
+    };
+
+    // Check initial value
+    checkIsMobile();
+
+    // Add event listener for window resize
+    window.addEventListener('resize', checkIsMobile);
+
+    return () => {
+      window.removeEventListener('resize', checkIsMobile);
+    };
+  }, []);
+
+  return isMobile;
 };
 
 export function AppShell() {
   const { toast } = useToast();
+  const dataIntegration = useDataIntegration();
+  // Subscribe to directions state so component updates when route is fetched
+  const { start: routeStartCoords, destination: routeEndCoords, route: mapboxDirectionsRoute, showTurnMarkers } = useDataStore(state => state.directions);
 
-  // Use our new domain-specific hooks
-  const mapState = useMapState();
-  const transitData = useTransitData();
-  const routeNavigation = useRouteNavigation();
-  const appLayout = useAppLayout(
-    transitData.isLoadingArrivals,
-    routeNavigation.isLoadingObaRouteGeometry,
-    routeNavigation.isLoadingObaVehicles
-  );
+  const poiStore = usePOIStore();
+  const mapViewport = useMapViewport();
+  const mapStyling = useMapStyling(mapViewport.mapRef);
+  const { sidebarTheme } = useThemeStore();
+  const isMobile = useIsMobile();
 
-  // Configuration validation
+  // Simplified sidebar state - single source of truth
+  const [activePane, setActivePane] = useState<PaneType>(null);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const isSidebarOpen = showSidebar;
+
+  // Global navigation function for opening sidebar to specific panes
+  const openSidebarPane = (pane: PaneType) => {
+    setActivePane(pane);
+    setShowSidebar(true);
+  };
+
+  // Open sidebar to main menu
+  const openSidebarMenu = () => {
+    setActivePane(null);
+    setShowSidebar(true);
+  };
+
+  // Close sidebar function
+  const closeSidebar = () => {
+    setShowSidebar(false);
+    setActivePane(null);
+  };
+
+  // Expose global navigation function for POI popups and other components
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as typeof window & { openSidebarPane?: typeof openSidebarPane }).openSidebarPane = openSidebarPane;
+      
+      // Set sidebar theme on body for portaled components (like suggestion dropdowns)
+      document.body.setAttribute('data-sidebar-theme', sidebarTheme);
+    }
+    
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete (window as typeof window & { openSidebarPane?: typeof openSidebarPane }).openSidebarPane;
+      }
+    };
+  }, [sidebarTheme]);
+
+  // API validation and store initialization on mount
   useEffect(() => {
-    if (!MAPBOX_ACCESS_TOKEN) {
-      log.error("Mapbox Access Token is missing. Please set NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN environment variable.");
+    // Store the Mapbox token in our data store so sidebar forms can use it
+    dataIntegration.config.setMapboxAccessToken(MAPBOX_ACCESS_TOKEN);
+    // API validation
+    if (isValidApiKey(MAPBOX_ACCESS_TOKEN)) {
+      log.info('Mapbox access token validated');
+    } else {
       toast({
-        title: "Configuration Error",
-        description: "Mapbox Access Token is missing. Maps may not function correctly.",
+        title: "Mapbox Configuration Error",
+        description: "Mapbox access token is missing or invalid. Some features may not work properly.",
         variant: "destructive",
       });
+      log.error('Invalid Mapbox access token');
     }
+
     if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
-      log.error("OneBusAway API Key is missing. Please set NEXT_PUBLIC_ONEBUSAWAY_API_KEY environment variable.");
-      toast({
-        title: "Configuration Error",
-        description: "OneBusAway API Key is missing. Real-time transit features will be unavailable.",
-        variant: "destructive",
-      });
+      log.info('OBA API key not configured - transit features will be limited');
     }
-  }, [toast]);
+    
+    // POI cleanup is now handled by the segregated stores automatically
+    console.log('✅ Using segregated POI architecture - automatic cleanup enabled');
+  }, []); // Empty dependency array - only run once on mount
 
-  // Create handler wrappers that use our hooks
-  const handleStopSelect = (stop: ObaStopSearchResult) => {
-    transitData.handleStopSelect(stop, mapState.handleFlyTo);
-  };
+  // Location handling now done via native GeolocateControl
+  const currentLocation = null; // Handled by native control
+  const isLoadingLocation = false; // Handled by native control
 
-  const handleSelectPoi = (poi: PointOfInterest | null) => {
-    transitData.handleSelectPoi(poi, mapState.handleFlyTo);
-  };
-
-  const handleSearchResult = (coords: Coordinates, name?: string) => {
-    routeNavigation.handleSearchResult(coords, name, mapState.handleFlyTo);
-  };
-
-  const handleSetDestination = (coords: Coordinates) => {
-    routeNavigation.handleSetDestination(coords, mapState.handleFlyTo);
-  };
-
-  const handleSelectRouteForPath = (routeId: string | null | undefined) => {
-    routeNavigation.handleSelectRouteForPath(routeId, transitData.obaReferencedRoutes, mapState.handleFlyTo);
-  };
-
-  const fetchDirections = async (start: Coordinates, end: Coordinates, mode: TransitMode) => {
-    routeNavigation.fetchDirections(start, end, mode, mapState.handleFlyTo);
-  };
-
-  const handleTransitNearby = (coords: Coordinates) => {
-    transitData.handleTransitNearby(coords);
-  };
+  // When a route is set, fit the map to the route bounds with UI overlay padding
+  useEffect(() => {
+    if (!mapboxDirectionsRoute) return;
+    const map = mapViewport.getMapInstance();
+    if (!map) return;
+    const coords = mapboxDirectionsRoute.geometry.coordinates;
+    const lons = coords.map(c => c[0]);
+    const lats = coords.map(c => c[1]);
+    const west = Math.min(...lons);
+    const south = Math.min(...lats);
+    const east = Math.max(...lons);
+    const north = Math.max(...lats);
+    // UI overlay dimensions
+    const sidebarWidth = 320; // sidebar width in pixels
+    const searchBarHeight = 80; // approximate height of top search controls
+    // Apply asymmetric padding: leave space on left for sidebar and top for search
+    map.fitBounds(
+      [[west, south], [east, north]],
+      {
+        padding: {
+          left: sidebarWidth + 16,
+          top: searchBarHeight + 16,
+          right: 16,
+          bottom: 16
+        },
+        duration: 2000
+      }
+    );
+  }, [mapboxDirectionsRoute, mapViewport]);
 
   return (
-    <div className="relative h-screen w-screen flex flex-col overflow-hidden">
-      <header className="absolute top-0 left-0 right-0 z-10 p-4 flex justify-between items-center overflow-hidden">
-        <div className="flex items-center gap-4 min-w-0 flex-1 overflow-hidden max-w-full">
-           <Sheet 
-             open={appLayout.sidebarOpen} 
-             onOpenChange={appLayout.handleSidebarToggle} 
-             modal={false}
-           >
+    <div className="relative h-screen overflow-hidden">
+      {/* Full-screen Map Area */}
+      <div className="absolute inset-0">
+        <MapView
+          mapRef={mapViewport.mapRef}
+          viewState={mapViewport.viewState}
+          onViewStateChange={mapViewport.setViewState}
+          mapStyleUrl={mapStyling.currentMapStyle.url}
+          currentLocation={currentLocation}
+          isLoadingLocation={isLoadingLocation}
+          isBusy={false}
+          mapboxDirectionsRoute={mapboxDirectionsRoute}
+          routeStartCoords={routeStartCoords}
+          routeEndCoords={routeEndCoords}
+          showTurnMarkers={showTurnMarkers}
+          // POI selection now completely handled by segregated architecture
+        />
+        
+        {/* Directions Popup - floats over map */}
+        <DirectionsPopup />
+        
+        {/* Global Toast Notifications */}
+        <Toaster />
+      </div>
+
+      {/* Map Controls - Menu Button and Search Bar */}
+      <div className={`
+        absolute top-4 left-4 z-20 flex items-center gap-3
+        transition-all duration-200 ease-in-out
+        ${!isMobile && isSidebarOpen ? 'translate-x-80' : 'translate-x-0'}
+      `}>
+        {/* Menu Button - only show when sidebar is closed */}
+        {isMobile ? (
+          /* Mobile Menu Button */
+          <Sheet open={isSidebarOpen} onOpenChange={(open) => {
+            if (!open) closeSidebar();
+          }} modal={false}>
             <SheetTrigger asChild>
-              <Button variant="outline" size="icon" aria-label="Open controls" className="shrink-0">
-                <Icons.Menu className="h-5 w-5" />
+              <Button
+                variant="outline"
+                size="icon"
+                className="bg-sidebar text-sidebar-foreground shadow-lg flex-shrink-0"
+                onClick={openSidebarMenu}
+              >
+                <Icons.Menu className="h-4 w-4" />
               </Button>
             </SheetTrigger>
-            <SheetContent 
-              side="left" 
-              className="p-0 flex flex-col border-r bg-sidebar [&>button]:hidden overflow-hidden"
-              hideOverlay={true}
-              onOpenAutoFocus={(e) => e.preventDefault()}
-              onCloseAutoFocus={(e) => e.preventDefault()}
-            >
-              {/* Custom close button that sets the allow flag */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={appLayout.handleSidebarClose}
-                className="absolute right-4 top-4 h-8 w-8 p-0 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 z-10"
-              >
-                <Icons.X className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-              </Button>
-              
-              <SidebarControls
-                mapStyles={MAP_STYLES}
-                currentMapStyle={mapState.currentMapStyle}
-                onMapStyleChange={mapState.setCurrentMapStyle}
-                customPois={[]} 
-                onDeleteCustomPoi={() => {}} 
-                onGetDirections={fetchDirections}
-                isLoadingRoute={routeNavigation.isLoadingRoute}
-                destination={routeNavigation.destination}
-                setDestination={routeNavigation.setDestination}
-                onFlyTo={mapState.handleFlyTo}
-                oneBusAwayApiKey={ONEBUSAWAY_API_KEY}
-                selectedPoi={transitData.selectedPoi}
-                onSelectPoi={handleSelectPoi}
-                obaStopArrivals={transitData.obaStopArrivals}
-                isLoadingArrivals={transitData.isLoadingArrivals}
-                onSelectRouteForPath={handleSelectRouteForPath}
-                currentOBARouteDisplayData={routeNavigation.currentOBARouteDisplayData}
-                isBusy={appLayout.isSidebarBusy}
-                obaReferencedRoutes={transitData.obaReferencedRoutes}
-                currentLocation={mapState.currentLocation || undefined}
+            <SheetContent side="left" className="w-96 p-0 border-r">
+              <VisuallyHidden>
+                <SheetTitle>Navigation Menu</SheetTitle>
+              </VisuallyHidden>
+              <SidebarShell
+                defaultPane={activePane}
+                onClose={closeSidebar}
+                mapRef={mapViewport.mapRef}
               />
             </SheetContent>
           </Sheet>
-          <h1 className={`text-xl font-headline font-semibold bg-clip-text text-transparent shrink-0 ${getTextGradient(mapState.isAutoLighting ? mapState.currentLightPreset : mapState.currentLightPreset)}`}>
-            SlyMaps
-          </h1>
-          <div className="w-full max-w-sm min-w-0 flex-1 overflow-hidden">
-            <EnhancedSearchBar
+        ) : (
+          /* Desktop Menu Button - only show when sidebar is closed */
+          !isSidebarOpen && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="bg-sidebar text-sidebar-foreground shadow-lg flex-shrink-0"
+              onClick={openSidebarMenu}
+            >
+              <Icons.Menu className="h-4 w-4" />
+            </Button>
+          )
+        )}
+
+        {/* Search Bar - pushes right when sidebar opens */}
+        <div className={`
+          w-[30rem]
+          max-w-[calc(100vw-200px)]
+        `}>
+          <div
+            className={cn(
+              "rounded-lg shadow-lg border",
+              sidebarTheme
+            )}
+            style={{
+              backgroundColor: 'hsl(var(--sidebar-background))',
+              borderColor: 'hsl(var(--sidebar-border))',
+              backdropFilter: 'blur(12px)',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1), inset -1px 0 0 rgba(255, 255, 255, 0.1)',
+            }}
+          >
+            <UnifiedSearchBox
               accessToken={MAPBOX_ACCESS_TOKEN}
-              onResult={handleSearchResult}
-              onRouteSelect={handleSelectRouteForPath}
-              onStopSelect={handleStopSelect}
-              onTransitNearby={handleTransitNearby}
-              currentLocation={mapState.currentLocation || undefined}
-              onClear={routeNavigation.clearAllRoutes}
+              mapRef={mapViewport.mapRef}
+              onResult={(coords: Coordinates) => {
+                // Fly to the selected location with a more precise zoom
+                mapViewport.flyTo(coords, {
+                  zoom: SEARCH_CONFIG.ZOOM_LEVELS.PRECISE,
+                  duration: SEARCH_CONFIG.PERFORMANCE.FLY_TO_DURATION_MS
+                });
+              }}
+              onClear={() => {}}
+              placeholder="Search places, transit, routes..."
+              className="bg-transparent border-none shadow-none"
             />
           </div>
         </div>
-      </header>
+      </div>
+
+      {/* Desktop Sidebar Overlay */}
+      {!isMobile && isSidebarOpen && (
+        <div className="absolute top-0 left-0 z-30 w-96 h-full">
+          <SidebarShell
+            onClose={closeSidebar}
+            defaultPane={activePane}
+            mapRef={mapViewport.mapRef}
+          />
+        </div>
+      )}
 
 
-      <MapView
-        mapRef={mapState.mapRef}
-        viewState={mapState.viewState}
-        onViewStateChange={mapState.setViewState}
-        pois={transitData.obaStopsData}
-        selectedPoi={transitData.selectedPoi}
-        onSelectPoi={handleSelectPoi}
-        mapStyleUrl={mapState.currentMapStyle.url}
-        mapboxDirectionsRoute={routeNavigation.route}
-        routeStartCoords={routeNavigation.routeStartCoords}
-        routeEndCoords={routeNavigation.routeEndCoords}
-        obaRouteGeometry={routeNavigation.obaRouteGeometry}
-        onFlyTo={mapState.handleFlyTo}
-        onSetDestination={handleSetDestination}
-        obaStopArrivals={transitData.obaStopArrivals}
-        isLoadingArrivals={transitData.isLoadingArrivals}
-        onSelectRouteForPath={handleSelectRouteForPath}
-        obaVehicleLocations={routeNavigation.obaVehicleLocations}
-        isAutoLighting={mapState.isAutoLighting}
-        currentLightPreset={mapState.currentLightPreset}
-        onChangeLightPreset={mapState.handleChangeLightPreset}
-        onToggleAutoLighting={mapState.handleToggleAutoLighting}
-      />
-
-      <DirectionsPopup
-        route={routeNavigation.route}
-        onClose={routeNavigation.handleCloseDirectionsPopup}
-        isVisible={routeNavigation.showDirectionsPopup}
-        sidebarOpen={appLayout.sidebarOpen}
-      />
     </div>
   );
-}
-
-    
+} 

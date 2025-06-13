@@ -1,17 +1,27 @@
 module.exports = {
   root: true,
-  extends: ['next/core-web-vitals'],
+  extends: ['next/core-web-vitals', 'next/typescript'],
+  rules: {
+    // General rules
+    '@typescript-eslint/no-unused-vars': [
+      'warn',
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      },
+    ],
+  },
   overrides: [
-    // Test files
+    // Test files - allow unused vars
     {
       files: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
       rules: {
-        '@typescript-eslint/no-explicit-any': 'off',
-        '@typescript-eslint/no-require-imports': 'off',
         '@typescript-eslint/no-unused-vars': 'off',
+        '@typescript-eslint/no-explicit-any': 'off',
       },
     },
-    // React components with allowed any for JSON display
+    // Specific files - allow explicit any
     {
       files: ['src/components/agency-browser.tsx', 'src/hooks/use-oba-explorer.ts'],
       rules: {

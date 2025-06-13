@@ -1,4 +1,4 @@
-import type { MapStyle } from '@/types';
+import type { MapStyle } from '@/types/core';
 
 export const MAPBOX_ACCESS_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
 export const ONEBUSAWAY_API_KEY = process.env.NEXT_PUBLIC_ONEBUSAWAY_API_KEY || '';

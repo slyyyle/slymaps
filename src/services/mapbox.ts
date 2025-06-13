@@ -1,6 +1,18 @@
 import { MAPBOX_ACCESS_TOKEN } from '@/lib/constants';
-import { handleApiError } from '@/lib/error-utils';
-import type { Coordinates, TransitMode, Route } from '@/types';
+import { handleApiError } from '@/lib/errors';
+import type { Coordinates, TransitMode } from '@/types/core';
+import type { Route } from '@/types/directions';
+
+/**
+ * Mapbox Services - June 2025 Optimized
+ * 
+ * NOTE: Manual geocoding functions have been removed as they are now handled
+ * by the @mapbox/search-js-react SearchBox component following best practices.
+ * 
+ * This service now focuses on:
+ * - Directions API for routing
+ * - Other Mapbox services that don't have dedicated React components
+ */
 
 /**
  * Fetch a route from the Mapbox Directions API
@@ -14,11 +26,28 @@ export async function getDirections(
     throw new Error("Mapbox access token is required for directions.");
   }
 
-  const modeString = mode === 'walking' ? 'walking' : 
-                     mode === 'cycling' ? 'cycling' : 
-                     mode === 'transit' ? 'driving-traffic' : // fallback for transit
-                     'driving-traffic';
-  const url = `https://api.mapbox.com/directions/v5/mapbox/${modeString}/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?geometries=geojson&overview=full&access_token=${MAPBOX_ACCESS_TOKEN}`;
+  // Map application TransitMode to Mapbox Directions API routing profiles
+  // 2025 API supports: driving-traffic, driving, walking, cycling
+  const getMapboxProfile = (mode: TransitMode): string => {
+    switch (mode) {
+      case 'walking':
+        return 'walking';
+      case 'cycling':
+        return 'cycling';
+      case 'driving-traffic':
+        return 'driving-traffic';
+      case 'transit':
+        // Transit routing requires specialized APIs - fallback to driving with traffic for route visualization
+        console.warn('Transit mode not supported by Mapbox Directions API, using driving-traffic fallback');
+        return 'driving-traffic';
+      default:
+        console.warn(`Unknown transit mode: ${mode}, defaulting to driving-traffic`);
+        return 'driving-traffic';
+    }
+  };
+
+  const profile = getMapboxProfile(mode);
+  const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?geometries=geojson&overview=full&steps=true&access_token=${MAPBOX_ACCESS_TOKEN}`;
 
   const response = await fetch(url);
 

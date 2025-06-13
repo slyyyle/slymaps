@@ -1,45 +1,784 @@
+/* ===== CSS LAYERS FOUNDATION ===== */
+/* Modern cascade control - no more !important needed */
+@layer reset, mapbox, shadcn, components, utilities;
+
+/* Tailwind directives must be at top level */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    --background: 206 86% 94%; /* Very Light Blue: #E3F2FD */
-    --foreground: 224 71.4% 4.1%; /* Dark Blue-Gray for text */
-
-    --card: 206 86% 98%; /* Slightly lighter than background or same */
-    --card-foreground: 224 71.4% 4.1%;
-
-    --popover: 206 86% 98%;
-    --popover-foreground: 224 71.4% 4.1%;
-
-    --primary: 207 82% 68%; /* Soft Blue: #64B5F6 */
-    --primary-foreground: 0 0% 100%; /* White for text on primary */
-
-    --secondary: 207 70% 80%; /* Lighter soft blue */
-    --secondary-foreground: 224 71.4% 4.1%;
-
-    --muted: 207 70% 90%; /* Very light muted blue */
-    --muted-foreground: 224 20% 40%; /* Muted text color */
-
-    --accent: 34 100% 65%; /* Soft Orange: #FFB74D */
-    --accent-foreground: 20 100% 15%; /* Dark brown/black for text on accent */
-
+/* ===== POPUP-SPECIFIC CSS CUSTOM PROPERTIES ===== */
+@layer shadcn {
+  .mapbox-popup-container {
+    /* Enhanced CSS variables for popup context */
+    --background: 255 255 255;
+    --foreground: 0 0 0;
+    --card: 255 255 255;
+    --card-foreground: 0 0 0;
+    --popover: 255 255 255;
+    --popover-foreground: 0 0 0;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 207 60% 85%; /* Light blue border */
-    --input: 207 60% 88%; /* Light blue input background */
-    --ring: 207 82% 68%; /* Soft Blue for focus rings */
-
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
-
+    
+    /* Chart variables for popup charts */
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+  }
 
+  /* 🌙 DARK GLASS THEME - Cool dark with glass effect and enhanced contrast */
+  .mapbox-popup-container.dark,
+  .dark .mapbox-popup-container {
+    --background: 15 23 42;        /* slate-800 */
+    --foreground: 248 250 252;     /* slate-50 - bright white text */
+    --card: 15 23 42;              /* slate-800 */
+    --card-foreground: 248 250 252; /* bright white */
+    --popover: 15 23 42;
+    --popover-foreground: 248 250 252;
+    --primary: 96 165 250;         /* blue-400 - brighter blue */
+    --primary-foreground: 15 23 42; /* dark background */
+    --secondary: 30 41 59;         /* slate-700 */
+    --secondary-foreground: 241 245 249; /* slate-100 - very bright */
+    --muted: 51 65 85;             /* slate-600 - lighter muted background */
+    --muted-foreground: 203 213 225; /* slate-300 - much brighter muted text */
+    --accent: 30 41 59;
+    --accent-foreground: 248 250 252;
+    --destructive: 248 113 113;    /* red-400 - brighter red */
+    --destructive-foreground: 15 23 42;
+    --border: 71 85 105;           /* slate-500 - brighter border */
+    --input: 51 65 85;
+    --ring: 96 165 250;
+    --chart-1: 96 165 250;         /* blue-400 */
+    --chart-2: 52 211 153;         /* emerald-400 */
+    --chart-3: 251 191 36;         /* amber-500 */
+    --chart-4: 196 181 253;        /* purple-300 */
+    --chart-5: 251 207 232;        /* pink-300 */
+  }
+
+  /* Enhanced text visibility for dark theme */
+  .mapbox-popup-container.dark h1,
+  .mapbox-popup-container.dark h2,
+  .mapbox-popup-container.dark h3,
+  .mapbox-popup-container.dark h4,
+  .mapbox-popup-container.dark .card-title {
+    color: rgb(248 250 252) !important; /* Pure white titles */
+    font-weight: 600;
+  }
+
+  .mapbox-popup-container.dark p,
+  .mapbox-popup-container.dark span,
+  .mapbox-popup-container.dark .card-description,
+  .mapbox-popup-container.dark .text-sm {
+    color: rgb(226 232 240) !important; /* slate-200 - very bright text */
+  }
+
+  .mapbox-popup-container.dark .text-muted-foreground,
+  .mapbox-popup-container.dark .text-xs {
+    color: rgb(203 213 225) !important; /* slate-300 - bright muted text */
+  }
+
+  /* 🌌 MIDNIGHT BLUE THEME - Deep space vibes with enhanced contrast */
+  .mapbox-popup-container.midnight {
+    --background: 12 10 32;        /* Deep midnight blue */
+    --foreground: 219 234 254;     /* blue-100 - bright blue-white */
+    --card: 12 10 32;
+    --card-foreground: 219 234 254;
+    --popover: 12 10 32;
+    --popover-foreground: 219 234 254;
+    --primary: 147 197 253;        /* blue-300 - brighter */
+    --primary-foreground: 12 10 32;
+    --secondary: 30 27 75;         /* darker blue */
+    --secondary-foreground: 191 219 254; /* blue-200 */
+    --muted: 59 57 122;            /* brighter muted background */
+    --muted-foreground: 191 219 254; /* blue-200 - much brighter */
+    --accent: 76 29 149;           /* purple-800 */
+    --accent-foreground: 219 234 254;
+    --destructive: 248 113 113;    /* red-400 */
+    --destructive-foreground: 12 10 32;
+    --border: 99 102 241;          /* indigo-500 - brighter border */
+    --input: 59 57 122;
+    --ring: 147 197 253;
+  }
+
+  .mapbox-popup-container.midnight h1,
+  .mapbox-popup-container.midnight h2,
+  .mapbox-popup-container.midnight h3,
+  .mapbox-popup-container.midnight h4,
+  .mapbox-popup-container.midnight .card-title {
+    color: rgb(219 234 254) !important; /* blue-100 bright titles */
+    font-weight: 600;
+  }
+
+  .mapbox-popup-container.midnight p,
+  .mapbox-popup-container.midnight span,
+  .mapbox-popup-container.midnight .card-description,
+  .mapbox-popup-container.midnight .text-sm {
+    color: rgb(191 219 254) !important; /* blue-200 bright text */
+  }
+
+  .mapbox-popup-container.midnight .text-muted-foreground,
+  .mapbox-popup-container.midnight .text-xs {
+    color: rgb(147 197 253) !important; /* blue-300 bright muted */
+  }
+
+  /* 💜 NEON PURPLE THEME - Cyberpunk vibes with enhanced contrast */
+  .mapbox-popup-container.neon {
+    --background: 17 12 34;        /* Very dark purple */
+    --foreground: 250 245 255;     /* purple-50 */
+    --card: 17 12 34;
+    --card-foreground: 250 245 255;
+    --popover: 17 12 34;
+    --popover-foreground: 250 245 255;
+    --primary: 196 181 253;        /* purple-300 - brighter */
+    --primary-foreground: 17 12 34;
+    --secondary: 59 39 83;         /* purple-900 */
+    --secondary-foreground: 233 213 255; /* purple-100 */
+    --muted: 88 79 149;            /* purple-700 - brighter muted */
+    --muted-foreground: 221 214 254; /* purple-200 - bright muted text */
+    --accent: 251 207 232;         /* pink-200 - brighter accent */
+    --accent-foreground: 17 12 34;
+    --destructive: 251 113 133;    /* rose-400 */
+    --destructive-foreground: 17 12 34;
+    --border: 147 51 234;          /* purple-600 - brighter border */
+    --input: 109 79 149;
+    --ring: 196 181 253;
+  }
+
+  .mapbox-popup-container.neon h1,
+  .mapbox-popup-container.neon h2,
+  .mapbox-popup-container.neon h3,
+  .mapbox-popup-container.neon h4,
+  .mapbox-popup-container.neon .card-title {
+    color: rgb(250 245 255) !important; /* purple-50 bright titles */
+    font-weight: 600;
+  }
+
+  .mapbox-popup-container.neon p,
+  .mapbox-popup-container.neon span,
+  .mapbox-popup-container.neon .card-description,
+  .mapbox-popup-container.neon .text-sm {
+    color: rgb(233 213 255) !important; /* purple-100 bright text */
+  }
+
+  .mapbox-popup-container.neon .text-muted-foreground,
+  .mapbox-popup-container.neon .text-xs {
+    color: rgb(221 214 254) !important; /* purple-200 bright muted */
+  }
+
+  /* 🌊 OCEAN THEME - Deep blue-green with enhanced contrast */
+  .mapbox-popup-container.ocean {
+    --background: 8 47 73;         /* Deep ocean blue */
+    --foreground: 240 253 250;     /* emerald-50 */
+    --card: 8 47 73;
+    --card-foreground: 240 253 250;
+    --popover: 8 47 73;
+    --popover-foreground: 240 253 250;
+    --primary: 52 211 153;         /* emerald-400 - brighter */
+    --primary-foreground: 8 47 73;
+    --secondary: 21 94 117;        /* cyan-800 */
+    --secondary-foreground: 165 243 252; /* cyan-200 */
+    --muted: 75 181 181;           /* teal-400 - brighter muted */
+    --muted-foreground: 165 243 252; /* cyan-200 - bright muted text */
+    --accent: 103 232 249;         /* cyan-300 - brighter accent */
+    --accent-foreground: 8 47 73;
+    --destructive: 251 146 60;     /* orange-400 */
+    --destructive-foreground: 8 47 73;
+    --border: 34 197 94;           /* emerald-500 - brighter border */
+    --input: 75 181 181;
+    --ring: 52 211 153;
+  }
+
+  .mapbox-popup-container.ocean h1,
+  .mapbox-popup-container.ocean h2,
+  .mapbox-popup-container.ocean h3,
+  .mapbox-popup-container.ocean h4,
+  .mapbox-popup-container.ocean .card-title {
+    color: rgb(240 253 250) !important; /* emerald-50 bright titles */
+    font-weight: 600;
+  }
+
+  .mapbox-popup-container.ocean p,
+  .mapbox-popup-container.ocean span,
+  .mapbox-popup-container.ocean .card-description,
+  .mapbox-popup-container.ocean .text-sm {
+    color: rgb(209 250 229) !important; /* emerald-100 bright text */
+  }
+
+  .mapbox-popup-container.ocean .text-muted-foreground,
+  .mapbox-popup-container.ocean .text-xs {
+    color: rgb(165 243 252) !important; /* cyan-200 bright muted */
+  }
+
+  /* ===== SIDEBAR-SPECIFIC CSS CUSTOM PROPERTIES ===== */
+  /* Modern sidebar theming that matches popup aesthetics */
+  
+  .sidebar-container {
+    /* Enhanced CSS variables for sidebar context */
+    --background: 255 255 255;
+    --foreground: 0 0 0;
+    --card: 255 255 255;
+    --card-foreground: 0 0 0;
+    --popover: 255 255 255;
+    --popover-foreground: 0 0 0;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+    
+    /* Sidebar-specific variables */
+    --sidebar-background: 250 250 250;  /* Soft light background */
+    --sidebar-foreground: 0 0 0;
+    --sidebar-border: 214.3 31.8% 91.4%;
+    --sidebar-accent: 221.2 83.2% 53.3%;
+    --sidebar-accent-foreground: 210 40% 98%;
+  }
+
+  /* 🌙 DARK GLASS SIDEBAR THEME - Matches popup dark theme */
+  .sidebar-container.dark {
+    --background: 15 23 42;        /* slate-800 */
+    --foreground: 248 250 252;     /* slate-50 - bright white text */
+    --card: 30 41 59;              /* slate-700 - slightly lighter for cards */
+    --card-foreground: 248 250 252; /* bright white */
+    --popover: 15 23 42;
+    --popover-foreground: 248 250 252;
+    --primary: 96 165 250;         /* blue-400 - brighter blue */
+    --primary-foreground: 15 23 42; /* dark background */
+    --secondary: 51 65 85;         /* slate-600 */
+    --secondary-foreground: 241 245 249; /* slate-100 - very bright */
+    --muted: 71 85 105;            /* slate-500 - lighter muted background */
+    --muted-foreground: 203 213 225; /* slate-300 - much brighter muted text */
+    --accent: 51 65 85;
+    --accent-foreground: 248 250 252;
+    --destructive: 248 113 113;    /* red-400 - brighter red */
+    --destructive-foreground: 15 23 42;
+    --border: 71 85 105;           /* slate-500 - brighter border */
+    --input: 51 65 85;
+    --ring: 96 165 250;
+    
+    /* Sidebar-specific dark theme */
+    --sidebar-background: 15 23 42;  /* slate-800 - main dark background */
+    --sidebar-foreground: 248 250 252; /* slate-50 - bright text */
+    --sidebar-border: 71 85 105;     /* slate-500 - visible borders */
+    --sidebar-accent: 96 165 250;    /* blue-400 - bright accent */
+    --sidebar-accent-foreground: 15 23 42;
+  }
+
+  /* 🌌 MIDNIGHT SIDEBAR THEME - Deep space vibes */
+  .sidebar-container.midnight {
+    --background: 12 10 32;        /* Deep midnight blue */
+    --foreground: 219 234 254;     /* blue-100 - bright blue-white */
+    --card: 30 27 75;              /* darker blue for cards */
+    --card-foreground: 219 234 254;
+    --popover: 12 10 32;
+    --popover-foreground: 219 234 254;
+    --primary: 147 197 253;        /* blue-300 - brighter */
+    --primary-foreground: 12 10 32;
+    --secondary: 59 57 122;        /* brighter secondary */
+    --secondary-foreground: 191 219 254; /* blue-200 */
+    --muted: 76 79 149;            /* even brighter muted background */
+    --muted-foreground: 191 219 254; /* blue-200 - much brighter */
+    --accent: 147 197 253;         /* blue-300 accent */
+    --accent-foreground: 12 10 32;
+    --destructive: 248 113 113;    /* red-400 */
+    --destructive-foreground: 12 10 32;
+    --border: 99 102 241;          /* indigo-500 - brighter border */
+    --input: 59 57 122;
+    --ring: 147 197 253;
+    
+    /* Sidebar-specific midnight theme */
+    --sidebar-background: 12 10 32;  /* Deep midnight blue */
+    --sidebar-foreground: 219 234 254; /* blue-100 */
+    --sidebar-border: 99 102 241;    /* indigo-500 - magical borders */
+    --sidebar-accent: 147 197 253;   /* blue-300 - cosmic accent */
+    --sidebar-accent-foreground: 12 10 32;
+  }
+
+  /* 💜 NEON SIDEBAR THEME - Cyberpunk vibes */
+  .sidebar-container.neon {
+    --background: 17 12 34;        /* Very dark purple */
+    --foreground: 250 245 255;     /* purple-50 */
+    --card: 59 39 83;              /* purple-900 for cards */
+    --card-foreground: 250 245 255;
+    --popover: 17 12 34;
+    --popover-foreground: 250 245 255;
+    --primary: 196 181 253;        /* purple-300 - brighter */
+    --primary-foreground: 17 12 34;
+    --secondary: 88 79 149;        /* purple-700 */
+    --secondary-foreground: 233 213 255; /* purple-100 */
+    --muted: 109 79 149;           /* brighter purple muted */
+    --muted-foreground: 221 214 254; /* purple-200 - bright muted text */
+    --accent: 196 181 253;         /* purple-300 accent */
+    --accent-foreground: 17 12 34;
+    --destructive: 251 113 133;    /* rose-400 */
+    --destructive-foreground: 17 12 34;
+    --border: 147 51 234;          /* purple-600 - brighter border */
+    --input: 109 79 149;
+    --ring: 196 181 253;
+    
+    /* Sidebar-specific neon theme */
+    --sidebar-background: 17 12 34;  /* Very dark purple */
+    --sidebar-foreground: 250 245 255; /* purple-50 */
+    --sidebar-border: 147 51 234;    /* purple-600 - electric borders */
+    --sidebar-accent: 196 181 253;   /* purple-300 - neon accent */
+    --sidebar-accent-foreground: 17 12 34;
+  }
+
+  /* 🌊 OCEAN SIDEBAR THEME - Deep water vibes */
+  .sidebar-container.ocean {
+    --background: 8 47 73;         /* Deep ocean blue */
+    --foreground: 240 253 250;     /* emerald-50 */
+    --card: 21 94 117;             /* cyan-800 for cards */
+    --card-foreground: 240 253 250;
+    --popover: 8 47 73;
+    --popover-foreground: 240 253 250;
+    --primary: 52 211 153;         /* emerald-400 - brighter */
+    --primary-foreground: 8 47 73;
+    --secondary: 75 181 181;       /* teal-400 */
+    --secondary-foreground: 240 253 250;
+    --muted: 94 196 196;           /* brighter teal muted */
+    --muted-foreground: 165 243 252; /* cyan-200 - bright muted text */
+    --accent: 52 211 153;          /* emerald-400 accent */
+    --accent-foreground: 8 47 73;
+    --destructive: 251 146 60;     /* orange-400 */
+    --destructive-foreground: 8 47 73;
+    --border: 34 197 94;           /* emerald-500 - brighter border */
+    --input: 75 181 181;
+    --ring: 52 211 153;
+    
+    /* Sidebar-specific ocean theme */
+    --sidebar-background: 8 47 73;   /* Deep ocean blue */
+    --sidebar-foreground: 240 253 250; /* emerald-50 */
+    --sidebar-border: 34 197 94;     /* emerald-500 - ocean borders */
+    --sidebar-accent: 52 211 153;    /* emerald-400 - aqua accent */
+    --sidebar-accent-foreground: 8 47 73;
+  }
+
+  /* Enhanced sidebar text visibility for all themes */
+  .sidebar-container.dark h1,
+  .sidebar-container.dark h2,
+  .sidebar-container.dark h3,
+  .sidebar-container.dark h4,
+  .sidebar-container.dark .font-semibold {
+    color: hsl(var(--foreground)) !important;
+    font-weight: 600;
+  }
+
+  .sidebar-container.midnight h1,
+  .sidebar-container.midnight h2,
+  .sidebar-container.midnight h3,
+  .sidebar-container.midnight h4,
+  .sidebar-container.midnight .font-semibold {
+    color: hsl(var(--foreground)) !important;
+    font-weight: 600;
+  }
+
+  .sidebar-container.neon h1,
+  .sidebar-container.neon h2,
+  .sidebar-container.neon h3,
+  .sidebar-container.neon h4,
+  .sidebar-container.neon .font-semibold {
+    color: hsl(var(--foreground)) !important;
+    font-weight: 600;
+  }
+
+  .sidebar-container.ocean h1,
+  .sidebar-container.ocean h2,
+  .sidebar-container.ocean h3,
+  .sidebar-container.ocean h4,
+  .sidebar-container.ocean .font-semibold {
+    color: hsl(var(--foreground)) !important;
+    font-weight: 600;
+  }
+
+  /* Enhanced sidebar button styling for all themes */
+  .sidebar-container button {
+    transition: all 0.2s ease-in-out;
+  }
+
+  .sidebar-container.dark button:hover,
+  .sidebar-container.midnight button:hover,
+  .sidebar-container.neon button:hover,
+  .sidebar-container.ocean button:hover {
+    background-color: hsl(var(--accent)) !important;
+    color: hsl(var(--accent-foreground)) !important;
+  }
+
+  /* Enhanced sidebar border styling */
+  .sidebar-container.dark,
+  .sidebar-container.midnight,
+  .sidebar-container.neon,
+  .sidebar-container.ocean {
+    border-color: hsl(var(--sidebar-border)) !important;
+  }
+
+  /* Enhanced sidebar glassmorphism effect for dark themes */
+  .sidebar-container.dark {
+    background: linear-gradient(180deg, 
+      rgba(15, 23, 42, 0.95) 0%,
+      rgba(30, 41, 59, 0.92) 100%
+    );
+    backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(96, 165, 250, 0.2);
+    box-shadow: inset -1px 0 0 rgba(96, 165, 250, 0.1);
+  }
+
+  .sidebar-container.midnight {
+    background: linear-gradient(180deg, 
+      rgba(12, 10, 32, 0.95) 0%,
+      rgba(30, 27, 75, 0.92) 100%
+    );
+    backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(147, 197, 253, 0.3);
+    box-shadow: 
+      inset -1px 0 0 rgba(147, 197, 253, 0.15),
+      0 0 20px rgba(96, 165, 250, 0.05);
+  }
+
+  .sidebar-container.neon {
+    background: linear-gradient(180deg, 
+      rgba(17, 12, 34, 0.95) 0%,
+      rgba(59, 39, 83, 0.92) 100%
+    );
+    backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(196, 181, 253, 0.3);
+    box-shadow: 
+      inset -1px 0 0 rgba(196, 181, 253, 0.15),
+      0 0 20px rgba(168, 85, 247, 0.08);
+  }
+
+  .sidebar-container.ocean {
+    background: linear-gradient(180deg, 
+      rgba(8, 47, 73, 0.95) 0%,
+      rgba(21, 94, 117, 0.92) 100%
+    );
+    backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(52, 211, 153, 0.3);
+    box-shadow: 
+      inset -1px 0 0 rgba(52, 211, 153, 0.15),
+      0 0 20px rgba(16, 185, 129, 0.08);
+  }
+
+  /* Enhanced text visibility for all themes */
+  .sidebar-container.dark h1,
+  .sidebar-container.dark h2,
+  .sidebar-container.dark h3,
+  .sidebar-container.dark h4,
+  .sidebar-container.dark .font-semibold {
+    color: hsl(var(--foreground)) !important;
+    font-weight: 600;
+  }
+
+  .sidebar-container.midnight h1,
+  .sidebar-container.midnight h2,
+  .sidebar-container.midnight h3,
+  .sidebar-container.midnight h4,
+  .sidebar-container.midnight .font-semibold {
+    color: hsl(var(--foreground)) !important;
+    font-weight: 600;
+  }
+
+  .sidebar-container.neon h1,
+  .sidebar-container.neon h2,
+  .sidebar-container.neon h3,
+  .sidebar-container.neon h4,
+  .sidebar-container.neon .font-semibold {
+    color: hsl(var(--foreground)) !important;
+    font-weight: 600;
+  }
+
+  .sidebar-container.ocean h1,
+  .sidebar-container.ocean h2,
+  .sidebar-container.ocean h3,
+  .sidebar-container.ocean h4,
+  .sidebar-container.ocean .font-semibold {
+    color: hsl(var(--foreground)) !important;
+    font-weight: 600;
+  }
+
+  /* Enhanced sidebar button styling for all themes */
+  .sidebar-container button {
+    transition: all 0.2s ease-in-out;
+  }
+
+  .sidebar-container.dark button:hover,
+  .sidebar-container.midnight button:hover,
+  .sidebar-container.neon button:hover,
+  .sidebar-container.ocean button:hover {
+    background-color: hsl(var(--accent)) !important;
+    color: hsl(var(--accent-foreground)) !important;
+  }
+
+  /* Enhanced sidebar border styling */
+  .sidebar-container.dark,
+  .sidebar-container.midnight,
+  .sidebar-container.neon,
+  .sidebar-container.ocean {
+    border-color: hsl(var(--sidebar-border)) !important;
+  }
+
+  /* Enhanced sidebar glassmorphism effect for dark themes */
+  .sidebar-container.dark {
+    background: linear-gradient(180deg, 
+      rgba(15, 23, 42, 0.95) 0%,
+      rgba(30, 41, 59, 0.92) 100%
+    );
+    backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(96, 165, 250, 0.2);
+    box-shadow: inset -1px 0 0 rgba(96, 165, 250, 0.1);
+  }
+
+  .sidebar-container.midnight {
+    background: linear-gradient(180deg, 
+      rgba(12, 10, 32, 0.95) 0%,
+      rgba(30, 27, 75, 0.92) 100%
+    );
+    backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(147, 197, 253, 0.3);
+    box-shadow: 
+      inset -1px 0 0 rgba(147, 197, 253, 0.15),
+      0 0 20px rgba(96, 165, 250, 0.05);
+  }
+
+  .sidebar-container.neon {
+    background: linear-gradient(180deg, 
+      rgba(17, 12, 34, 0.95) 0%,
+      rgba(59, 39, 83, 0.92) 100%
+    );
+    backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(196, 181, 253, 0.3);
+    box-shadow: 
+      inset -1px 0 0 rgba(196, 181, 253, 0.15),
+      0 0 20px rgba(168, 85, 247, 0.08);
+  }
+
+  .sidebar-container.ocean {
+    background: linear-gradient(180deg, 
+      rgba(8, 47, 73, 0.95) 0%,
+      rgba(21, 94, 117, 0.92) 100%
+    );
+    backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(52, 211, 153, 0.3);
+    box-shadow: 
+      inset -1px 0 0 rgba(52, 211, 153, 0.15),
+      0 0 20px rgba(16, 185, 129, 0.08);
+  }
+
+  /* Search component placeholder styling for all themes */
+  .sidebar-container input::placeholder {
+    color: hsl(var(--sidebar-foreground) / 0.5) !important;
+  }
+
+  .sidebar-container.dark input::placeholder {
+    color: hsl(var(--sidebar-foreground) / 0.5) !important;
+  }
+
+  .sidebar-container.midnight input::placeholder {
+    color: hsl(var(--sidebar-foreground) / 0.5) !important;
+  }
+
+  .sidebar-container.neon input::placeholder {
+    color: hsl(var(--sidebar-foreground) / 0.5) !important;
+  }
+
+  .sidebar-container.ocean input::placeholder {
+    color: hsl(var(--sidebar-foreground) / 0.5) !important;
+  }
+
+  /* ===== SHADCN COMPONENT OVERRIDES FOR SIDEBAR THEME CONTEXT ===== */
+  
+  /* Global theme-aware overrides for portaled content (popover suggestions, etc.) */
+  /* These target the document body with theme data attributes */
+  
+  body[data-sidebar-theme="light"] [data-radix-popper-content-wrapper] > *,
+  body[data-sidebar-theme="light"] [data-radix-popper-content-wrapper],
+  body[data-sidebar-theme="dark"] [data-radix-popper-content-wrapper] > *,
+  body[data-sidebar-theme="dark"] [data-radix-popper-content-wrapper],
+  body[data-sidebar-theme="midnight"] [data-radix-popper-content-wrapper] > *,
+  body[data-sidebar-theme="midnight"] [data-radix-popper-content-wrapper],
+  body[data-sidebar-theme="neon"] [data-radix-popper-content-wrapper] > *,
+  body[data-sidebar-theme="neon"] [data-radix-popper-content-wrapper],
+  body[data-sidebar-theme="ocean"] [data-radix-popper-content-wrapper] > *,
+  body[data-sidebar-theme="ocean"] [data-radix-popper-content-wrapper] {
+    background: hsl(var(--sidebar-background)) !important;
+    border-color: hsl(var(--sidebar-border)) !important;
+    color: hsl(var(--sidebar-foreground)) !important;
+    backdrop-filter: blur(12px) !important;
+  }
+
+  /* More comprehensive targeting for popover content using actual classnames */
+  body[data-sidebar-theme] [data-radix-popover-content],
+  body[data-sidebar-theme] .bg-popover {
+    background: hsl(var(--sidebar-background)) !important;
+    border-color: hsl(var(--sidebar-border)) !important;
+    color: hsl(var(--sidebar-foreground)) !important;
+    backdrop-filter: blur(12px) !important;
+  }
+
+  /* Command components - used in search suggestions */
+  body[data-sidebar-theme] [cmdk-root],
+  body[data-sidebar-theme] .bg-popover {
+    background: transparent !important;
+    color: hsl(var(--sidebar-foreground)) !important;
+  }
+
+  body[data-sidebar-theme] [cmdk-list] {
+    background: transparent !important;
+  }
+
+  body[data-sidebar-theme] [cmdk-item] {
+    color: hsl(var(--sidebar-foreground)) !important;
+    background: transparent !important;
+    border-radius: 4px !important;
+  }
+
+  body[data-sidebar-theme] [cmdk-item]:hover,
+  body[data-sidebar-theme] [cmdk-item][aria-selected="true"],
+  body[data-sidebar-theme] [cmdk-item][data-selected="true"] {
+    background: hsl(var(--sidebar-accent)) !important;
+    color: hsl(var(--sidebar-accent-foreground)) !important;
+  }
+
+  body[data-sidebar-theme] [cmdk-empty] {
+    color: hsl(var(--sidebar-foreground) / 0.7) !important;
+  }
+
+  body[data-sidebar-theme] [cmdk-loading] {
+    color: hsl(var(--sidebar-foreground) / 0.7) !important;
+  }
+
+  /* More comprehensive targeting including tailwind classes */
+  body[data-sidebar-theme] .text-popover-foreground {
+    color: hsl(var(--sidebar-foreground)) !important;
+  }
+
+  body[data-sidebar-theme] .bg-accent {
+    background: hsl(var(--sidebar-accent)) !important;
+  }
+
+  body[data-sidebar-theme] .text-accent-foreground {
+    color: hsl(var(--sidebar-accent-foreground)) !important;
+  }
+
+  /* Select components - for any dropdowns in search */
+  body[data-sidebar-theme] [data-radix-select-content] {
+    background: hsl(var(--sidebar-background)) !important;
+    border-color: hsl(var(--sidebar-border)) !important;
+    color: hsl(var(--sidebar-foreground)) !important;
+    backdrop-filter: blur(12px) !important;
+  }
+
+  body[data-sidebar-theme] [data-radix-select-item] {
+    color: hsl(var(--sidebar-foreground)) !important;
+  }
+
+  body[data-sidebar-theme] [data-radix-select-item]:hover,
+  body[data-sidebar-theme] [data-radix-select-item][data-highlighted] {
+    background: hsl(var(--sidebar-accent)) !important;
+    color: hsl(var(--sidebar-accent-foreground)) !important;
+  }
+
+  /* Dropdown Menu components */
+  body[data-sidebar-theme] [data-radix-dropdown-menu-content] {
+    background: hsl(var(--sidebar-background)) !important;
+    border-color: hsl(var(--sidebar-border)) !important;
+    color: hsl(var(--sidebar-foreground)) !important;
+    backdrop-filter: blur(12px) !important;
+  }
+
+  body[data-sidebar-theme] [data-radix-dropdown-menu-item] {
+    color: hsl(var(--sidebar-foreground)) !important;
+  }
+
+  body[data-sidebar-theme] [data-radix-dropdown-menu-item]:hover,
+  body[data-sidebar-theme] [data-radix-dropdown-menu-item][data-highlighted] {
+    background: hsl(var(--sidebar-accent)) !important;
+    color: hsl(var(--sidebar-accent-foreground)) !important;
+  }
+
+  /* Command.Item specific targeting for suggestion dropdowns */
+  body[data-sidebar-theme] [data-radix-popover-content] [cmdk-item] {
+    padding: 8px !important;
+    margin: 2px 4px !important;
+    border-radius: 6px !important;
+    transition: all 0.15s ease-in-out !important;
+  }
+
+  body[data-sidebar-theme] [data-radix-popover-content] [cmdk-item]:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  /* Additional targeting for shadcn/ui class patterns */
+  body[data-sidebar-theme] .rounded-md.border.bg-popover,
+  body[data-sidebar-theme] .bg-popover.text-popover-foreground {
+    background: hsl(var(--sidebar-background)) !important;
+    border-color: hsl(var(--sidebar-border)) !important;
+    color: hsl(var(--sidebar-foreground)) !important;
+    backdrop-filter: blur(12px) !important;
+  }
+
+  /* Legacy sidebar-container scoped rules for components that aren't portaled */
+  .sidebar-container input::placeholder {
+    color: hsl(var(--sidebar-foreground) / 0.5) !important;
+  }
+
+  .sidebar-container button:hover {
+    background: hsl(var(--sidebar-accent)) !important;
+    color: hsl(var(--sidebar-accent-foreground)) !important;
+  }
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
     --sidebar-background: 206 86% 96%; /* Slightly darker light blue for sidebar */
     --sidebar-foreground: 224 71.4% 4.1%;
     --sidebar-primary: 207 82% 68%;
@@ -51,34 +790,30 @@
   }
 
   .dark {
-    --background: 224 71.4% 4.1%; /* Dark Blue-Gray */
-    --foreground: 206 86% 94%; /* Very Light Blue for text */
-
-    --card: 224 71.4% 8%;
-    --card-foreground: 206 86% 94%;
-
-    --popover: 224 71.4% 8%;
-    --popover-foreground: 206 86% 94%;
-
-    --primary: 207 82% 68%; /* Soft Blue */
-    --primary-foreground: 224 71.4% 4.1%;
-
-    --secondary: 207 50% 30%; /* Darker muted blue */
-    --secondary-foreground: 206 86% 94%;
-
-    --muted: 207 50% 25%;
-    --muted-foreground: 206 30% 70%;
-
-    --accent: 34 100% 65%; /* Soft Orange */
-    --accent-foreground: 20 100% 15%;
-
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 207 30% 40%;
-    --input: 207 30% 35%;
-    --ring: 207 82% 68%;
-
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
     --sidebar-background: 224 71.4% 6%;
     --sidebar-foreground: 206 86% 94%;
     --sidebar-primary: 207 82% 68%;
@@ -88,9 +823,7 @@
     --sidebar-border: 207 30% 40%;
     --sidebar-ring: 207 82% 68%;
   }
-}
 
-@layer base {
   * {
     @apply border-border;
   }
@@ -103,7 +836,7 @@
 @layer utilities {
   /* Custom sidebar background - medium grey for good visibility */
   .bg-sidebar {
-    background-color: #6b7280 !important; /* Medium grey - clearly visible */
+    background-color: #6b7280; /* Medium grey - clearly visible */
   }
 
   /* Enhanced Mapbox AddressAutofill dropdown styling */
@@ -114,136 +847,113 @@
   .mapbox-search-results-container,
   [data-mapbox-search-suggest],
   .mapbox-address-autofill-suggestions {
-    z-index: 100 !important; /* ShadCN Dialog is z-50, so this should be higher */
-    pointer-events: auto !important; /* Ensure suggestions are clickable */
-    position: relative !important;
+    z-index: 100; /* ShadCN Dialog is z-50, so this should be higher */
+    pointer-events: auto; /* Ensure suggestions are clickable */
+    position: relative;
   }
   
   /* Ensure suggestion items are clickable */
   .mapbox-address-autofill-suggestions li,
   .mapbox-search-suggestion-list li,
   [data-mapbox-search-suggest] li {
-    pointer-events: auto !important;
-    cursor: pointer !important;
+    pointer-events: auto;
+    cursor: pointer;
   }
   
-  /* Remove default Mapbox popup styling for custom popups */
-  .mapboxgl-popup-content-no-padding .mapboxgl-popup-content {
-    padding: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    border: none !important;
-    border-radius: 0 !important;
-  }
-  
-  .mapboxgl-popup-content-no-padding .mapboxgl-popup-tip {
-    display: none !important;
-  }
 
-  /* Hide Mapbox attribution and logo completely */
-  .mapboxgl-ctrl-attrib,
-  .mapboxgl-ctrl-attribution,
-  .mapboxgl-ctrl-logo {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-    position: absolute !important;
-    left: -9999px !important;
-  }
 
   /* Force sidebar width constraints with maximum specificity */
   [data-radix-dialog-content] {
-    max-width: 24rem !important;
-    width: 24rem !important;
-    min-width: 24rem !important;
-    overflow: hidden !important;
-    box-sizing: border-box !important;
-    display: flex !important;
-    flex-direction: column !important;
+    max-width: 24rem;
+    width: 24rem;
+    min-width: 24rem;
+    overflow: hidden;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
   }
   
   /* Additional constraint for any sheet content */
   [role="dialog"] {
-    max-width: 24rem !important;
-    width: 24rem !important;
-    min-width: 24rem !important;
-    overflow: hidden !important;
-    box-sizing: border-box !important;
-    display: flex !important;
-    flex-direction: column !important;
+    max-width: 24rem;
+    width: 24rem;
+    min-width: 24rem;
+    overflow: hidden;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
   }
 
   /* Override Sheet component's default width classes */
   .fixed.z-50[data-radix-dialog-content] {
-    width: 24rem !important;
-    max-width: 24rem !important;
-    min-width: 24rem !important;
+    width: 24rem;
+    max-width: 24rem;
+    min-width: 24rem;
   }
 
   /* Target the specific sheet variant classes */
   .inset-y-0.right-0.h-full[data-radix-dialog-content] {
-    width: 24rem !important;
-    max-width: 24rem !important;
-    min-width: 24rem !important;
+    width: 24rem;
+    max-width: 24rem;
+    min-width: 24rem;
   }
 
   .inset-y-0.left-0.h-full[data-radix-dialog-content] {
-    width: 24rem !important;
-    max-width: 24rem !important;
-    min-width: 24rem !important;
+    width: 24rem;
+    max-width: 24rem;
+    min-width: 24rem;
   }
 
   /* Disable slide animations that cause width issues */
   [data-radix-dialog-content] {
-    animation: none !important;
-    transform: none !important;
-    transition: none !important;
+    animation: none;
+    transform: none;
+    transition: none;
   }
 
   /* Override any slide-in animations */
   [data-radix-dialog-content][data-state="open"] {
-    animation: none !important;
-    transform: translateX(0) !important;
-    transition: none !important;
+    animation: none;
+    transform: translateX(0);
+    transition: none;
   }
 
   /* Force immediate positioning */
   .fixed.inset-y-0.right-0[data-radix-dialog-content] {
-    right: 0 !important;
-    transform: translateX(0) !important;
-    animation: none !important;
-    transition: none !important;
+    right: 0;
+    transform: translateX(0);
+    animation: none;
+    transition: none;
   }
 
   .fixed.inset-y-0.left-0[data-radix-dialog-content] {
-    left: 0 !important;
-    transform: translateX(0) !important;
-    animation: none !important;
-    transition: none !important;
+    left: 0;
+    transform: translateX(0);
+    animation: none;
+    transition: none;
   }
 
   /* Aggressive overflow prevention for all sidebar content */
   [data-radix-dialog-content] * {
-    min-width: 0 !important;
-    word-wrap: break-word !important;
-    overflow-wrap: break-word !important;
-    hyphens: auto !important;
+    min-width: 0;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
   }
 
   [role="dialog"] * {
-    min-width: 0 !important;
-    word-wrap: break-word !important;
-    overflow-wrap: break-word !important;
-    hyphens: auto !important;
+    min-width: 0;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
   }
 
   /* Prevent any flex items from growing beyond container */
   [data-radix-dialog-content] .flex > *,
   [role="dialog"] .flex > * {
-    flex-shrink: 1 !important;
-    min-width: 0 !important;
-    max-width: 100% !important;
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
   }
 
   /* Force text elements to wrap */
@@ -253,10 +963,10 @@
   [role="dialog"] span,
   [role="dialog"] p,
   [role="dialog"] div {
-    word-break: break-word !important;
-    overflow-wrap: break-word !important;
-    white-space: normal !important;
-    max-width: 100% !important;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    max-width: 100%;
   }
 
   /* Prevent buttons and badges from expanding */
@@ -264,8 +974,1061 @@
   [data-radix-dialog-content] .badge,
   [role="dialog"] button,
   [role="dialog"] .badge {
-    min-width: 0 !important;
-    max-width: 100% !important;
-    flex-shrink: 1 !important;
+    min-width: 0;
+    max-width: 100%;
+    flex-shrink: 1;
   }
+
+
+
+  /* Popup reset utility */
+  .popup-reset {
+    font-family: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
+
+  /* ===== SIDEBAR THEME UTILITIES ===== */
+  /* Enhanced hover states for sidebar buttons using theme variables */
+  .sidebar-container button:hover {
+    background-color: hsl(var(--accent)) !important;
+    color: hsl(var(--accent-foreground)) !important;
+  }
+
+  /* Smooth theme transitions for all sidebar elements */
+  .sidebar-container,
+  .sidebar-container * {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+  }
+
+  /* Enhanced focus states using theme variables */
+  .sidebar-container button:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Subtle glow effects for dark themes */
+  .sidebar-container.midnight button:hover,
+  .sidebar-container.neon button:hover {
+    box-shadow: 0 0 12px rgba(var(--primary), 0.3);
+  }
+
+  .sidebar-container.ocean button:hover {
+    box-shadow: 0 0 12px rgba(52, 211, 153, 0.3);
+  }
+}
+
+/* ===== MAPBOX CONTROLS THEMING ===== */
+/* Style all Mapbox GL JS controls to match our theme system */
+
+/* Default light theme for controls */
+.mapboxgl-ctrl-group,
+.mapboxgl-ctrl {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.mapboxgl-ctrl-group button,
+.mapboxgl-ctrl button {
+  background: transparent !important;
+  color: rgba(0, 0, 0, 0.8) !important;
+  border: none !important;
+  transition: all 0.2s ease !important;
+}
+
+.mapboxgl-ctrl-group button:hover,
+.mapboxgl-ctrl button:hover {
+  background: rgba(0, 0, 0, 0.1) !important;
+  color: rgba(0, 0, 0, 1) !important;
+}
+
+/* Navigation Control specific styling */
+.mapboxgl-ctrl-zoom-in,
+.mapboxgl-ctrl-zoom-out,
+.mapboxgl-ctrl-compass {
+  width: 40px !important;
+  height: 40px !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+}
+
+/* Fullscreen control styling */
+.mapboxgl-ctrl-fullscreen {
+  width: 40px !important;
+  height: 40px !important;
+}
+
+/* Geolocate control styling */
+.mapboxgl-ctrl-geolocate {
+  width: 40px !important;
+  height: 40px !important;
+}
+
+/* Active state for geolocate */
+.mapboxgl-ctrl-geolocate.mapboxgl-ctrl-geolocate-active,
+.mapboxgl-ctrl-geolocate.mapboxgl-ctrl-geolocate-active-error {
+  background: rgba(59, 130, 246, 0.1) !important;
+  color: rgb(59, 130, 246) !important;
+}
+
+/* Control group spacing */
+.mapboxgl-ctrl-group:not(:empty) {
+  margin: 8px !important;
+}
+
+.mapboxgl-ctrl-group button:first-child {
+  border-top-left-radius: 8px !important;
+  border-top-right-radius: 8px !important;
+}
+
+.mapboxgl-ctrl-group button:last-child {
+  border-bottom-left-radius: 8px !important;
+  border-bottom-right-radius: 8px !important;
+}
+
+/* Dark theme controls */
+body.theme-dark .mapboxgl-ctrl-group,
+body.theme-dark .mapboxgl-ctrl {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border: 1px solid rgba(96, 165, 250, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(96, 165, 250, 0.2) !important;
+}
+
+body.theme-dark .mapboxgl-ctrl-group button,
+body.theme-dark .mapboxgl-ctrl button {
+  color: rgba(248, 250, 252, 0.9) !important;
+}
+
+body.theme-dark .mapboxgl-ctrl-group button:hover,
+body.theme-dark .mapboxgl-ctrl button:hover {
+  background: rgba(96, 165, 250, 0.2) !important;
+  color: rgba(248, 250, 252, 1) !important;
+}
+
+/* Midnight theme controls */
+body.theme-midnight .mapboxgl-ctrl-group,
+body.theme-midnight .mapboxgl-ctrl {
+  background: rgba(12, 10, 32, 0.9) !important;
+  border: 1px solid rgba(147, 197, 253, 0.4) !important;
+  box-shadow: 0 4px 12px rgba(12, 10, 32, 0.5), inset 0 1px 0 rgba(147, 197, 253, 0.3), 0 0 20px rgba(96, 165, 250, 0.1) !important;
+}
+
+body.theme-midnight .mapboxgl-ctrl-group button,
+body.theme-midnight .mapboxgl-ctrl button {
+  color: rgba(219, 234, 254, 0.9) !important;
+}
+
+body.theme-midnight .mapboxgl-ctrl-group button:hover,
+body.theme-midnight .mapboxgl-ctrl button:hover {
+  background: rgba(147, 197, 253, 0.2) !important;
+  color: rgba(219, 234, 254, 1) !important;
+  box-shadow: 0 0 12px rgba(147, 197, 253, 0.3) !important;
+}
+
+/* Neon theme controls */
+body.theme-neon .mapboxgl-ctrl-group,
+body.theme-neon .mapboxgl-ctrl {
+  background: rgba(17, 12, 34, 0.9) !important;
+  border: 1px solid rgba(196, 181, 253, 0.4) !important;
+  box-shadow: 0 4px 12px rgba(17, 12, 34, 0.5), inset 0 1px 0 rgba(196, 181, 253, 0.3), 0 0 20px rgba(168, 85, 247, 0.1) !important;
+}
+
+body.theme-neon .mapboxgl-ctrl-group button,
+body.theme-neon .mapboxgl-ctrl button {
+  color: rgba(250, 245, 255, 0.9) !important;
+}
+
+body.theme-neon .mapboxgl-ctrl-group button:hover,
+body.theme-neon .mapboxgl-ctrl button:hover {
+  background: rgba(196, 181, 253, 0.2) !important;
+  color: rgba(250, 245, 255, 1) !important;
+  box-shadow: 0 0 12px rgba(196, 181, 253, 0.4) !important;
+}
+
+/* Ocean theme controls */
+body.theme-ocean .mapboxgl-ctrl-group,
+body.theme-ocean .mapboxgl-ctrl {
+  background: rgba(8, 47, 73, 0.9) !important;
+  border: 1px solid rgba(52, 211, 153, 0.4) !important;
+  box-shadow: 0 4px 12px rgba(8, 47, 73, 0.5), inset 0 1px 0 rgba(52, 211, 153, 0.3), 0 0 20px rgba(16, 185, 129, 0.1) !important;
+}
+
+body.theme-ocean .mapboxgl-ctrl-group button,
+body.theme-ocean .mapboxgl-ctrl button {
+  color: rgba(240, 253, 250, 0.9) !important;
+}
+
+body.theme-ocean .mapboxgl-ctrl-group button:hover,
+body.theme-ocean .mapboxgl-ctrl button:hover {
+  background: rgba(52, 211, 153, 0.2) !important;
+  color: rgba(240, 253, 250, 1) !important;
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.3) !important;
+}
+
+/* Enhanced focus states for accessibility */
+.mapboxgl-ctrl-group button:focus,
+.mapboxgl-ctrl button:focus {
+  outline: 2px solid rgba(59, 130, 246, 0.6) !important;
+  outline-offset: 2px !important;
+}
+
+body.theme-midnight .mapboxgl-ctrl-group button:focus,
+body.theme-midnight .mapboxgl-ctrl button:focus {
+  outline-color: rgba(147, 197, 253, 0.6) !important;
+}
+
+body.theme-neon .mapboxgl-ctrl-group button:focus,
+body.theme-neon .mapboxgl-ctrl button:focus {
+  outline-color: rgba(196, 181, 253, 0.6) !important;
+}
+
+body.theme-ocean .mapboxgl-ctrl-group button:focus,
+body.theme-ocean .mapboxgl-ctrl button:focus {
+  outline-color: rgba(52, 211, 153, 0.6) !important;
+}
+
+/* Attribution control styling */
+.mapboxgl-ctrl-attrib {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-radius: 4px !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+body.theme-dark .mapboxgl-ctrl-attrib,
+body.theme-midnight .mapboxgl-ctrl-attrib,
+body.theme-neon .mapboxgl-ctrl-attrib,
+body.theme-ocean .mapboxgl-ctrl-attrib {
+  background: rgba(0, 0, 0, 0.8) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Scale control styling */
+.mapboxgl-ctrl-scale {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-radius: 4px !important;
+  color: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+body.theme-dark .mapboxgl-ctrl-scale,
+body.theme-midnight .mapboxgl-ctrl-scale,
+body.theme-neon .mapboxgl-ctrl-scale,
+body.theme-ocean .mapboxgl-ctrl-scale {
+  background: rgba(0, 0, 0, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* ===== QUICK SETTINGS THEMING ===== */
+/* Style the custom settings panel to match our theme system */
+
+/* Quick Settings button container - default light theme */
+.quick-settings-container {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.quick-settings-panel {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: blur(16px) !important;
+}
+
+.quick-settings-header {
+  background: rgba(248, 250, 252, 0.8) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+.quick-settings-text {
+  color: rgba(0, 0, 0, 0.8) !important;
+}
+
+.quick-settings-label {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Dark theme Quick Settings */
+body.theme-dark .quick-settings-container {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border: 1px solid rgba(96, 165, 250, 0.3) !important;
+}
+
+body.theme-dark .quick-settings-panel {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 1px solid rgba(96, 165, 250, 0.3) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(96, 165, 250, 0.2) !important;
+}
+
+body.theme-dark .quick-settings-header {
+  background: rgba(30, 41, 59, 0.8) !important;
+  border-bottom: 1px solid rgba(96, 165, 250, 0.2) !important;
+}
+
+body.theme-dark .quick-settings-text {
+  color: rgba(248, 250, 252, 0.9) !important;
+}
+
+body.theme-dark .quick-settings-label {
+  color: rgba(203, 213, 225, 0.8) !important;
+}
+
+/* Midnight theme Quick Settings */
+body.theme-midnight .quick-settings-container {
+  background: rgba(12, 10, 32, 0.9) !important;
+  border: 1px solid rgba(147, 197, 253, 0.4) !important;
+}
+
+body.theme-midnight .quick-settings-panel {
+  background: rgba(12, 10, 32, 0.95) !important;
+  border: 1px solid rgba(147, 197, 253, 0.4) !important;
+  box-shadow: 0 8px 32px rgba(12, 10, 32, 0.6), inset 0 1px 0 rgba(147, 197, 253, 0.3), 0 0 20px rgba(96, 165, 250, 0.1) !important;
+}
+
+body.theme-midnight .quick-settings-header {
+  background: rgba(30, 27, 75, 0.8) !important;
+  border-bottom: 1px solid rgba(147, 197, 253, 0.3) !important;
+}
+
+body.theme-midnight .quick-settings-text {
+  color: rgba(219, 234, 254, 0.9) !important;
+}
+
+body.theme-midnight .quick-settings-label {
+  color: rgba(191, 219, 254, 0.8) !important;
+}
+
+/* Neon theme Quick Settings */
+body.theme-neon .quick-settings-container {
+  background: rgba(17, 12, 34, 0.9) !important;
+  border: 1px solid rgba(196, 181, 253, 0.4) !important;
+}
+
+body.theme-neon .quick-settings-panel {
+  background: rgba(17, 12, 34, 0.95) !important;
+  border: 1px solid rgba(196, 181, 253, 0.4) !important;
+  box-shadow: 0 8px 32px rgba(17, 12, 34, 0.6), inset 0 1px 0 rgba(196, 181, 253, 0.3), 0 0 20px rgba(168, 85, 247, 0.1) !important;
+}
+
+body.theme-neon .quick-settings-header {
+  background: rgba(59, 39, 83, 0.8) !important;
+  border-bottom: 1px solid rgba(196, 181, 253, 0.3) !important;
+}
+
+body.theme-neon .quick-settings-text {
+  color: rgba(250, 245, 255, 0.9) !important;
+}
+
+body.theme-neon .quick-settings-label {
+  color: rgba(221, 214, 254, 0.8) !important;
+}
+
+/* Ocean theme Quick Settings */
+body.theme-ocean .quick-settings-container {
+  background: rgba(8, 47, 73, 0.9) !important;
+  border: 1px solid rgba(52, 211, 153, 0.4) !important;
+}
+
+body.theme-ocean .quick-settings-panel {
+  background: rgba(8, 47, 73, 0.95) !important;
+  border: 1px solid rgba(52, 211, 153, 0.4) !important;
+  box-shadow: 0 8px 32px rgba(8, 47, 73, 0.6), inset 0 1px 0 rgba(52, 211, 153, 0.3), 0 0 20px rgba(16, 185, 129, 0.1) !important;
+}
+
+body.theme-ocean .quick-settings-header {
+  background: rgba(21, 94, 117, 0.8) !important;
+  border-bottom: 1px solid rgba(52, 211, 153, 0.3) !important;
+}
+
+body.theme-ocean .quick-settings-text {
+  color: rgba(240, 253, 250, 0.9) !important;
+}
+
+body.theme-ocean .quick-settings-label {
+  color: rgba(165, 243, 252, 0.8) !important;
+}
+
+/* ===== ENHANCED REACT MAP GL POPUP STYLING ===== */
+@layer mapbox {
+  /* All React Map GL popups get enhanced styling */
+  .mapboxgl-popup {
+    animation: popupEntranceSpring 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: center bottom;
+  }
+
+  /* DEFAULT THEME - Enhanced glassmorphism */
+  .mapboxgl-popup-content {
+    /* Enhanced glassmorphism effect */
+    background: rgba(255, 255, 255, 0.88);
+    
+    /* Remove all borders and padding */
+    border: none !important;
+    border-radius: 20px;
+    box-shadow: 
+      0 25px 50px -12px rgba(0, 0, 0, 0.12),
+      0 16px 25px -8px rgba(0, 0, 0, 0.08),
+      0 4px 12px -3px rgba(0, 0, 0, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.6),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    
+    /* Typography and spacing improvements */
+    padding: 0 !important;
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+    
+    /* Size constraints */
+    max-width: 420px;
+    min-width: 320px;
+    
+    /* Performance optimizations */
+    will-change: transform, opacity;
+    transform: translateZ(0);
+    overflow: hidden !important;
+  }
+
+  /* 🌙 DARK THEME - Dark glass with blue accents */
+  .mapbox-popup-container.dark .mapboxgl-popup-content {
+    background: rgba(15, 23, 42, 0.9);
+    border: none !important;
+    box-shadow: 
+      0 25px 50px -12px rgba(0, 0, 0, 0.4),
+      0 16px 25px -8px rgba(0, 0, 0, 0.3),
+      0 4px 12px -3px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(59, 130, 246, 0.2),
+      inset 0 0 0 1px rgba(59, 130, 246, 0.1);
+  }
+
+  /* 🌌 MIDNIGHT THEME - Deep space glass */
+  .mapbox-popup-container.midnight .mapboxgl-popup-content {
+    background: rgba(12, 10, 32, 0.92);
+    border: none !important;
+    box-shadow: 
+      0 30px 60px -15px rgba(12, 10, 32, 0.6),
+      0 20px 35px -10px rgba(76, 29, 149, 0.3),
+      0 8px 20px -5px rgba(96, 165, 250, 0.2),
+      inset 0 1px 0 rgba(96, 165, 250, 0.3),
+      inset 0 0 0 1px rgba(96, 165, 250, 0.15),
+      0 0 20px rgba(96, 165, 250, 0.1);
+  }
+
+  /* 💜 NEON THEME - Cyberpunk glass */
+  .mapbox-popup-container.neon .mapboxgl-popup-content {
+    background: rgba(17, 12, 34, 0.9);
+    border: none !important;
+    box-shadow: 
+      0 25px 50px -12px rgba(17, 12, 34, 0.5),
+      0 16px 25px -8px rgba(168, 85, 247, 0.3),
+      0 4px 12px -3px rgba(236, 72, 153, 0.2),
+      inset 0 1px 0 rgba(168, 85, 247, 0.4),
+      inset 0 0 0 1px rgba(168, 85, 247, 0.2),
+      0 0 30px rgba(168, 85, 247, 0.15),
+      0 0 60px rgba(236, 72, 153, 0.08);
+  }
+
+  /* 🌊 OCEAN THEME - Deep water glass */
+  .mapbox-popup-container.ocean .mapboxgl-popup-content {
+    background: rgba(8, 47, 73, 0.9);
+    border: none !important;
+    box-shadow: 
+      0 25px 50px -12px rgba(8, 47, 73, 0.5),
+      0 16px 25px -8px rgba(6, 182, 212, 0.2),
+      0 4px 12px -3px rgba(16, 185, 129, 0.15),
+      inset 0 1px 0 rgba(16, 185, 129, 0.3),
+      inset 0 0 0 1px rgba(6, 182, 212, 0.15),
+      0 0 25px rgba(16, 185, 129, 0.1);
+  }
+
+
+
+  /* Enhanced close button styling for all themes */
+  .mapboxgl-popup-close-button {
+    width: 40px !important;
+    height: 40px !important;
+    right: 10px !important;
+    top: 10px !important;
+    background: rgba(0, 0, 0, 0.08) !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-size: 20px !important;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.7);
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    z-index: 10;
+  }
+
+  /* Popup header content spacing to account for close button - only apply to header area */
+  .mapboxgl-popup-content .card-header,
+  .mapboxgl-popup-content [class*="header"],
+  .mapboxgl-popup-content .card-title,
+  .mapboxgl-popup-content h1,
+  .mapboxgl-popup-content h2,
+  .mapboxgl-popup-content h3 {
+    padding-right: 60px !important; /* 10px (button right) + 40px (button width) + 10px (extra spacing) */
+  }
+
+  /* Dark themes close button */
+  .mapbox-popup-container.dark .mapboxgl-popup-close-button,
+  .mapbox-popup-container.midnight .mapboxgl-popup-close-button,
+  .mapbox-popup-container.neon .mapboxgl-popup-close-button,
+  .mapbox-popup-container.ocean .mapboxgl-popup-close-button {
+    background: rgba(255, 255, 255, 0.12);
+    border: none !important;
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .mapboxgl-popup-close-button:hover {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: rgba(239, 68, 68, 0.9);
+    transform: scale(1.08);
+    box-shadow: 
+      0 4px 16px rgba(239, 68, 68, 0.15),
+      0 0 0 3px rgba(239, 68, 68, 0.1);
+  }
+
+  /* Enhanced popup tip/pointer for each theme */
+  .mapboxgl-popup-tip {
+    border-top-color: rgba(255, 255, 255, 0.88);
+    border-width: 12px 12px 0;
+    filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.08));
+  }
+
+  .mapbox-popup-container.dark .mapboxgl-popup-tip {
+    border-top-color: rgba(15, 23, 42, 0.9);
+    filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.3));
+  }
+
+  .mapbox-popup-container.midnight .mapboxgl-popup-tip {
+    border-top-color: rgba(12, 10, 32, 0.92);
+    filter: drop-shadow(0 8px 20px rgba(12, 10, 32, 0.4));
+  }
+
+  .mapbox-popup-container.neon .mapboxgl-popup-tip {
+    border-top-color: rgba(17, 12, 34, 0.9);
+    filter: drop-shadow(0 6px 16px rgba(168, 85, 247, 0.2));
+  }
+
+  .mapbox-popup-container.ocean .mapboxgl-popup-tip {
+    border-top-color: rgba(8, 47, 73, 0.9);
+    filter: drop-shadow(0 6px 16px rgba(16, 185, 129, 0.15));
+  }
+
+
+
+  /* Reset only specific properties for shadcn compatibility */
+  .mapboxgl-popup-content * {
+    font-family: inherit;
+    line-height: inherit;
+    /* Keep our glassmorphism - don't override background, border, etc. */
+  }
+}
+
+@layer components {
+  /* Popup content enhancements - targets your Card components inside popups */
+  .mapboxgl-popup-content .card,
+  .mapboxgl-popup-content [class*="card"] {
+    /* Remove default shadows since we have our own glassmorphism */
+    box-shadow: none;
+    border: none;
+    background: transparent;
+    border-radius: 20px;
+    overflow: hidden;
+  }
+
+
+
+  /* shadcn component overrides for popup context */
+  .mapbox-popup-container .button {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90;
+    @apply border-primary;
+  }
+
+  .mapbox-popup-container .badge {
+    @apply bg-secondary text-secondary-foreground;
+  }
+
+  .mapbox-popup-container .card {
+    @apply bg-card text-card-foreground border-border;
+  }
+
+  /* Enhanced animations */
+  @keyframes popupEntranceSpring {
+    0% {
+    opacity: 0;
+      transform: translateY(24px) scale(0.88) rotate(-0.5deg);
+    }
+    50% {
+      opacity: 0.8;
+      transform: translateY(-2px) scale(1.02) rotate(0.2deg);
+    }
+    100% {
+    opacity: 1;
+      transform: translateY(0) scale(1) rotate(0deg);
+    }
+  }
+
+  @keyframes popupExitSpring {
+    0% {
+      opacity: 1;
+      transform: translateY(0) scale(1) rotate(0deg);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-16px) scale(0.92) rotate(-0.3deg);
+    }
+  }
+
+  /* Apply exit animation when popup is being removed */
+  .mapboxgl-popup[style*="pointer-events: none"] {
+    animation: popupExitSpring 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* Dark mode enhancements - only apply if no specific theme is set */
+@media (prefers-color-scheme: dark) {
+    .mapboxgl-popup-content:not(.mapbox-popup-container *) {
+      background: rgba(17, 24, 39, 0.9);
+      border: 1px solid rgba(55, 65, 81, 0.4);
+      box-shadow: 
+        0 25px 50px -12px rgba(0, 0, 0, 0.4),
+        0 16px 25px -8px rgba(0, 0, 0, 0.3),
+        0 4px 12px -3px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+
+    .mapboxgl-popup-close-button:not(.mapbox-popup-container *) {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .mapboxgl-popup-close-button:hover:not(.mapbox-popup-container *) {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: rgba(248, 113, 113, 1);
+    }
+
+    .mapboxgl-popup-tip:not(.mapbox-popup-container *) {
+      border-top-color: rgba(17, 24, 39, 0.9);
+    }
+  }
+
+  /* High contrast mode for accessibility - only apply if no specific theme is set */
+  @media (prefers-contrast: high) {
+    .mapboxgl-popup-content:not(.mapbox-popup-container *) {
+      background: rgba(255, 255, 255, 0.98);
+      border: 2px solid #000000;
+      box-shadow: 
+        0 8px 24px rgba(0, 0, 0, 0.3),
+        inset 0 0 0 1px #ffffff;
+    }
+
+    .mapboxgl-popup-close-button:not(.mapbox-popup-container *) {
+      background: #ffffff;
+      border: 2px solid #000000;
+      color: #000000;
+      font-weight: 800;
+    }
+
+    .mapboxgl-popup-close-button:hover:not(.mapbox-popup-container *) {
+      background: #000000;
+      color: #ffffff;
+    }
+
+    .mapboxgl-popup-tip:not(.mapbox-popup-container *) {
+      border-top-color: #ffffff;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+    }
+  }
+
+  /* Mobile responsive enhancements */
+@media (max-width: 640px) {
+    .mapboxgl-popup-content {
+      min-width: 280px;
+      max-width: calc(100vw - 40px);
+      border-radius: 16px;
+    }
+
+    .mapboxgl-popup-close-button {
+      width: 36px !important;
+      height: 36px !important;
+      font-size: 18px !important;
+      right: 16px !important;
+      top: 16px !important;
+    }
+
+    .mapboxgl-popup-tip {
+      border-width: 10px 10px 0;
+    }
+  }
+
+  /* Performance optimization for reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .mapboxgl-popup {
+      animation: none;
+    }
+    
+    .mapboxgl-popup-content {
+      transition: none;
+    }
+    
+    .mapboxgl-popup-close-button {
+      transition: none;
+    }
+    
+    .mapboxgl-popup-close-button:hover {
+      transform: none;
+    }
+  }
+}
+
+
+
+
+
+
+@layer utilities {
+/* ===== HARDCODED TAILWIND BACKGROUND OVERRIDES ===== */
+/* Override hardcoded background classes with CSS custom properties */
+
+/* Primary content backgrounds */
+.mapbox-popup-container .bg-white {
+  background-color: hsl(var(--card)) !important;
+  color: hsl(var(--card-foreground)) !important;
+}
+
+/* Muted content backgrounds */
+.mapbox-popup-container .bg-gray-50,
+.mapbox-popup-container .bg-slate-50 {
+  background-color: hsl(var(--muted)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.mapbox-popup-container .bg-gray-100 {
+  background-color: hsl(var(--muted)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+/* Hours section backgrounds - BLUE GRADIENTS */
+.mapbox-popup-container .bg-blue-50 {
+  background: linear-gradient(135deg, 
+    rgba(59, 130, 246, 0.2) 0%,
+    rgba(37, 99, 235, 0.15) 50%,
+    rgba(29, 78, 216, 0.12) 100%
+  ) !important;
+  color: hsl(var(--foreground)) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.mapbox-popup-container .bg-blue-100 {
+  background: linear-gradient(135deg, 
+    rgba(59, 130, 246, 0.25) 0%,
+    rgba(37, 99, 235, 0.22) 50%,
+    rgba(29, 78, 216, 0.18) 100%
+  ) !important;
+  color: hsl(var(--foreground)) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+/* Description section backgrounds - GREEN GRADIENTS */
+.mapbox-popup-container .bg-green-50 {
+  background: linear-gradient(135deg, 
+    rgba(34, 197, 94, 0.15) 0%,
+    rgba(16, 185, 129, 0.12) 50%,
+    rgba(5, 150, 105, 0.1) 100%
+  ) !important;
+  color: hsl(var(--foreground)) !important;
+  border: none !important;
+  border-radius: 8px !important;
+}
+
+.mapbox-popup-container .bg-green-100 {
+  background: linear-gradient(135deg, 
+    rgba(34, 197, 94, 0.2) 0%,
+    rgba(16, 185, 129, 0.18) 50%,
+    rgba(5, 150, 105, 0.15) 100%
+  ) !important;
+  color: hsl(var(--foreground)) !important;
+  border: 1px solid rgba(34, 197, 94, 0.3) !important;
+  border-radius: 8px !important;
+}
+
+/* Warning/alert backgrounds */
+.mapbox-popup-container .bg-amber-50 {
+  background-color: hsl(var(--muted)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.mapbox-popup-container .bg-red-50 {
+  background-color: hsl(var(--destructive) / 0.1) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.mapbox-popup-container .bg-red-100 {
+  background-color: hsl(var(--destructive) / 0.2) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+/* Status badge backgrounds */
+.mapbox-popup-container .bg-green-100.text-green-700 {
+  background-color: hsl(var(--primary) / 0.1) !important;
+  color: hsl(var(--primary)) !important;
+}
+
+.mapbox-popup-container .bg-gray-100.text-gray-600 {
+  background-color: hsl(var(--muted)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+/* ===== HARDCODED TAILWIND BORDER OVERRIDES ===== */
+/* Override hardcoded border classes with CSS custom properties */
+
+.mapbox-popup-container .border-blue-200,
+.mapbox-popup-container .border-blue-100 {
+  border-color: hsl(var(--border)) !important;
+}
+
+.mapbox-popup-container .border-green-200,
+.mapbox-popup-container .border-green-100 {
+  border-color: hsl(var(--border)) !important;
+}
+
+.mapbox-popup-container .border-gray-200,
+.mapbox-popup-container .border-gray-100,
+.mapbox-popup-container .border-slate-200 {
+  border-color: hsl(var(--border)) !important;
+}
+
+.mapbox-popup-container .border-amber-200 {
+  border-color: hsl(var(--border)) !important;
+}
+
+.mapbox-popup-container .border-red-200 {
+  border-color: hsl(var(--destructive) / 0.3) !important;
+}
+
+/* Border-left accent colors for sections */
+.mapbox-popup-container .border-l-4.border-blue-300 {
+  border-left-color: hsl(var(--primary)) !important;
+}
+
+.mapbox-popup-container .border-l-4.border-green-300 {
+  border-left-color: hsl(var(--primary)) !important;
+}
+
+.mapbox-popup-container .border-l-4.border-gray-300 {
+  border-left-color: hsl(var(--border)) !important;
+}
+
+.mapbox-popup-container .border-l-4.border-red-300 {
+  border-left-color: hsl(var(--destructive)) !important;
+}
+
+/* ===== HARDCODED TAILWIND TEXT COLOR OVERRIDES ===== */
+/* Override hardcoded text colors with CSS custom properties */
+
+.mapbox-popup-container .text-blue-900 {
+  color: hsl(var(--foreground)) !important;
+}
+
+.mapbox-popup-container .text-blue-800 {
+  color: hsl(var(--foreground)) !important;
+}
+
+.mapbox-popup-container .text-blue-600,
+.mapbox-popup-container .text-blue-700 {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.mapbox-popup-container .text-green-800,
+.mapbox-popup-container .text-green-900 {
+  color: hsl(var(--foreground)) !important;
+}
+
+.mapbox-popup-container .text-green-700 {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.mapbox-popup-container .text-green-600 {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.mapbox-popup-container .text-gray-800 {
+  color: hsl(var(--foreground)) !important;
+}
+
+.mapbox-popup-container .text-gray-600,
+.mapbox-popup-container .text-gray-700 {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.mapbox-popup-container .text-gray-500 {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.mapbox-popup-container .text-red-600 {
+  color: hsl(var(--destructive)) !important;
+}
+
+.mapbox-popup-container .text-amber-600 {
+  color: hsl(var(--foreground)) !important;
+}
+
+/* ===== THEME-SPECIFIC BACKGROUND OVERRIDES ===== */
+/* Ensure all themes have proper section backgrounds that match their aesthetic */
+
+/* 🌙 DARK THEME - Dark backgrounds with blue accents */
+.mapbox-popup-container.dark .bg-white {
+  background-color: rgba(30, 41, 59, 0.8) !important;
+  color: rgb(248 250 252) !important;
+}
+
+.mapbox-popup-container.dark .bg-gray-50,
+.mapbox-popup-container.dark .bg-slate-50 {
+  background-color: rgba(51, 65, 85, 0.6) !important;
+  color: rgb(226 232 240) !important;
+}
+
+/* DARK THEME - Blue Hours Gradient */
+.mapbox-popup-container.dark .bg-blue-50 {
+  background: linear-gradient(135deg, 
+    rgba(96, 165, 250, 0.25) 0%,
+    rgba(59, 130, 246, 0.2) 50%,
+    rgba(37, 99, 235, 0.15) 100%
+  ) !important;
+  color: rgb(219 234 254) !important;
+  border: 1px solid rgba(96, 165, 250, 0.5) !important;
+  box-shadow: inset 0 1px 0 rgba(96, 165, 250, 0.2) !important;
+}
+
+/* DARK THEME - Green Description Gradient */
+.mapbox-popup-container.dark .bg-green-50 {
+  background: linear-gradient(135deg, 
+    rgba(74, 222, 128, 0.2) 0%,
+    rgba(34, 197, 94, 0.15) 50%,
+    rgba(16, 185, 129, 0.12) 100%
+  ) !important;
+  color: rgb(187 247 208) !important;
+  border: none !important;
+}
+
+/* 🌌 MIDNIGHT THEME - Deep space backgrounds */
+.mapbox-popup-container.midnight .bg-white {
+  background-color: rgba(30, 27, 75, 0.8) !important;
+  color: rgb(219 234 254) !important;
+}
+
+.mapbox-popup-container.midnight .bg-gray-50,
+.mapbox-popup-container.midnight .bg-slate-50 {
+  background-color: rgba(59, 57, 122, 0.6) !important;
+  color: rgb(191 219 254) !important;
+}
+
+/* MIDNIGHT THEME - Blue Hours Gradient */
+.mapbox-popup-container.midnight .bg-blue-50 {
+  background: linear-gradient(135deg, 
+    rgba(129, 140, 248, 0.3) 0%,
+    rgba(99, 102, 241, 0.25) 50%,
+    rgba(79, 70, 229, 0.2) 100%
+  ) !important;
+  color: rgb(165 180 252) !important;
+  border: 1px solid rgba(129, 140, 248, 0.6) !important;
+  box-shadow: inset 0 1px 0 rgba(129, 140, 248, 0.25) !important;
+}
+
+/* MIDNIGHT THEME - Green Description Gradient */
+.mapbox-popup-container.midnight .bg-green-50 {
+  background: linear-gradient(135deg, 
+    rgba(74, 222, 128, 0.25) 0%,
+    rgba(34, 197, 94, 0.2) 50%,
+    rgba(16, 185, 129, 0.15) 100%
+  ) !important;
+  color: rgb(134 239 172) !important;
+  border: none !important;
+}
+
+/* 💜 NEON THEME - Cyberpunk backgrounds */
+.mapbox-popup-container.neon .bg-white {
+  background-color: rgba(59, 39, 83, 0.8) !important;
+  color: rgb(250 245 255) !important;
+}
+
+.mapbox-popup-container.neon .bg-gray-50,
+.mapbox-popup-container.neon .bg-slate-50 {
+  background-color: rgba(88, 79, 149, 0.6) !important;
+  color: rgb(233 213 255) !important;
+}
+
+/* NEON THEME - Blue Hours Gradient (Electric Cyan) */
+.mapbox-popup-container.neon .bg-blue-50 {
+  background: linear-gradient(135deg, 
+    rgba(34, 211, 238, 0.3) 0%,
+    rgba(6, 182, 212, 0.25) 50%,
+    rgba(8, 145, 178, 0.2) 100%
+  ) !important;
+  color: rgb(103 232 249) !important;
+  border: 1px solid rgba(34, 211, 238, 0.6) !important;
+  box-shadow: inset 0 1px 0 rgba(34, 211, 238, 0.25) !important;
+}
+
+/* NEON THEME - Green Description Gradient (Electric Lime) */
+.mapbox-popup-container.neon .bg-green-50 {
+  background: linear-gradient(135deg, 
+    rgba(132, 204, 22, 0.25) 0%,
+    rgba(101, 163, 13, 0.2) 50%,
+    rgba(77, 124, 15, 0.15) 100%
+  ) !important;
+  color: rgb(190 242 100) !important;
+  border: none !important;
+}
+
+/* 🌊 OCEAN THEME - Deep water backgrounds */
+.mapbox-popup-container.ocean .bg-white {
+  background-color: rgba(21, 94, 117, 0.8) !important;
+  color: rgb(240 253 250) !important;
+}
+
+.mapbox-popup-container.ocean .bg-gray-50,
+.mapbox-popup-container.ocean .bg-slate-50 {
+  background-color: rgba(75, 181, 181, 0.6) !important;
+  color: rgb(165 243 252) !important;
+}
+
+/* OCEAN THEME - Blue Hours Gradient (Deep Sea) */
+.mapbox-popup-container.ocean .bg-blue-50 {
+  background: linear-gradient(135deg, 
+    rgba(34, 211, 238, 0.35) 0%,
+    rgba(6, 182, 212, 0.3) 50%,
+    rgba(8, 145, 178, 0.25) 100%
+  ) !important;
+  color: rgb(165 243 252) !important;
+  border: 1px solid rgba(34, 211, 238, 0.7) !important;
+  box-shadow: inset 0 1px 0 rgba(34, 211, 238, 0.3) !important;
+}
+
+/* OCEAN THEME - Green Description Gradient (Sea Kelp) */
+.mapbox-popup-container.ocean .bg-green-50 {
+  background: linear-gradient(135deg, 
+    rgba(52, 211, 153, 0.3) 0%,
+    rgba(16, 185, 129, 0.25) 50%,
+    rgba(5, 150, 105, 0.2) 100%
+  ) !important;
+  color: rgb(110 231 183) !important;
+  border: none !important;
+}
+
 }
