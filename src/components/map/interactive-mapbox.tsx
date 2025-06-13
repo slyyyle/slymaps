@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // Map core, overlays, controls, and layers
 import Map, {
@@ -24,6 +24,7 @@ import type { MapViewProps } from './map-orchestrator';
 
 import { ThreeDToggle } from './3d-toggle';
 import { TerrainControl } from './terrain-control';
+import { ClusteredMarkers } from '@/components/ClusteredMarkers';
 
 // NEW SEGREGATED APPROACH
 import { useUnifiedPOIHandler } from '@/hooks/map/use-unified-poi-handler';
@@ -354,10 +355,15 @@ export function StandardMapView({
   
   // Combined POIs for rendering (replaces currentPois)
   const currentPois = React.useMemo(() => [
-    ...storedPOIs,
     ...searchResults,
+    ...storedPOIs,
     ...createdPOIs
-  ], [storedPOIs, searchResults, createdPOIs]);
+  ], [searchResults, storedPOIs, createdPOIs]);
+
+  // Precompute ID sets for click handling
+  const searchIds = useMemo(() => new Set(searchResults.map(p => p.id)), [searchResults]);
+  const storedIds = useMemo(() => new Set(storedPOIs.map(p => p.id)), [storedPOIs]);
+  const createdIds = useMemo(() => new Set(createdPOIs.map(p => p.id)), [createdPOIs]);
 
   const {
     toggle3D,
@@ -677,7 +683,26 @@ export function StandardMapView({
         </Source>
       )}
 
-              {segregatedMarkers}
+        {/* Clustered POI markers */}
+        <ClusteredMarkers
+          pois={currentPois}
+          zoom={(internalViewState.zoom as number) || (externalViewState.zoom as number) || 12}
+          onMarkerClick={(poi) => {
+            // Delegate to correct handler
+            if (searchIds.has(poi.id)) {
+              handleSearchResultClick(poi);
+            } else if (storedIds.has(poi.id)) {
+              handleStoredPOIClick(poi);
+            } else if (createdIds.has(poi.id)) {
+              handleCreatedPOIClick(poi);
+            }
+            flyTo({ latitude: poi.latitude, longitude: poi.longitude }, { zoom: 16 });
+          }}
+          onClusterClick={(cluster) => {
+            flyTo({ latitude: cluster.latitude, longitude: cluster.longitude }, { zoom: ((internalViewState.zoom as number) || 12) + 2 });
+          }}
+        />
+
       {vehicleMarkers}
         {startMarker}
         {endMarker}
