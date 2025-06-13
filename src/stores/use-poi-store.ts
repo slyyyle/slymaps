@@ -46,11 +46,20 @@ export interface ActivePOISelection {
   selectedAt: number;
 }
 
+// Nearby search caching
+type NearbySearchParams = { lat: number; lng: number; radius: number; category: string };
+const NEARBY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+function generateNearbyCacheKey(params: NearbySearchParams): string {
+  return `${params.lat.toFixed(4)},${params.lng.toFixed(4)},${params.radius},${params.category}`;
+}
+
 interface POIStoreState {
   // Segregated POI collections
   storedPOIs: Record<string, StoredPOI>;
   searchResults: Record<string, SearchResultPOI>;
   createdPOIs: Record<string, CreatedPOI>;
+  // Cache of nearby search results keyed by params
+  nearbyCache: Record<string, { pois: PointOfInterest[]; timestamp: number }>;
   
   // Active selection (can be from any type)
   activeSelection: ActivePOISelection | null;
@@ -61,6 +70,10 @@ interface POIStoreState {
 }
 
 interface POIStoreActions {
+  // Nearby search cache
+  getNearbyCache: (params: NearbySearchParams) => PointOfInterest[] | null;
+  setNearbyCache: (params: NearbySearchParams, pois: PointOfInterest[]) => void;
+  
   // Stored POIs (imported from various sources)
   addStoredPOI: (poi: PointOfInterest) => string;
   updateStoredPOI: (id: string, updates: Partial<StoredPOI>) => void;
@@ -109,6 +122,7 @@ export const usePOIStore = create<POIStore>()(
     storedPOIs: {},
     searchResults: {},
     createdPOIs: {},
+    nearbyCache: {},
     activeSelection: null,
     searchResultTTL: 30 * 60 * 1000, // 30 minutes
     maxSearchResults: 20,
@@ -435,6 +449,22 @@ export const usePOIStore = create<POIStore>()(
           storedPOIs: newStoredPOIs,
           createdPOIs: newCreatedPOIs
         };
+      });
+    },
+
+    // Nearby cache getters/setters
+    getNearbyCache: (params: NearbySearchParams) => {
+      const key = generateNearbyCacheKey(params);
+      const entry = get().nearbyCache[key];
+      if (!entry || Date.now() - entry.timestamp > NEARBY_CACHE_TTL) return null;
+      return entry.pois;
+    },
+
+    setNearbyCache: (params: NearbySearchParams, pois: PointOfInterest[]) => {
+      set(state => {
+        const cache = { ...state.nearbyCache };
+        cache[generateNearbyCacheKey(params)] = { pois, timestamp: Date.now() };
+        return { nearbyCache: cache };
       });
     }
   }))
