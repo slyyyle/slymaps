@@ -12,6 +12,7 @@ import { useDataIntegration } from '@/hooks/data/use-data-integration';
 import { useThemeStore } from '@/stores/theme-store';
 import { Button } from '@/components/ui/button';
 import { Icons } from '@/components/icons';
+import { UnifiedSearchBox } from '@/components/search/unified-search';
 import { MAPBOX_ACCESS_TOKEN } from '@/lib/constants';
 
 export type PaneType = 'home' | 'directions' | 'transit' | 'places' | 'style' | null;
@@ -32,6 +33,11 @@ export function SidebarShell({
   const [activePane, setActivePane] = useState<PaneType>(defaultPane);
   const { sidebarTheme } = useThemeStore();
   const dataIntegration = useDataIntegration();
+
+  // Get POI list for search and saved
+  const allPois = dataIntegration.pois.getAllPOIs();
+  const savedPois = allPois.filter(poi => (poi as any).favorites);
+  const searchResultPois = allPois.filter(poi => poi.isSearchResult && !(poi as any).favorites);
 
   // Update active pane when defaultPane changes (for external navigation)
   React.useEffect(() => {
@@ -98,10 +104,31 @@ export function SidebarShell({
       {/* Main content area - no search section */}
       <div className="flex-1 flex flex-col min-h-0">
         {!activePane ? (
-          <MainMenu 
-            onPaneSelect={handlePaneChange}
-            className="flex-1"
-          />
+          <>
+            {/* Unified search above menu */}
+            <div className="px-3 py-1">
+              <UnifiedSearchBox
+                accessToken={MAPBOX_ACCESS_TOKEN}
+                mapRef={mapRef}
+                onResult={(coords) => {
+                  if (mapRef?.current) {
+                    mapRef.current.getMap().flyTo({ center: [coords.longitude, coords.latitude], zoom: 15 });
+                  }
+                }}
+                onClear={() => {}}
+                placeholder="Search places, transit, routes..."
+                className="w-full"
+              />
+            </div>
+            {/* Separator between search and menu */}
+            <div className="border-t my-1" style={{ borderColor: 'hsl(var(--border))' }} />
+            {/* Main menu below */}
+            <MainMenu onPaneSelect={handlePaneChange} className="px-3 py-1 space-y-1" />
+            {/* Separator */}
+            <div className="border-t my-1" style={{ borderColor: 'hsl(var(--border))' }} />
+            {/* Compact Places section below menu */}
+            <PlacesPane compact onBack={handleCloseSidebar} mapRef={mapRef} />
+          </>
         ) : (
           <div className="flex-1 flex flex-col">
             {activePane === 'directions' && (

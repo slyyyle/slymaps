@@ -1,6 +1,8 @@
 // === CORE TYPES ===
 // Fundamental types used throughout the application
 
+import type { AddressInput } from '@/utils/address-utils';
+
 export type Coordinates = {
   longitude: number;
   latitude: number;
@@ -14,7 +16,7 @@ export interface PointOfInterest {
   type: string; // e.g., Restaurant, Bar, Venue, Park, Shop, Bus Stop
   latitude: number;
   longitude: number;
-  description?: string;
+  description?: AddressInput;
   imageUrl?: string;
   dataAiHint?: string;
   // OBA specific fields

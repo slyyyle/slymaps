@@ -5,6 +5,8 @@ import type { PopupSection, TransitSectionData, HoursSectionData, PhotosSectionD
 import { openingHoursParser } from '@/services/opening-hours-parser';
 import { usePOIStore } from '@/stores/use-poi-store';
 import type { SearchResultPOI } from '@/stores/use-poi-store';
+import { useToast } from '@/hooks/ui/use-toast';
+import { formatAddressLines } from '@/utils/address-utils';
 
 // Simple loading spinner
 const Spinner = () => <Loader2 className="h-4 w-4 animate-spin" />;
@@ -283,23 +285,19 @@ export const ActionsSection = ({
   onDirections?: (poi: any) => void; 
   onSave?: (poi: any) => void; 
 }) => {
-  // Get POI store to check if this POI is saved
+  const { toast } = useToast();
   const poiStore = usePOIStore();
   
-  // Check if this POI is already saved
   const isSaved = React.useMemo(() => {
-    // Check if it's a stored POI
     if (poi.id && poiStore.getStoredPOI(poi.id)) {
       return true;
     }
     return false;
   }, [poi, poiStore]);
 
-  // Handle save action
   const handleSave = React.useCallback(() => {
     if (!poi || isSaved) return;
     
-    // Create a stored POI from the native POI
     const storedPoi = {
       id: `stored-${Date.now()}`,
       name: poi.name,
@@ -314,14 +312,39 @@ export const ActionsSection = ({
       }
     };
     
-    // Add to store
     poiStore.addStoredPOI(storedPoi);
     
-    // Call the onSave callback if provided
     if (onSave) {
       onSave(poi);
     }
   }, [poi, isSaved, poiStore, onSave]);
+
+  // Fallback copy for unsupported browsers
+  const fallbackCopy = React.useCallback((text: string) => {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'absolute';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    toast({ title: 'Copied to clipboard' });
+  }, [toast]);
+
+  const handleShare = React.useCallback(() => {
+    const text = poi.description
+      ? formatAddressLines(poi.description).join('\n')
+      : window.location.href;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(() => toast({ title: 'Copied to clipboard' }))
+        .catch(() => fallbackCopy(text));
+    } else {
+      fallbackCopy(text);
+    }
+  }, [poi.description, toast, fallbackCopy]);
 
   return (
     <div className="border-t border-gray-200 pt-3 flex gap-2">
@@ -345,17 +368,7 @@ export const ActionsSection = ({
       <Button
         variant="outline"
         size="sm"
-        onClick={() => {
-          if (navigator.share) {
-            navigator.share({
-              title: poi.name,
-              text: `Check out ${poi.name}`,
-              url: window.location.href
-            });
-          } else {
-            navigator.clipboard.writeText(window.location.href);
-          }
-        }}
+        onClick={handleShare}
         className="flex-1 text-xs"
       >
         <Share className="h-3 w-3 mr-1" />

@@ -1,6 +1,8 @@
 // OpenStreetMap Overpass API Service
 // Fetches real POI data to replace mock data
 
+import type { AddressInput } from '@/utils/address-utils';
+
 export interface OSMElement {
   type: 'node' | 'way' | 'relation';
   id: number;
@@ -19,7 +21,7 @@ export interface OSMPoiData {
   website?: string;
   operator?: string;
   brand?: string;
-  address?: string;
+  address?: AddressInput;
   cuisine?: string;
   amenity?: string;
   shop?: string;
@@ -59,7 +61,7 @@ export interface NominatimPlace {
 export interface GeocodingResult {
   coordinates: { lat: number; lon: number };
   display_name: string;
-  address?: string;
+  address?: AddressInput;
   place_id: string;
   type: string;
   importance: number;
@@ -126,17 +128,22 @@ class OSMService {
       subclass = tags.leisure;
     }
 
-    // Build address from components
-    const addressParts = [
-      tags['addr:housenumber'],
-      tags['addr:street'],
-      tags['addr:city'],
-      tags['addr:state'],
-      tags['addr:postcode']
-    ].filter(Boolean);
-    
-    const address = addressParts.length > 0 
-      ? addressParts.join(', ')
+    // Build structured address input
+    const rawAddress: AddressInput = {
+      house_number: tags['addr:housenumber'],
+      road: tags['addr:street'],
+      neighbourhood: tags['addr:neighbourhood'],
+      suburb: tags['addr:suburb'],
+      city: tags['addr:city'],
+      county: tags['addr:county'],
+      state: tags['addr:state'],
+      postcode: tags['addr:postcode'],
+      country: tags['addr:country'],
+      country_code: tags['addr:country_code'],
+    };
+    const hasRaw = Object.values(rawAddress).some((v) => Boolean(v));
+    const address: AddressInput = hasRaw
+      ? rawAddress
       : `${coordinates.lat.toFixed(4)}, ${coordinates.lon.toFixed(4)}`;
 
     return {
@@ -232,7 +239,7 @@ class OSMService {
           lon: parseFloat(place.lon)
         },
         display_name: place.display_name,
-        address: this.formatNominatimAddress(place.address),
+        address: place.address,
         place_id: place.place_id,
         type: place.type,
         importance: parseFloat(place.importance)
@@ -267,7 +274,7 @@ class OSMService {
       return {
         coordinates: { lat, lon },
         display_name: place.display_name,
-        address: this.formatNominatimAddress(place.address),
+        address: place.address,
         place_id: place.place_id,
         type: place.type,
         importance: parseFloat(place.importance)
@@ -277,25 +284,6 @@ class OSMService {
       console.warn('Reverse geocoding failed:', error);
       return null;
     }
-  }
-
-  /**
-   * Format Nominatim address object to readable string
-   */
-  private formatNominatimAddress(address?: NominatimPlace['address']): string {
-    if (!address) return '';
-    
-    const parts = [
-      address.house_number,
-      address.road,
-      address.neighbourhood || address.suburb,
-      address.city,
-      address.state,
-      address.postcode,
-      address.country
-    ].filter(Boolean);
-    
-    return parts.join(', ');
   }
 
   /**

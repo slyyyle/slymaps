@@ -9,10 +9,12 @@ import { Icons } from '@/components/icons';
 import type { PointOfInterest } from '@/types/core';
 import { OSMDescription } from '@/components/popup/osm_description';
 import type { MapRef } from 'react-map-gl/mapbox';
+import { cn } from '@/lib/cn';
 
 interface PlacesPaneProps {
   onBack: () => void;
   mapRef?: React.RefObject<MapRef>;
+  compact?: boolean;
 }
 
 // Utility functions for pretty transit property formatting
@@ -112,7 +114,7 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   }
 };
 
-export function PlacesPane({ onBack, mapRef }: PlacesPaneProps) {
+export function PlacesPane({ onBack, mapRef, compact = false }: PlacesPaneProps) {
   const dataIntegration = useDataIntegration();
   // Pull recent search history
   // const recentSearches = dataIntegration.searches.getRecentSearches();
@@ -164,45 +166,26 @@ export function PlacesPane({ onBack, mapRef }: PlacesPaneProps) {
     const isTransit = props?.group === 'transit';
 
     return (
-      <Card key={poi.id} className="mb-3">
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
+      <Card key={poi.id} className="mb-2">
+        <CardHeader className={compact ? "px-3 py-1" : "px-4 py-2"}>
+          <div className="flex items-center justify-between">
+            <div className="flex-1 flex flex-col space-y-0.5">
+              <div className="flex items-center gap-1">
                 {isTransit && props?.maki && typeof props.maki === 'string' ? (
-                  <span className="text-base">{getTransitIcon(props.maki)}</span>
+                  <span className="text-base" style={{ color: 'hsl(var(--foreground))' }}>{getTransitIcon(props.maki)}</span>
                 ) : null}
-                {poi.name}
-              </CardTitle>
-              <CardDescription className="text-xs">
-                {formatPoiType(poi.type)}
-                {distance && ` • ${distance}`}
-              </CardDescription>
-              
-              {/* Enhanced transit information */}
-              {isTransit && props?.transit_mode && typeof props.transit_mode === 'string' ? (
-                <div className="mt-1">
-                  <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                    {formatTransitMode(props.transit_mode)}
-                  </span>
-                </div>
-              ) : null}
+                <span className="text-xs font-medium" style={{ color: 'hsl(var(--foreground))' }}>{poi.name}</span>
+              </div>
+              {poi.description && (
+                <OSMDescription address={poi.description} />
+              )}
             </div>
-            <div className="flex items-center gap-2 ml-2">
+            <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  handleSelectPoi(poi);
-                  if (mapRef?.current) {
-                    const map = mapRef.current.getMap();
-                    map?.flyTo({
-                      center: [poi.longitude, poi.latitude],
-                      zoom: 15,
-                    });
-                  }
-                }}
-                className="h-8 w-8 p-0"
+                onClick={() => { handleSelectPoi(poi); if (mapRef?.current) { mapRef.current.getMap().flyTo({ center: [poi.longitude, poi.latitude], zoom: 15 }); } }}
+                className="h-6 w-6 p-0"
                 title="Fly to POI"
               >
                 <Icons.MapPin className="h-4 w-4" />
@@ -212,7 +195,7 @@ export function PlacesPane({ onBack, mapRef }: PlacesPaneProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => dataIntegration.pois.favoritePOI(poi.id, !(poi as any).favorites)}
-                  className={`h-8 w-8 p-0 ${(poi as any).favorites ? 'text-destructive' : 'text-muted-foreground'} hover:text-destructive`}
+                  className={`h-6 w-6 p-0 ${(poi as any).favorites ? 'text-destructive' : 'text-muted-foreground'}`}
                   title={(poi as any).favorites ? 'Unsave' : 'Save'}
                 >
                   <Icons.Heart className="h-4 w-4" />
@@ -222,43 +205,36 @@ export function PlacesPane({ onBack, mapRef }: PlacesPaneProps) {
                 variant="ghost"
                 size="sm"
                 onClick={() => handleDeletePoi(poi.id, poi.name)}
-                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                className="h-6 w-6 p-0 text-destructive"
+                title="Delete POI"
               >
                 <Icons.X className="h-4 w-4" />
               </Button>
             </div>
           </div>
         </CardHeader>
-        {/* Description or formatted address */}
-        {(_category === 'search' || _category === 'favorite') && poi.description ? (
-          <CardContent className="pt-0">
-            <OSMDescription address={poi.description} />
-          </CardContent>
-        ) : poi.description ? (
-          <CardContent className="pt-0">
-            <p className="text-xs text-muted-foreground">{poi.description}</p>
-          </CardContent>
-        ) : null}
       </Card>
     );
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <PaneHeader 
-        title="Places" 
-        onBack={onBack}
-      />
+    <div className={cn("flex flex-col", compact ? "" : "h-full")}>
+      {!compact && (
+        <PaneHeader 
+          title="Places" 
+          onBack={onBack}
+        />
+      )}
       
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-6">
+      <ScrollArea className={compact ? "flex-1 px-3 py-1" : "flex-1 p-4"}>
+        <div className={compact ? "space-y-1" : "space-y-4"}>
           
           {/* Saved POIs Section */}
           {savedPois.length > 0 && (
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-medium">Saved POIs</h3>
+              <div className={cn("flex items-center justify-between", compact ? "mb-1" : "mb-2")}>
+                <div className="flex items-center gap-1">
+                  <h3 className={cn(compact ? "text-xs" : "text-[13px]", "font-medium")}>Saved POIs</h3>
                   <Badge variant="secondary" className="text-xs">{savedPois.length}</Badge>
                 </div>
                 <Button
@@ -277,9 +253,9 @@ export function PlacesPane({ onBack, mapRef }: PlacesPaneProps) {
           {/* Search Results Section */}
           {searchResultPois.length > 0 && (
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-medium">Search Results</h3>
+              <div className={cn("flex items-center justify-between", compact ? "mb-1" : "mb-2")}>
+                <div className="flex items-center gap-1">
+                  <h3 className={cn(compact ? "text-xs" : "text-[13px]", "font-medium")}>Search Results</h3>
                   <Badge variant="secondary" className="text-xs">
                     {searchResultPois.length}
                   </Badge>
@@ -335,11 +311,11 @@ export function PlacesPane({ onBack, mapRef }: PlacesPaneProps) {
           
           {/* Empty State */}
           {allPois.length === 0 && (
-            <div className="text-center py-8">
+            <div className="text-center pt-8">
               <Icons.MapPin className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-sm font-medium mb-2">No places yet</h3>
+              <h3 className="text-sm font-medium mb-2">No searches yet</h3>
               <p className="text-xs text-muted-foreground">
-                Search for places or click on map POIs to add them here.
+                Recent searches will appear here for quick pinning!
               </p>
             </div>
           )}

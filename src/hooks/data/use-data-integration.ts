@@ -27,6 +27,9 @@ import type {
 // Routing types - directions and navigation
 import type { Route as RouteType } from '@/types/directions';
 
+// Utils - address utils
+import type { AddressInput } from '@/utils/address-utils';
+
 export function useDataIntegration() {
   const store = useDataStore();
   
@@ -361,7 +364,7 @@ export function useDataIntegration() {
     /**
      * Get proper address for POI using OSM reverse geocoding
      */
-    getProperAddress: useCallback(async (lat: number, lon: number): Promise<string | null> => {
+    getProperAddress: useCallback(async (lat: number, lon: number): Promise<AddressInput | null> => {
       const result = await osmService.reverseGeocode(lat, lon);
       return result?.address || null;
     }, []),

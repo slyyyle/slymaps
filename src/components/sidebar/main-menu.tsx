@@ -29,12 +29,6 @@ const menuItems = [
     description: 'Find buses, trains & stops'
   },
   {
-    id: 'places' as const,
-    label: 'Places',
-    icon: 'MapPin',
-    description: 'Manage saved locations & POIs'
-  },
-  {
     id: 'style' as const,
     label: 'Style',
     icon: 'Palette',

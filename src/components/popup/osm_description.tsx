@@ -1,7 +1,11 @@
 import React from 'react';
+import { formatAddressLines, formatAddressByVariant, AddressVariant } from '@/utils/address-utils';
+import type { AddressInput } from '@/utils/address-utils';
 
 interface OSMDescriptionProps {
-  address?: string;
+  address?: AddressInput;
+  /** If set, overrides default multi-line formatting */
+  variant?: AddressVariant;
   phone?: string;
   website?: string;
   operator?: string;
@@ -14,6 +18,7 @@ interface OSMDescriptionProps {
 
 export const OSMDescription: React.FC<OSMDescriptionProps> = ({
   address,
+  variant,
   phone,
   website,
   operator,
@@ -58,9 +63,10 @@ export const OSMDescription: React.FC<OSMDescriptionProps> = ({
       key: 'phone',
       icon: '📞',
       content: (
-        <a 
+        <a
           href={`tel:${phone}`}
-          className="text-slate-900 hover:underline text-xs"
+          className="hover:underline text-xs"
+          style={{ color: 'hsl(var(--foreground))' }}
         >
           {formatPhone(phone)}
         </a>
@@ -73,11 +79,12 @@ export const OSMDescription: React.FC<OSMDescriptionProps> = ({
       key: 'website',
       icon: '🌐',
       content: (
-        <a 
+        <a
           href={formatWebsiteUrl(website)}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-blue-600 hover:underline text-xs"
+          className="hover:underline text-xs"
+          style={{ color: 'hsl(var(--foreground))' }}
         >
           {getWebsiteDisplayText(website)}
         </a>
@@ -90,7 +97,7 @@ export const OSMDescription: React.FC<OSMDescriptionProps> = ({
       key: 'operator',
       icon: '🏢',
       content: (
-        <span className="text-slate-900 text-xs">{operator}</span>
+        <span className="text-xs" style={{ color: 'hsl(var(--foreground))' }}>{operator}</span>
       )
     });
   }
@@ -100,7 +107,7 @@ export const OSMDescription: React.FC<OSMDescriptionProps> = ({
       key: 'brand',
       icon: '🏷️',
       content: (
-        <span className="text-slate-900 text-xs">{brand}</span>
+        <span className="text-xs" style={{ color: 'hsl(var(--foreground))' }}>{brand}</span>
       )
     });
   }
@@ -110,7 +117,7 @@ export const OSMDescription: React.FC<OSMDescriptionProps> = ({
       key: 'cuisine',
       icon: '🍽️',
       content: (
-        <span className="text-slate-900 text-xs">{cuisine}</span>
+        <span className="text-xs" style={{ color: 'hsl(var(--foreground))' }}>{cuisine}</span>
       )
     });
   }
@@ -120,7 +127,7 @@ export const OSMDescription: React.FC<OSMDescriptionProps> = ({
       key: 'amenity',
       icon: '🏪',
       content: (
-        <span className="text-slate-900 text-xs">Amenity: {amenity}</span>
+        <span className="text-xs" style={{ color: 'hsl(var(--foreground))' }}>Amenity: {amenity}</span>
       )
     });
   }
@@ -130,7 +137,7 @@ export const OSMDescription: React.FC<OSMDescriptionProps> = ({
       key: 'shop',
       icon: '🛍️',
       content: (
-        <span className="text-slate-900 text-xs">Shop: {shop}</span>
+        <span className="text-xs" style={{ color: 'hsl(var(--foreground))' }}>Shop: {shop}</span>
       )
     });
   }
@@ -140,7 +147,7 @@ export const OSMDescription: React.FC<OSMDescriptionProps> = ({
       key: 'tourism',
       icon: '🗺️',
       content: (
-        <span className="text-slate-900 text-xs">Tourism: {tourism}</span>
+        <span className="text-xs" style={{ color: 'hsl(var(--foreground))' }}>Tourism: {tourism}</span>
       )
     });
   }
@@ -155,32 +162,17 @@ export const OSMDescription: React.FC<OSMDescriptionProps> = ({
   
   // Add address first if it exists
   if (address) {
-    const raw = address || '';
-    const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
-    // Hide country if it's United States
-    if (parts[parts.length - 1] === 'United States') parts.pop();
-    // Prepare default lines
-    let line1 = parts.join(', ');
-    let line2 = '';
-    if (parts.length === 3) {
-      // Street, city, state+zip -> split state and zip
-      const [street, city, stateZip] = parts;
-      const szParts = stateZip.split(' ').filter(Boolean);
-      const zip = szParts.length > 1 ? szParts.pop()! : '';
-      const state = szParts.join(' ');
-      line1 = street;
-      line2 = [city, state, zip].filter(Boolean).join(', ');
-    } else if (parts.length === 2) {
-      line1 = parts[0];
-      line2 = parts[1];
-    }
+    const lines = variant
+      ? formatAddressByVariant(address, variant)
+      : formatAddressLines(address);
     allItems.push({
       key: 'address',
       icon: '📍',
       content: (
-        <div className="flex flex-col min-w-0">
-          <span className="text-slate-900 text-xs">{line1}</span>
-          {line2 && <span className="text-slate-900 text-xs">{line2}</span>}
+        <div className="flex flex-col min-w-0" style={{ color: 'hsl(var(--foreground))' }}>
+          {lines.map((line, idx) => (
+            <span key={idx} className="text-xs">{line}</span>
+          ))}
         </div>
       )
     });
@@ -194,15 +186,23 @@ export const OSMDescription: React.FC<OSMDescriptionProps> = ({
   }
 
   return (
-    <div className="bg-slate-50 border border-slate-200 rounded text-xs">
+    <div className="text-xs">
       {allItems.map((item, index) => {
         const isLast = index === allItems.length - 1;
-        const borderClass = isLast ? '' : 'border-b border-slate-200';
         return (
-          <div key={item.key} className={`flex items-center gap-2 px-3 py-1 ${borderClass}`}>
-          <span className="text-sm flex-shrink-0">{item.icon}</span>
-          <div className="min-w-0 flex-1">{item.content}</div>
-        </div>
+          <div
+            key={item.key}
+            className="flex items-center gap-2 px-2 py-0.5"
+            style={{ borderBottom: isLast ? undefined : '1px solid hsl(var(--border))' }}
+          >
+            <span
+              className="text-sm flex-shrink-0"
+              style={{ color: 'hsl(var(--muted-foreground))' }}
+            >{item.icon}</span>
+            <div className="min-w-0 flex-1" style={{ color: 'hsl(var(--foreground))' }}>
+              {item.content}
+            </div>
+          </div>
         );
       })}
     </div>

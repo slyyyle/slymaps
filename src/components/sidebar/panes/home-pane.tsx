@@ -25,7 +25,7 @@ export function HomePane({ onBack, mapRef }: HomePaneProps) {
     const addr = await osm.getProperAddress(coords.latitude, coords.longitude);
     const poi: PointOfInterest = {
       id: `home`,
-      name: name || addr || 'Home',
+      name: name || 'Home',
       type: 'home',
       latitude: coords.latitude,
       longitude: coords.longitude,

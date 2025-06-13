@@ -1,13 +1,14 @@
 import React from 'react';
 import { OSMDescription } from './osm_description';
 import { OSMHoursTable } from './osm_hours_table';
+import type { AddressInput } from '@/utils/address-utils';
 
 interface OSMInfoSectionProps {
   isNativePoi: boolean;
   hasOSMEnrichment: boolean;
   osmLookupAttempted: boolean;
   isLoading: boolean;
-  address?: string;
+  address?: AddressInput;
   phone?: string;
   website?: string;
   operator?: string;
@@ -90,6 +91,7 @@ export const OSMInfoSection: React.FC<OSMInfoSectionProps> = ({
             📋 Contact & Details
           </h5>
           <OSMDescription
+            variant="double"
             address={address}
             phone={phone}
             website={website}

@@ -182,39 +182,36 @@ export function AppShell() {
         <Toaster />
       </div>
 
-      {/* Map Controls - Menu Button and Search Bar */}
-      <div className={`
-        absolute top-4 left-4 z-20 flex items-center gap-3
-        transition-all duration-200 ease-in-out
-        ${!isMobile && isSidebarOpen ? 'translate-x-80' : 'translate-x-0'}
-      `}>
+      {/* Map Controls - Menu Button and Search Bar (hidden when sidebar open) */}
+      {!isSidebarOpen && (
+      <div className="absolute top-4 left-4 z-20 flex items-center gap-3">
         {/* Menu Button - only show when sidebar is closed */}
         {isMobile ? (
-          /* Mobile Menu Button */
-          <Sheet open={isSidebarOpen} onOpenChange={(open) => {
-            if (!open) closeSidebar();
-          }} modal={false}>
-            <SheetTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                className="bg-sidebar text-sidebar-foreground shadow-lg flex-shrink-0"
-                onClick={openSidebarMenu}
-              >
-                <Icons.Menu className="h-4 w-4" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-96 p-0 border-r">
-              <VisuallyHidden>
-                <SheetTitle>Navigation Menu</SheetTitle>
-              </VisuallyHidden>
-              <SidebarShell
-                defaultPane={activePane}
-                onClose={closeSidebar}
-                mapRef={mapViewport.mapRef}
-              />
-            </SheetContent>
-          </Sheet>
+         /* Mobile Menu Button */
+         <Sheet open={isSidebarOpen} onOpenChange={(open) => {
+           if (!open) closeSidebar();
+         }} modal={false}>
+           <SheetTrigger asChild>
+             <Button
+               variant="outline"
+               size="icon"
+               className="bg-sidebar text-sidebar-foreground shadow-lg flex-shrink-0"
+               onClick={openSidebarMenu}
+             >
+               <Icons.Menu className="h-4 w-4" />
+             </Button>
+           </SheetTrigger>
+           <SheetContent side="left" className="w-96 p-0 border-r">
+             <VisuallyHidden>
+               <SheetTitle>Navigation Menu</SheetTitle>
+             </VisuallyHidden>
+             <SidebarShell
+               defaultPane={activePane}
+               onClose={closeSidebar}
+               mapRef={mapViewport.mapRef}
+             />
+           </SheetContent>
+         </Sheet>
         ) : (
           /* Desktop Menu Button - only show when sidebar is closed */
           !isSidebarOpen && (
@@ -263,6 +260,7 @@ export function AppShell() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Desktop Sidebar Overlay */}
       {!isMobile && isSidebarOpen && (
