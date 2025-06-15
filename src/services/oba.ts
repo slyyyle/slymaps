@@ -14,16 +14,36 @@ import type {
   UnifiedSearchSuggestion,
   ObaRouteGeometry,
   ObaRoute,
-  ObaArrivalDeparture,
   ObaVehicleLocation,
   ObaAgency,
   ObaScheduleEntry,
   ObaTripDetails,
-  ObaStopSchedule
+  ObaStopSchedule,
+  ObaStopScheduleWithRefs
 } from '@/types/oba';
 import polyline from '@mapbox/polyline';
 
 const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where';
+
+// NEW: Safely parse JSON or return null, and log raw text for debugging
+async function safeParseJsonResponse(response: Response): Promise<any | null> {
+  // Always read the full body as text
+  const text = await response.text();
+  // Log raw response for debugging unexpected shapes
+  console.debug(`🔍 OBA raw response [${response.url}]:`, text);
+  // Handle empty bodies
+  if (!text || text.trim() === '') {
+    console.warn(`Empty response body for ${response.url}`);
+    return null;
+  }
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    // Log error and raw text
+    console.error(`Failed to parse JSON from ${response.url}:`, err, 'Raw text:', text);
+    return null;
+  }
+}
 
 /**
  * Get all agencies with coverage to understand the service area
@@ -215,41 +235,6 @@ export async function findNearbyTransit(
 }
 
 /**
- * Get arrivals and departures for a specific stop
- */
-export async function getArrivalsForStop(stopId: string): Promise<ObaArrivalDeparture[]> {
-  if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
-    throw new Error('OneBusAway API key is required');
-  }
-
-  const data = await rateLimitedRequest(async () => {
-    const response = await fetch(`${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${ONEBUSAWAY_API_KEY}&minutesBefore=0&minutesAfter=60&includeReferences=false`);
-        
-    if (!response.ok) {
-      await handleApiError(response, `fetch arrivals for stop ${stopId}`);
-    }
-
-    return await response.json();
-  }, `arrivals for stop ${stopId}`);
-
-  const arrivals: ObaArrivalDeparture[] = data.data?.entry?.arrivalsAndDepartures.map((ad: Record<string, unknown>) => ({
-    routeId: ad.routeId as string,
-    routeShortName: ad.routeShortName as string,
-    tripId: ad.tripId as string,
-    tripHeadsign: ad.tripHeadsign as string,
-    stopId: ad.stopId as string,
-    scheduledArrivalTime: ad.scheduledArrivalTime as number,
-    predictedArrivalTime: ad.predictedArrivalTime !== 0 ? ad.predictedArrivalTime as number : null,
-    status: ad.status as string,
-    vehicleId: ad.vehicleId as string,
-    distanceFromStop: ad.distanceFromStop as number,
-    lastUpdateTime: ad.lastKnownLocationUpdateTime as number, 
-  })) || [];
-  
-  return arrivals;
-}
-
-/**
  * Get real-time vehicle locations for a specific route
  */
 export async function getVehiclesForRoute(routeId: string): Promise<ObaVehicleLocation[]> {
@@ -259,7 +244,7 @@ export async function getVehiclesForRoute(routeId: string): Promise<ObaVehicleLo
   }
 
   const data = await rateLimitedRequest(async () => {
-    const response = await fetch(`${OBA_BASE_URL}/vehicles-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includeReferences=false`);
+    const response = await fetch(`${OBA_BASE_URL}/trips-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includeReferences=false`);
 
     if (!response.ok) {
       // This will throw an error which will be caught by the calling hook
@@ -269,15 +254,22 @@ export async function getVehiclesForRoute(routeId: string): Promise<ObaVehicleLo
     return await response.json();
   }, `vehicles for route ${routeId}`);
   
-  const vehicles: ObaVehicleLocation[] = data.data?.list?.map((v: Record<string, unknown>) => ({
-    id: v.vehicleId as string,
-    routeId: routeId,
-    latitude: (v.location as Record<string, unknown>).lat as number,
-    longitude: (v.location as Record<string, unknown>).lon as number,
-    tripId: v.tripId as string,
-    tripHeadsign: (v.trip as Record<string, unknown>)?.tripHeadsign as string,
-    lastUpdateTime: v.lastLocationUpdateTime as number,
-  })) || [];
+  const vehicles: ObaVehicleLocation[] = (data.data?.list as Array<Record<string, any>> || [])
+    .map(entry => {
+      const status = entry.status as Record<string, any>;
+      const position = status?.position as Record<string, number> | undefined;
+      if (!status?.vehicleId || !position) return null;
+      return {
+        id: status.vehicleId,
+        routeId,
+        latitude: position.lat,
+        longitude: position.lon,
+        tripId: entry.tripId as string,
+        lastUpdateTime: status.lastLocationUpdateTime as number,
+        heading: status.orientation as number,
+      } as ObaVehicleLocation;
+    })
+    .filter((v): v is ObaVehicleLocation => v !== null);
 
   return vehicles;
 }
@@ -286,9 +278,8 @@ export async function getVehiclesForRoute(routeId: string): Promise<ObaVehicleLo
  * Get comprehensive route details including geometry, stops, and route information
  */
 export async function getRouteDetails(routeId: string): Promise<{
-  routeGeometry: ObaRouteGeometry | null;
-  routeInfo: ObaRoute | null; 
-  stops: PointOfInterest[];
+  routeInfo: ObaRoute | null;
+  branches: { branchIdx: number; name: string; segments: ObaRouteGeometry[]; stops: PointOfInterest[] }[];
 }> {
   if (!routeId || typeof routeId !== 'string' || routeId.trim() === '') {
     throw new Error('A valid OneBusAway Route ID is required to fetch its details.');
@@ -298,8 +289,11 @@ export async function getRouteDetails(routeId: string): Promise<{
     throw new Error('OneBusAway API Key is missing. Cannot fetch route details.');
   }
 
-  // Get route geometry and details from the enhanced service
-  const { routeGeometry, routeDetails: enhancedRouteDetails } = await getRouteShapes(routeId);
+  // Get route geometry, details, and stops from the enhanced service
+  const {
+    routeDetails: enhancedRouteDetails,
+    branches: enhancedBranches
+  } = await getRouteShapes(routeId);
 
   // For backward compatibility, still fetch full API response for stops and other data
   const data = await rateLimitedRequest(async () => {
@@ -339,28 +333,9 @@ export async function getRouteDetails(routeId: string): Promise<{
     routeInfo = enhancedRouteDetails;
   }
 
-  // Extract stops
-  let stops: PointOfInterest[] = [];
-  if (dataData?.list && Array.isArray(dataData.list)) {
-    stops = dataData.list.map((stop: Record<string, unknown>) => ({
-      id: stop.id as string,
-      name: stop.name as string,
-      type: 'Bus Stop',
-      latitude: stop.lat as number,
-      longitude: stop.lon as number,
-      isObaStop: true,
-      direction: stop.direction as string,
-      code: stop.code as string,
-      routeIds: (stop.routeIds as string[]) || [], 
-      locationType: stop.locationType as number,
-      wheelchairBoarding: stop.wheelchairBoarding as string,
-    }));
-  }
-
   return {
-    routeGeometry,
     routeInfo,
-    stops,
+    branches: enhancedBranches as any
   };
 }
 
@@ -480,9 +455,10 @@ export async function getSearchSuggestions(
  * Uses the stops-for-route API with polylines enabled
  */
 export async function getRouteShapes(routeId: string): Promise<{
-  routeGeometry: ObaRouteGeometry | null;
+  routeSegments: ObaRouteGeometry[];
   routeDetails: ObaRoute | null;
-  stops: ObaStopSearchResult[];
+  stopsBySegment: ObaStopSearchResult[][];
+  branches: { branchIdx: number; name: string; segments: ObaRouteGeometry[]; stops: ObaStopSearchResult[] }[];
 }> {
   const baseUrl = 'https://api.pugetsound.onebusaway.org/api/where';
   
@@ -499,39 +475,31 @@ export async function getRouteShapes(routeId: string): Promise<{
       return await response.json();
     }, 'route shapes');
     
+    // Add raw response logging for debugging
+    console.log(`[OBA] raw stops-for-route response for ${routeId}:`, data);
+    
     if (data.code !== 200) {
       throw new Error(`OBA API error: ${data.text || 'Unknown error'}`);
     }
     
-    // Process polylines into route geometry
-    let routeGeometry: ObaRouteGeometry | null = null;
+    // Process polylines into separate route segments
+    const routeSegments: ObaRouteGeometry[] = [];
     if (data.data?.entry?.polylines?.length > 0) {
-      const allCoordinates: number[][] = [];
-      
-      data.data.entry.polylines.forEach((encodedPolyline: Record<string, unknown>) => {
+      data.data.entry.polylines.forEach((encoded: Record<string, unknown>, idx: number) => {
         try {
-          const decoded = polyline.decode(encodedPolyline.points as string);
-          // Convert from [lat, lng] to [lng, lat] for GeoJSON
-          decoded.forEach(coordPair => {
-            allCoordinates.push([coordPair[1], coordPair[0]]);
-          });
+          const coords: number[][] = polyline.decode(encoded.points as string)
+            .map(([lat, lon]) => [lon, lat]);
+          if (coords.length > 0) {
+            routeSegments.push({
+              type: "Feature",
+              geometry: { type: "LineString", coordinates: coords },
+              properties: { routeId, segmentIndex: idx }
+            });
+          }
         } catch (error) {
-          console.warn('Failed to decode polyline:', error);
+          console.warn(`Failed to decode polyline segment ${idx}:`, error);
         }
       });
-      
-      if (allCoordinates.length > 0) {
-        routeGeometry = {
-          type: "Feature",
-          geometry: {
-            type: "LineString",
-            coordinates: allCoordinates
-          },
-          properties: {
-            routeId: routeId
-          }
-        };
-      }
     }
     
     // Extract route details from references
@@ -540,33 +508,68 @@ export async function getRouteShapes(routeId: string): Promise<{
       routeDetails = data.data.references.routes.find((r: Record<string, unknown>) => r.id === routeId) || null;
     }
     
-    // Extract stops
-    const stops: ObaStopSearchResult[] = [];
+    // Extract stops per segment
+    const stopsBySegment: ObaStopSearchResult[][] = [];
     if (data.data?.entry?.stopGroupings) {
       data.data.entry.stopGroupings.forEach((grouping: Record<string, unknown>) => {
+        const segmentStops: ObaStopSearchResult[] = [];
         (grouping.stopGroups as Record<string, unknown>[])?.forEach((group: Record<string, unknown>) => {
           (group.stopIds as string[])?.forEach((stopId: string) => {
             const stopRef = data.data.references?.stops?.find((s: Record<string, unknown>) => s.id === stopId);
             if (stopRef) {
-                             stops.push({
-                 id: stopRef.id as string,
-                 name: stopRef.name as string,
-                 code: stopRef.code as string,
-                 latitude: stopRef.lat as number,
-                 longitude: stopRef.lon as number,
-                 direction: (stopRef.direction as string) || 'N',
-                 routeIds: (stopRef.routeIds as string[]) || []
-               });
+              segmentStops.push({
+                id: stopRef.id as string,
+                name: stopRef.name as string,
+                code: stopRef.code as string,
+                latitude: stopRef.lat as number,
+                longitude: stopRef.lon as number,
+                direction: (stopRef.direction as string) || 'N',
+                routeIds: (stopRef.routeIds as string[]) || []
+              });
             }
           });
         });
+        stopsBySegment.push(segmentStops);
       });
     }
     
+    // Debug logging: segment and stop counts
+    console.log(`[OBA] getRouteShapes(${routeId}) → segments: ${routeSegments.length}, stopsBySegment: [${stopsBySegment.map(arr => arr.length).join(', ')}]`);
+    
+    // Build per-branch variants
+    const directionGrouping = data.data.entry.stopGroupings?.find((g: any) => (g as any).type === 'direction');
+    const branches = (directionGrouping?.stopGroups as any[] || []).map((group: any, branchIdx: number) => {
+      const segments: ObaRouteGeometry[] = (group.polylines as any[] || []).map((encoded, segIdx) => {
+        const coords: number[][] = polyline.decode(encoded.points as string).map(([lat, lon]) => [lon, lat]);
+        return ({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: coords },
+          properties: { routeId, branchIdx, segmentIndex: segIdx }
+        } as ObaRouteGeometry);
+      });
+      const stops = (group.stopIds as string[] || [])
+        .map(stopId => {
+          const ref = data.data.references?.stops?.find((s: any) => s.id === stopId);
+          if (!ref) return null;
+          return {
+            id: ref.id as string,
+            name: ref.name as string,
+            code: ref.code as string,
+            latitude: ref.lat as number,
+            longitude: ref.lon as number,
+            direction: (ref.direction as string) || 'N',
+            routeIds: (ref.routeIds as string[]) || []
+          } as ObaStopSearchResult;
+        })
+        .filter((s): s is ObaStopSearchResult => s !== null);
+      return { branchIdx, name: (group.name as any).name as string, segments, stops };
+    });
+    
     return {
-      routeGeometry,
+      routeSegments,
       routeDetails,
-      stops
+      stopsBySegment,
+      branches
     };
     
   } catch (error) {
@@ -605,9 +608,9 @@ export async function getMultipleRouteShapes(routeIds: string[]): Promise<{
       const result = await getRouteShapes(routeId);
       return {
         routeId,
-        geometry: result.routeGeometry,
+        geometry: result.routeSegments[0] || null,
         details: result.routeDetails,
-        stops: result.stops,
+        stops: result.stopsBySegment[0] || [],
         color: colors[index % colors.length]
       };
     } catch (error) {
@@ -693,7 +696,7 @@ export async function getSituationsForAgency(agencyId: string): Promise<unknown[
   return data.data?.list || [];
 }
 
-export async function getStopSchedule(stopId: string): Promise<ObaStopSchedule> {
+export async function getStopSchedule(stopId: string): Promise<ObaStopScheduleWithRefs> {
   if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
     throw new Error('OneBusAway API key is required');
   }
@@ -703,5 +706,8 @@ export async function getStopSchedule(stopId: string): Promise<ObaStopSchedule> 
     await handleApiError(response, `fetch schedule for stop ${stopId}`);
   }
   const data = await response.json();
-  return data.data?.entry || data.data;
+  // Extract entry and references
+  const entry = data.data?.entry as ObaStopSchedule;
+  const references = data.data?.references;
+  return { entry, references };
 } 

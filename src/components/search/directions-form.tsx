@@ -65,6 +65,7 @@ export function DirectionsForm({ mapRef }: DirectionsFormProps) {
           <UnifiedSearchBox
             accessToken={mapboxAccessToken}
             placeholder="Enter start address"
+            suggestionTypes={['place','stop']}
             onResult={handleStartAddressSelect}
             onRouteSelect={(routeId) => {
               // For routes, we could show route info or use first stop
@@ -115,6 +116,7 @@ export function DirectionsForm({ mapRef }: DirectionsFormProps) {
           <UnifiedSearchBox
             accessToken={mapboxAccessToken}
             placeholder="Enter destination address"
+            suggestionTypes={['place','stop']}
             onResult={handleDestinationAddressSelect}
             onRouteSelect={(routeId) => {
               console.log('Route selected for destination:', routeId);

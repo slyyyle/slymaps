@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { PopupStore, PopupSection, POI, CacheConfig } from '@/types/popup'
+import type { PopupStore, PopupSection, POI } from '@/types/popup'
 
 // Cache TTL configuration
 const CACHE_TTL = {
@@ -19,7 +19,7 @@ export const usePopupStore = create<PopupStore>((set, get) => ({
   sections: {},
   currentPOI: null,
     
-    loadSection: async (sectionId: string, loader: () => Promise<any>) => {
+    loadSection: async <T>(sectionId: string, loader: () => Promise<T>): Promise<void> => {
       const existing = get().getSectionState(sectionId);
       
       // Check cache first - skip loading if valid
@@ -53,14 +53,15 @@ export const usePopupStore = create<PopupStore>((set, get) => ({
         }));
         
         console.log(`✅ Loaded section: ${sectionId}`);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
         set(state => ({
           sections: {
             ...state.sections,
-            [sectionId]: { 
-              id: sectionId, 
-              status: 'error', 
-              error: error.message || 'Unknown error'
+            [sectionId]: {
+              id: sectionId,
+              status: 'error',
+              error: message
             }
           }
         }));
@@ -69,7 +70,7 @@ export const usePopupStore = create<PopupStore>((set, get) => ({
       }
     },
     
-    retrySection: async (sectionId: string, loader: () => Promise<any>) => {
+    retrySection: async <T>(sectionId: string, loader: () => Promise<T>): Promise<void> => {
       console.log(`🔄 Retrying section: ${sectionId}`);
       
       // Clear error state and retry
@@ -108,8 +109,9 @@ export const usePopupStore = create<PopupStore>((set, get) => ({
       );
     },
     
-    getSectionState: (sectionId: string) => {
-      return get().sections[sectionId] || { id: sectionId, status: 'idle' };
+    getSectionState: <T>(sectionId: string): PopupSection<T> => {
+      const section = get().sections[sectionId] as PopupSection<T> | undefined;
+      return section || ({ id: sectionId, status: 'idle' } as PopupSection<T>);
     },
     
     isAnyLoading: () => {

@@ -8,7 +8,7 @@ import { useSearchActions } from '@/hooks/search/use-search-actions';
 import { MapboxSearchBox } from '@/components/search/mapbox-searchbox';
 import { SearchActions } from '@/components/search/search-actions';
 import { UnifiedSuggestionsDropdown } from '@/components/search/unified-suggestions-dropdown';
-import type { Coordinates } from '@/types/core';
+import type { Coordinates, PointOfInterest } from '@/types/core';
 import type { MapboxRetrieveFeature, MapboxSuggestion, MapboxRetrieveResponse } from '@/types/mapbox';
 import type { ObaStopSearchResult, UnifiedSearchSuggestion } from '@/types/oba';
 import type { MapRef } from 'react-map-gl/mapbox';
@@ -16,12 +16,15 @@ import { convertMapboxSuggestionsToUnified } from '@/utils/search-utils';
 
 interface UnifiedSearchBoxProps {
   accessToken: string;
-  onResult: (coords: Coordinates, name?: string) => void;
+  onResult?: (coords: Coordinates, name?: string) => void;
   onClear: () => void;
   onRouteSelect?: (routeId: string) => void;
   onStopSelect?: (stop: ObaStopSearchResult) => void;
+  onLocationSelect?: (poi: PointOfInterest) => void;
   onTransitNearby?: (coords: Coordinates) => void;
   currentLocation?: Coordinates;
+  // Types of suggestions to show: 'place','stop','route'
+  suggestionTypes?: Array<'place' | 'stop' | 'route'>;
   
   // Map integration props
   mapRef?: React.RefObject<MapRef>;
@@ -44,6 +47,7 @@ export function UnifiedSearchBox({
   onClear,
   onRouteSelect,
   onStopSelect,
+  onLocationSelect,
   onTransitNearby,
   currentLocation,
   mapRef,
@@ -53,6 +57,7 @@ export function UnifiedSearchBox({
   value: externalValue,
   onValueChange,
   disabled: _disabled = false,
+  suggestionTypes = ['place','stop','route'],
 }: UnifiedSearchBoxProps) {
   const dataIntegration = useDataIntegration();
   const { searches } = dataIntegration;
@@ -71,6 +76,7 @@ export function UnifiedSearchBox({
     onResult,
     onRouteSelect,
     onStopSelect,
+    onLocationSelect,
     onValueChange,
   });
 
@@ -100,6 +106,11 @@ export function UnifiedSearchBox({
     const unifiedMapboxSuggestions = convertMapboxSuggestionsToUnified(mapboxSuggestions);
     return [...unifiedSearch.unifiedSuggestions, ...unifiedMapboxSuggestions];
   }, [unifiedSearch.unifiedSuggestions, mapboxSuggestions]);
+
+  // Filter by allowed types
+  const filteredSuggestions = React.useMemo(() => 
+    allSuggestions.filter(s => suggestionTypes.includes(s.type as 'place'|'stop'|'route'))
+  , [allSuggestions, suggestionTypes]);
 
   // Handle search box retrieve with cleanup - Updated for 2025 API
   const handleSearchBoxRetrieve = useCallback((result: MapboxRetrieveFeature) => {
@@ -143,6 +154,7 @@ export function UnifiedSearchBox({
 
   // Handle unified suggestion selection
   const handleUnifiedSelect = useCallback(async (suggestion: UnifiedSearchSuggestion) => {
+    console.log('UnifiedSearchBox: suggestion clicked:', suggestion);
     if (suggestion.type === 'place') {
       try {
         // Retrieve full place details and add as a POI
@@ -156,29 +168,35 @@ export function UnifiedSearchBox({
         const data: MapboxRetrieveResponse = await response.json();
         const feature = data.features?.[0];
         if (feature) {
-          // Delegate to our retrieve handler which adds, selects, and flies to the POI,
-          // and also records it in history and clears suggestions/input.
           handleSearchBoxRetrieve(feature);
         }
       } catch (error) {
         console.error('Error retrieving place details:', error);
       }
-    } else {
-      // Handle transit selection as before
+    } else if (suggestion.type === 'route') {
+      // Handle route selection via search result handler (adds route POI)
       searchResultHandling.handleUnifiedSelect(suggestion);
-      // Still record the transit search term in history
-      if (suggestion.type === 'stop') {
+      // Update input display and record in search history
+      const displayText = suggestion.title;
+      (searchBoxRef.current as any)?.setValue(displayText);
+      setCurrentQuery(displayText);
+      onValueChange?.(displayText);
+      addSearch(currentQuery, { mapboxFeatures: [], pois: [], routes: [] });
+    } else if (suggestion.type === 'stop') {
+      // Stop selection: invoke stop handler, update input, and record
+      searchResultHandling.handleUnifiedSelect(suggestion);
         const stopData = suggestion.data as ObaStopSearchResult;
+      const displayText = stopData.name;
+      (searchBoxRef.current as any)?.setValue(displayText);
+      setCurrentQuery(displayText);
+      onValueChange?.(displayText);
         addSearch(currentQuery, { mapboxFeatures: [], pois: [], routes: [] }, { latitude: stopData.latitude, longitude: stopData.longitude });
-      } else {
-        addSearch(currentQuery, { mapboxFeatures: [], pois: [], routes: [] });
-      }
     }
 
-    // Clear suggestion dropdowns
+    // Clear suggestions
     setMapboxSuggestions([]);
     unifiedSearch.clearSearchResults();
-  }, [accessToken, handleSearchBoxRetrieve, searchResultHandling, sessionToken, unifiedSearch, onValueChange, addSearch, currentQuery]);
+  }, [accessToken, handleSearchBoxRetrieve, searchResultHandling, sessionToken, unifiedSearch, onValueChange, addSearch, currentQuery, onRouteSelect]);
 
   if (!accessToken) {
     return (
@@ -218,9 +236,9 @@ export function UnifiedSearchBox({
       
       {/* Unified suggestions dropdown */}
       <UnifiedSuggestionsDropdown
-        show={unifiedSearch.showSuggestionsDropdown || mapboxSuggestions.length > 0}
+        show={unifiedSearch.showSuggestionsDropdown || filteredSuggestions.length > 0}
         isLoading={unifiedSearch.isLoadingUnified}
-        suggestions={allSuggestions}
+        suggestions={filteredSuggestions}
         onSelect={handleUnifiedSelect}
       />
     </div>

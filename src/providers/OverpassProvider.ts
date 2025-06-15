@@ -13,10 +13,23 @@ export interface ProviderResponse {
   nextPage?: string;
 }
 
+interface RawOverpassElement {
+  lat?: number;
+  lon?: number;
+  center?: { lat: number; lon: number };
+  tags?: Record<string, string>;
+  id: number | string;
+  type: string;
+}
+
+interface RawOverpassResponse {
+  elements?: RawOverpassElement[];
+}
+
 export class OverpassProvider {
   private baseUrl = 'https://overpass-api.de/api/interpreter';
   private maxConcurrent = 3;
-  private requestQueue: Promise<any>[] = [];
+  private requestQueue: Promise<RawOverpassResponse>[] = [];
 
   /**
    * Fetch POIs matching category within radius around coords.
@@ -48,7 +61,7 @@ out center meta;`;
     }
   }
 
-  private async makeRequest(query: string): Promise<any> {
+  private async makeRequest(query: string): Promise<RawOverpassResponse> {
     const response = await fetch(this.baseUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -63,17 +76,17 @@ out center meta;`;
     return response.json();
   }
 
-  private parseResponse(data: any): ProviderResponse {
+  private parseResponse(data: RawOverpassResponse): ProviderResponse {
     const pois: PointOfInterest[] = [];
-    (data.elements || []).forEach((el: any) => {
+    (data.elements || []).forEach((el: RawOverpassElement) => {
       const lat = el.lat ?? el.center?.lat;
       const lng = el.lon ?? el.center?.lon;
       if (typeof lat !== 'number' || typeof lng !== 'number') return;
 
       pois.push({
         id: `overpass-${el.type}-${el.id}`,
-        name: el.tags?.name ?? categoryLabel(el.tags),
-        type: el.tags?.amenity ?? el.tags?.shop ?? 'poi',
+        name: el.tags?.name || categoryLabel(el.tags),
+        type: el.tags?.amenity || el.tags?.shop || 'poi',
         latitude: lat,
         longitude: lng,
         description: undefined,
@@ -86,6 +99,6 @@ out center meta;`;
   }
 }
 
-function categoryLabel(tags: Record<string, any> = {}): string {
+function categoryLabel(tags: Record<string, string> = {} as Record<string, string>): string {
   return tags.name || tags.amenity || Object.values(tags)[0] || 'Unknown POI';
 } 

@@ -2,20 +2,23 @@ import { useCallback } from 'react';
 import { useDataIntegration } from '@/hooks/data/use-data-integration';
 import { useMapViewport } from '@/hooks/map/use-map-navigation';
 import { SEARCH_CONFIG } from '@/constants/search-config';
-import { determineOptimalZoom } from '@/utils/search-utils';
+import { extractAddressComponents } from '@/utils/search-utils';
 import type { Coordinates } from '@/types/core';
 import type { MapboxRetrieveFeature } from '@/types/mapbox';
 import type { UnifiedSearchSuggestion, ObaStopSearchResult } from '@/types/oba';
+import type { AddressInput } from '@/utils/address-utils';
+import type { PointOfInterest } from '@/types/core';
 
 interface UseSearchResultHandlingOptions {
   onResult?: (coords: Coordinates, name?: string) => void;
   onRouteSelect?: (routeId: string) => void;
   onStopSelect?: (stop: ObaStopSearchResult) => void;
+  onLocationSelect?: (poi: PointOfInterest) => void;
   onValueChange?: (value: string) => void;
 }
 
 export function useSearchResultHandling(options: UseSearchResultHandlingOptions) {
-  const { onResult, onRouteSelect, onStopSelect, onValueChange } = options;
+  const { onResult, onRouteSelect, onStopSelect, onLocationSelect, onValueChange } = options;
   const dataIntegration = useDataIntegration();
   const { flyTo } = useMapViewport();
 
@@ -63,7 +66,21 @@ export function useSearchResultHandling(options: UseSearchResultHandlingOptions)
             'Search Result',
       latitude: coords.latitude,
       longitude: coords.longitude,
-      description: result.properties.full_address || result.properties.place_formatted || result.properties.name,
+      // Build structured address for description
+      description: (() => {
+        const comps = extractAddressComponents(result);
+        const addr: AddressInput = {
+          road: comps.street,
+          city: comps.city,
+          state: comps.region,
+          postcode: comps.postcode
+        };
+        // Fallback to full_address string if structured is empty
+        if (!Object.values(addr).some(Boolean)) {
+          return result.properties.full_address || result.properties.place_formatted || result.properties.name;
+        }
+        return addr;
+      })(),
       isSearchResult: true,
       searchResultData: {
         mapboxId: result.properties.mapbox_id,
@@ -129,52 +146,71 @@ export function useSearchResultHandling(options: UseSearchResultHandlingOptions)
       duration: SEARCH_CONFIG.PERFORMANCE.FLY_TO_DURATION_MS 
     });
     
-    // Call onResult callback if provided, passing the feature name for header display
-    if (onResult) {
-      onResult(coords, result.properties.name);
+    // Call onLocationSelect if provided, else fallback to onResult
+    if (onLocationSelect) {
+      onLocationSelect(searchResultPoi);
+    } else if (onResult) {
+      onResult(coords, placeName);
     }
     
     // Clear the search input
     if (onValueChange) {
       onValueChange('');
     }
-  }, [dataIntegration, onResult, flyTo, onValueChange]);
+  }, [dataIntegration, onResult, flyTo, onValueChange, onLocationSelect]);
 
   // Handle unified suggestion selection (both transit and places)
   const handleUnifiedSelect = useCallback((suggestion: UnifiedSearchSuggestion) => {
     if (suggestion.type === 'route' && onRouteSelect) {
       const routeData = suggestion.data as unknown as import('@/types/oba').ObaRouteSearchResult;
+      // Add route to route store
       dataIntegration.routes.addRoute(routeData);
+      // Also add as a search-result POI for sidebar listing
+      const routePoi: PointOfInterest = {
+        id: suggestion.id,
+        name: suggestion.title,
+        type: 'Route',
+        latitude: 0,
+        longitude: 0,
+        isSearchResult: true,
+        properties: { source: 'oba-route' }
+      };
+      dataIntegration.pois.addPOI(routePoi);
+      // Trigger route selection handler (fly and pane transition)
       onRouteSelect(suggestion.id);
-    } else if (suggestion.type === 'stop' && onStopSelect) {
+    } else if (suggestion.type === 'stop') {
       const stopData = suggestion.data as ObaStopSearchResult;
-      
-      // Add stop to Zustand store as POI
-      const poi = {
+      // Build POI object for the stop
+      const poi: PointOfInterest = {
         id: stopData.id,
         name: stopData.name,
         type: 'Bus Stop',
         latitude: stopData.latitude,
         longitude: stopData.longitude,
+        description: `Stop #${stopData.code} - ${stopData.direction} bound`,
+        isSearchResult: true,
         isObaStop: true,
-        code: stopData.code,
+        properties: {
+          source: 'oba',
+          stop_code: stopData.code,
         direction: stopData.direction,
-        routeIds: stopData.routeIds,
+          route_ids: stopData.routeIds,
+          wheelchair_boarding: stopData.wheelchairBoarding
+        }
       };
+      // Add and select the POI in the store
       dataIntegration.pois.addPOI(poi);
       dataIntegration.pois.selectPOI(poi.id);
-      
-      onStopSelect(stopData);
-      
-      // Also fly to the stop location
-      if (onResult) {
-        onResult({
-          longitude: stopData.longitude,
-          latitude: stopData.latitude,
-        }, stopData.name);
+      // Invoke unified location handler if provided
+      if (onLocationSelect) {
+        onLocationSelect(poi);
+      } else {
+        // Fallback to individual callbacks
+        if (onStopSelect) onStopSelect(stopData);
+        if (onResult) onResult({ longitude: stopData.longitude, latitude: stopData.latitude }, stopData.name);
       }
     }
-  }, [onRouteSelect, onStopSelect, onResult, dataIntegration]);
+  }, [onRouteSelect, onStopSelect, onResult, onLocationSelect, dataIntegration]);
 
   return {
     handleSearchBoxRetrieve,

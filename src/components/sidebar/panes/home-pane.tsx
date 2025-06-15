@@ -68,6 +68,7 @@ export function HomePane({ onBack, mapRef }: HomePaneProps) {
             mapRef={mapRef}
             onResult={handleResult}
             onClear={() => {}}
+            suggestionTypes={['place', 'stop']}
             placeholder="Search for your home address…"
             className="w-full"
           />

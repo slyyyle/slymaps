@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import type { Coordinates } from '@/types/core';
-import { log } from '@/lib/logging';
 import { useToast } from '@/hooks/ui/use-toast';
 import { useDataIntegration } from './use-data-integration';
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { DirectionsPopup } from '@/components/search/directions-popup';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetTrigger, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -23,6 +23,10 @@ import { useMapViewport } from '@/hooks/map/use-map-navigation';
 import { useMapStyling } from '@/hooks/map/use-map-styling';
 import { cn } from '@/lib/cn';
 import { SEARCH_CONFIG } from '@/constants/search-config';
+import { useRouteStore } from '@/stores/use-route-store';
+import { useUnifiedPOIHandler } from '@/hooks/map/use-unified-poi-handler';
+import { useRouteHandler } from '@/hooks/map/use-route-handler';
+import type { ObaStopSearchResult } from '@/types/oba';
 
 // Custom mobile detection hook
 const useIsMobile = () => {
@@ -54,10 +58,52 @@ export function AppShell() {
   const { start: routeStartCoords, destination: routeEndCoords, route: mapboxDirectionsRoute, showTurnMarkers } = useDataStore(state => state.directions);
 
   const poiStore = usePOIStore();
+  // Extract search results clear action to remove route stops markers
+  const clearSearchResults = usePOIStore(state => state.clearSearchResults);
   const mapViewport = useMapViewport();
   const mapStyling = useMapStyling(mapViewport.mapRef);
   const { sidebarTheme } = useThemeStore();
   const isMobile = useIsMobile();
+
+  // Unified POI and route handlers for topbar search
+  const unifiedHandler = useUnifiedPOIHandler({ map: mapViewport.mapRef.current });
+  const routeHandler = useRouteHandler({ enableVehicleTracking: true });
+
+  const handleStopSelect = React.useCallback((stop: ObaStopSearchResult) => {
+    // Convert OBA stop into our PointOfInterest shape
+    const poi = {
+      id: stop.id,
+      name: stop.name,
+      type: 'Bus Stop',
+      latitude: stop.latitude,
+      longitude: stop.longitude,
+      description: `Stop #${stop.code} - ${stop.direction} bound`,
+      isObaStop: true,
+      properties: {
+        source: 'oba',
+        stop_code: stop.code,
+        direction: stop.direction,
+        route_ids: stop.routeIds,
+        wheelchair_boarding: stop.wheelchairBoarding
+      }
+    };
+    unifiedHandler.handleSearchResultClick(poi);
+  }, [unifiedHandler]);
+
+  const handleRouteSelect = React.useCallback(async (routeId: string) => {
+    const storeId = await routeHandler.addOBARoute(routeId);
+    routeHandler.selectRoute(storeId);
+  }, [routeHandler]);
+
+  // Clear map overlays, active selection, and route stops when search is cleared
+  const handleClearSearch = React.useCallback(() => {
+    // Remove any active transit route and live vehicle tracking
+    routeHandler.clearAllRoutes();
+    // Clear any selected POI
+    unifiedHandler.clearSelection();
+    // Clear OBA route stops markers from POI store
+    clearSearchResults();
+  }, [routeHandler, unifiedHandler, clearSearchResults]);
 
   // Simplified sidebar state - single source of truth
   const [activePane, setActivePane] = useState<PaneType>(null);
@@ -126,35 +172,39 @@ export function AppShell() {
   const currentLocation = null; // Handled by native control
   const isLoadingLocation = false; // Handled by native control
 
-  // When a route is set, fit the map to the route bounds with UI overlay padding
+  // Subscribe to the active OBA route and derive the selected branch's geometry & stops
+  const activeOBARoute = useRouteStore(state => state.getActiveRoute());
+  const branchIdx = activeOBARoute?.selectedSegmentIndex ?? 0;
+  const branch = activeOBARoute?.branches?.[branchIdx];
+  const obaRouteSegments = branch?.segments ?? [];
+  const obaVehicleLocations = activeOBARoute?.vehicles ?? [];
+  const obaRouteStops = (branch?.stops ?? []) as ObaStopSearchResult[];
+  console.log('🚌 AppShell active branch stops:', obaRouteStops.length, obaRouteStops);
+
+  // Fit the map to the selected route once, then hand control back to the user
+  const lastFitIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!mapboxDirectionsRoute) return;
     const map = mapViewport.getMapInstance();
     if (!map) return;
-    const coords = mapboxDirectionsRoute.geometry.coordinates;
-    const lons = coords.map(c => c[0]);
-    const lats = coords.map(c => c[1]);
-    const west = Math.min(...lons);
-    const south = Math.min(...lats);
-    const east = Math.max(...lons);
-    const north = Math.max(...lats);
-    // UI overlay dimensions
-    const sidebarWidth = 320; // sidebar width in pixels
-    const searchBarHeight = 80; // approximate height of top search controls
-    // Apply asymmetric padding: leave space on left for sidebar and top for search
-    map.fitBounds(
-      [[west, south], [east, north]],
-      {
-        padding: {
-          left: sidebarWidth + 16,
-          top: searchBarHeight + 16,
-          right: 16,
-          bottom: 16
-        },
-        duration: 2000
-      }
-    );
-  }, [mapboxDirectionsRoute, mapViewport]);
+    let coords: [number, number][] | null = null;
+    let currentId: string | null = null;
+    if (mapboxDirectionsRoute && mapboxDirectionsRoute.id !== lastFitIdRef.current) {
+      coords = mapboxDirectionsRoute.geometry.coordinates as [number, number][];
+      currentId = mapboxDirectionsRoute.id;
+    } else if (obaRouteSegments && obaRouteSegments.length > 0 && activeOBARoute?.id && activeOBARoute.id !== lastFitIdRef.current) {
+      coords = obaRouteSegments.flatMap(s => s.geometry.coordinates) as [number, number][];
+      currentId = activeOBARoute.id;
+    }
+    if (coords && currentId) {
+      const lons = coords.map(c => c[0]);
+      const lats = coords.map(c => c[1]);
+      map.fitBounds(
+          [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
+          { padding: { left: 336, top: 96, right: 16, bottom: 16 }, duration: 1500 }
+      );
+      lastFitIdRef.current = currentId;
+    }
+  }, [mapboxDirectionsRoute, obaRouteSegments, activeOBARoute, mapViewport]);
 
   return (
     <div className="relative h-screen overflow-hidden">
@@ -172,7 +222,10 @@ export function AppShell() {
           routeStartCoords={routeStartCoords}
           routeEndCoords={routeEndCoords}
           showTurnMarkers={showTurnMarkers}
-          // POI selection now completely handled by segregated architecture
+          // Pass OBA route segments and vehicle locations
+          obaRouteSegments={obaRouteSegments}
+          obaVehicleLocations={obaVehicleLocations}
+          obaRouteStops={obaRouteStops}
         />
         
         {/* Directions Popup - floats over map */}
@@ -184,7 +237,7 @@ export function AppShell() {
 
       {/* Map Controls - Menu Button and Search Bar (hidden when sidebar open) */}
       {!isSidebarOpen && (
-      <div className="absolute top-4 left-4 z-20 flex items-center gap-3">
+      <div id="topbar-controls" className="absolute top-4 left-4 z-20 flex items-center gap-3">
         {/* Menu Button - only show when sidebar is closed */}
         {isMobile ? (
          /* Mobile Menu Button */
@@ -247,13 +300,17 @@ export function AppShell() {
               accessToken={MAPBOX_ACCESS_TOKEN}
               mapRef={mapViewport.mapRef}
               onResult={(coords: Coordinates) => {
-                // Fly to the selected location with a more precise zoom
                 mapViewport.flyTo(coords, {
                   zoom: SEARCH_CONFIG.ZOOM_LEVELS.PRECISE,
                   duration: SEARCH_CONFIG.PERFORMANCE.FLY_TO_DURATION_MS
                 });
               }}
-              onClear={() => {}}
+              onStopSelect={handleStopSelect}
+              onRouteSelect={async (routeId: string) => {
+                await handleRouteSelect(routeId);
+                openSidebarPane('transit');
+              }}
+              onClear={handleClearSearch}
               placeholder="Search places, transit, routes..."
               className="bg-transparent border-none shadow-none"
             />

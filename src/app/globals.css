@@ -2032,3 +2032,108 @@ body.theme-ocean .quick-settings-label {
 }
 
 }
+
+/* Draw control styling - match other Mapbox controls */
+.mapbox-gl-draw_ctrl-group,
+.mapbox-gl-draw_ctrl {
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: blur(12px) !important;
+}
+.mapbox-gl-draw_ctrl-group button,
+.mapbox-gl-draw_ctrl button {
+  background-color: transparent !important;
+  color: hsl(var(--foreground)) !important;
+  border: none !important;
+  width: 40px !important;
+  height: 40px !important;
+  transition: all 0.2s ease !important;
+}
+.mapbox-gl-draw_ctrl-group button:hover,
+.mapbox-gl-draw_ctrl button:hover {
+  background-color: hsla(var(--primary), 0.1) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+/* Dark theme for Draw controls */
+body.theme-dark .mapbox-gl-draw_ctrl-group,
+body.theme-dark .mapbox-gl-draw_ctrl {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border: 1px solid rgba(96, 165, 250, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(96, 165, 250, 0.2) !important;
+}
+body.theme-dark .mapbox-gl-draw_ctrl-group button,
+body.theme-dark .mapbox-gl-draw_ctrl button {
+  color: rgb(248, 250, 252) !important;
+}
+body.theme-dark .mapbox-gl-draw_ctrl-group button:hover,
+body.theme-dark .mapbox-gl-draw_ctrl button:hover {
+  background-color: rgba(96, 165, 250, 0.2) !important;
+  color: rgb(248, 250, 252) !important;
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.3) !important;
+}
+
+/* Draw control theming: container and buttons */
+.mapbox-gl-draw,
+.mapbox-gl-draw_ctrl-top-left,
+.mapbox-gl-draw_ctrl-top-right {
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: blur(12px) !important;
+}
+.mapbox-gl-draw button,
+.mapbox-gl-draw .mapbox-gl-draw_trash {
+  background-color: transparent !important;
+  color: hsl(var(--foreground)) !important;
+  width: 40px !important;
+  height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: none !important;
+  transition: all 0.2s ease !important;
+  padding: 0 !important;
+  margin: 4px !important;
+}
+.mapbox-gl-draw button:hover,
+.mapbox-gl-draw .mapbox-gl-draw_trash:hover {
+  background-color: hsla(var(--primary), 0.15) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+/* Dark theme for Draw controls */
+body.theme-dark .mapbox-gl-draw,
+body.theme-dark .mapbox-gl-draw_ctrl-top-left,
+body.theme-dark .mapbox-gl-draw_ctrl-top-right {
+  background: rgba(30, 41, 59, 0.9) !important;
+  border: 1px solid rgba(96, 165, 250, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(96, 165, 250, 0.2) !important;
+}
+body.theme-dark .mapbox-gl-draw button,
+body.theme-dark .mapbox-gl-draw .mapbox-gl-draw_trash {
+  color: rgb(248, 250, 252) !important;
+}
+body.theme-dark .mapbox-gl-draw button:hover,
+body.theme-dark .mapbox-gl-draw .mapbox-gl-draw_trash:hover {
+  background-color: rgba(96, 165, 250, 0.2) !important;
+  color: rgb(248, 250, 252) !important;
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.3) !important;
+}
+
+/* Distinguish draw tool buttons with colored tints */
+.mapbox-gl-draw_ctrl-draw-btn.mapbox-gl-draw_point {
+  background-color: rgba(239, 68, 68, 0.15) !important; /* red tint for point */
+}
+.mapbox-gl-draw_ctrl-draw-btn.mapbox-gl-draw_line {
+  background-color: rgba(59, 130, 246, 0.15) !important; /* blue tint for line */
+}
+.mapbox-gl-draw_ctrl-draw-btn.mapbox-gl-draw_polygon {
+  background-color: rgba(16, 185, 129, 0.15) !important; /* green tint for polygon */
+}
+.mapbox-gl-draw_ctrl-draw-btn.mapbox-gl-draw_trash {
+  background-color: rgba(107, 114, 128, 0.15) !important; /* gray tint for trash */
+}

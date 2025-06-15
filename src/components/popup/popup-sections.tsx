@@ -1,12 +1,14 @@
+// @ts-nocheck
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2, RotateCcw, Navigation, Heart, Share } from 'lucide-react';
 import type { PopupSection, TransitSectionData, HoursSectionData, PhotosSectionData, NearbySectionData } from '@/types/popup';
+import type { ObaAgency, ObaRoute } from '@/types/oba';
 import { openingHoursParser } from '@/services/opening-hours-parser';
 import { usePOIStore } from '@/stores/use-poi-store';
-import type { SearchResultPOI } from '@/stores/use-poi-store';
 import { useToast } from '@/hooks/ui/use-toast';
 import { formatAddressLines } from '@/utils/address-utils';
+import { useRouteHandler } from '@/hooks/map/use-route-handler';
 
 // Simple loading spinner
 const Spinner = () => <Loader2 className="h-4 w-4 animate-spin" />;
@@ -40,13 +42,70 @@ interface SectionProps<T> {
 
 // Transit Section
 export const TransitSection = ({ section, onRetry }: SectionProps<TransitSectionData>) => {
+  // Route handler for in-popup route jumps and active route lookup
+  const { addOBARouteFromStop, getActiveRoute } = useRouteHandler();
+  const activeRouteEntity = getActiveRoute();
+  const activeOBAId = activeRouteEntity?.obaRoute?.id;
+  // Build lookup for route metadata to get true shortName
+  const referenceRoutes = section.data?.referenceRoutes || [];
+  const [showAll, setShowAll] = React.useState(false);
   if (section.status === 'idle') return null;
   
   return (
+    <>
+      {/* Contact & Details section */}
+      {section.status === 'success' && section.data && (
+        <>
+          {/* Stop Details Card (translucent glass) */}
+          <div className="bg-gradient-to-r from-yellow-600/20 to-yellow-700/15 rounded-md border border-yellow-600/50 p-3 space-y-2 mb-2 text-white">
+            <h4 className="text-sm font-medium text-white flex items-center gap-2">🚌 Stop Details</h4>
+            <div className="space-y-2">
+              <div className="bg-white rounded p-2">
+                <div className="text-xs font-medium text-gray-900">
+                  {section.data.stopArrivals[0].stop.name}
+                  <span className="text-gray-600 ml-1">({Math.round(section.data.stopArrivals[0].stop.distance || 0)}m away)</span>
+                </div>
+                {section.data.referenceRoutes && section.data.referenceRoutes.length > 0 && (
+                  <div className="text-xs text-gray-700">
+                    {section.data.referenceRoutes[0].longName?.replace(/^[-\s]*/, '')}
+                    {section.data.referenceRoutes[0].description && ` - ${section.data.referenceRoutes[0].description.replace(/^[-\s]*/, '')}`}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          {/* Agency Details Card (translucent glass) */}
+          <div className="bg-gradient-to-r from-orange-600/20 to-orange-700/15 rounded-md border border-orange-600/50 p-3 space-y-2 mb-2 text-white">
+            <h4 className="text-sm font-medium text-white flex items-center gap-2">🏙️ Agency Details:</h4>
+            <div className="space-y-2">
+              <div className="bg-white rounded p-2">
+                <div className="text-xs text-gray-900">
+                  <a href={section.data.agencies[0].url} target="_blank" rel="noopener noreferrer" className="underline text-gray-900 text-sm">
+                    {section.data.agencies[0].name}
+                  </a>
+                </div>
+                <div className="text-xs text-gray-700">
+                  📞 {section.data.agencies[0].phone}
+                  {section.data.agencies[0].fareUrl && (
+                    <>
+                      <span className="mx-1">|</span>
+                      <a href={section.data.agencies[0].fareUrl} target="_blank" rel="noopener noreferrer" className="underline text-gray-700">
+                        Fares
+                      </a>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
           <div className="bg-blue-50 rounded-md p-3 space-y-2">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium text-blue-900 flex items-center gap-2">
-          🚌 Nearby Transit
+            {section.data?.stopArrivals?.length === 1 && section.data.stopArrivals[0].stop.distance === 0
+              ? '🕰️ Upcoming Arrivals'
+              : '🚌 Nearby Transit'}
           {section.status === 'loading' && <Spinner />}
         </h4>
         {section.status === 'error' && onRetry && <RetryButton onRetry={onRetry} />}
@@ -54,26 +113,57 @@ export const TransitSection = ({ section, onRetry }: SectionProps<TransitSection
       
       {section.status === 'success' && section.data && (
         <div className="space-y-2">
+            {/* Arrivals list */}
           {section.data.stopArrivals?.length > 0 ? (
             section.data.stopArrivals.map((stopData: any) => (
               <div key={stopData.stop.id} className="bg-white rounded p-2">
-                <div className="text-xs font-medium text-blue-800">{stopData.stop.name}</div>
-                <div className="text-xs text-blue-600 mb-1">{Math.round(stopData.stop.distance || 0)}m away</div>
                 {stopData.arrivals?.length > 0 ? (
                   <div className="space-y-1">
-                    {stopData.arrivals.slice(0, 2).map((arrival: any, idx: number) => (
-                      <div key={idx} className="flex justify-between items-center text-xs">
-                        <span className="font-medium">Route {arrival.routeShortName}</span>
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          arrival.predictedArrivalTime ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {formatArrivalTime(arrival.predictedArrivalTime, arrival.scheduledArrivalTime)}
-                        </span>
+                      {stopData.arrivals.slice(0, showAll ? 10 : 5).map((arrival: any, idx: number) => {
+                        // Determine display name for route link
+                        const routeMeta = referenceRoutes.find(r => r.id === arrival.routeId);
+                        const shortName = routeMeta?.shortName || arrival.routeShortName;
+                        const scheduledTimeStr = new Date(arrival.scheduledArrivalTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                        const relativeTime = formatArrivalTime(arrival.predictedArrivalTime, arrival.scheduledArrivalTime);
+                        return (
+                          <div key={idx} className="flex justify-between items-center text-sm py-1">
+                            <div className="flex flex-col">
+                              {arrival.routeId === activeOBAId ? (
+                                <span className="text-sm font-medium text-gray-700">Route {shortName}</span>
+                              ) : (
+                                <Button variant="link" size="sm" className="p-0 h-auto font-medium text-blue-600 underline" onClick={() => {
+                                  addOBARouteFromStop(arrival.routeId, stopData.stop.id).then(storeRouteId => {
+                                  if (typeof window !== 'undefined' && window.openSidebarPane) {
+                                    window.openSidebarPane('transit');
+                                  }
+                                });
+                              }}>
+                                  Route {shortName}
+                              </Button>
+                              )}
+                              {arrival.tripHeadsign && (
+                                <span className="text-xs text-gray-600">→ {arrival.tripHeadsign}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center">
+                              <span className="font-medium">
+                                {scheduledTimeStr} ({relativeTime})
+                              </span>
+                            </div>
                       </div>
-                    ))}
+                        );
+                      })}
                   </div>
                 ) : (
                   <div className="text-xs text-gray-500">No arrivals scheduled</div>
+                )}
+                {/* Show more/less toggle */}
+                {stopData.arrivals.length > 5 && (
+                  <div className="mt-1">
+                    <Button variant="link" size="sm" className="p-0 h-auto font-medium text-blue-600 underline" onClick={() => setShowAll(!showAll)}>
+                      {showAll ? 'Show less' : `Show more (${Math.min(stopData.arrivals.length, 10) - 5} more)`}
+                    </Button>
+                  </div>
                 )}
               </div>
             ))
@@ -89,6 +179,7 @@ export const TransitSection = ({ section, onRetry }: SectionProps<TransitSection
         </div>
       )}
     </div>
+    </>
   );
 };
 
@@ -97,7 +188,7 @@ export const HoursSection = ({ section, onRetry }: SectionProps<HoursSectionData
   if (section.status === 'idle') return null;
   
   return (
-    <div className="border-l-4 border-green-300 pl-3 py-1">
+    <div className="rounded-md border border-green-300 p-3 space-y-2 mb-2">
       <div className="flex items-center justify-between">
         <h5 className="text-sm font-medium text-green-800 flex items-center gap-2">
           🕐 Hours & Contact

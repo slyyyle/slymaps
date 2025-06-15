@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { getSearchSuggestions } from '@/services/oba';
+import { getSearchSuggestions, searchStops, searchRoutesByName } from '@/services/oba';
 import type { Coordinates } from '@/types/core';
 import type { UnifiedSearchSuggestion } from '@/types/oba';
 
@@ -41,9 +41,68 @@ export function useUnifiedSearch({ currentLocation }: UseUnifiedSearchOptions) {
 
   // Smart search - search OBA transit sources for transit-like queries
   const searchOBA = useCallback(async (query: string) => {
-    if (!query.trim()) {
+    const trimmed = query.trim();
+    if (!trimmed) {
       setUnifiedSuggestions([]);
       setShowSuggestionsDropdown(false);
+      return;
+    }
+
+    // Prefix-based dispatch: "stop" => only stop suggestions; "route" => only route suggestions
+    const lower = trimmed.toLowerCase();
+    if (lower.startsWith('stop ') || lower === 'stop') {
+      const term = lower === 'stop' ? '' : trimmed.slice(5).trim();
+      if (!term) {
+        setUnifiedSuggestions([]);
+        setShowSuggestionsDropdown(false);
+        return;
+      }
+      setIsLoadingUnified(true);
+      try {
+        const stops = await searchStops(term, 5);
+        const suggestions = stops.map(stop => ({
+          type: 'stop' as const,
+          id: stop.id,
+          title: stop.name,
+          subtitle: `Stop #${stop.code} - ${stop.direction}`,
+          data: stop
+        }));
+        setUnifiedSuggestions(suggestions);
+        setShowSuggestionsDropdown(suggestions.length > 0);
+      } catch (error) {
+        console.error('Error searching stops:', error);
+        setUnifiedSuggestions([]);
+        setShowSuggestionsDropdown(false);
+      }
+      setIsLoadingUnified(false);
+      return;
+    }
+    if (lower.startsWith('route ') || lower === 'route') {
+      const term = lower === 'route' ? '' : trimmed.slice(6).trim();
+      if (!term) {
+        setUnifiedSuggestions([]);
+        setShowSuggestionsDropdown(false);
+        return;
+      }
+      setIsLoadingUnified(true);
+      try {
+        const coords = currentLocation || { latitude: 47.6062, longitude: -122.3321 };
+        const routes = await searchRoutesByName(term, coords, 5);
+        const suggestions = routes.map(route => ({
+          type: 'route' as const,
+          id: route.id,
+          title: `Route ${route.shortName}`,
+          subtitle: route.longName || route.description,
+          data: route
+        }));
+        setUnifiedSuggestions(suggestions);
+        setShowSuggestionsDropdown(suggestions.length > 0);
+      } catch (error) {
+        console.error('Error searching routes:', error);
+        setUnifiedSuggestions([]);
+        setShowSuggestionsDropdown(false);
+      }
+      setIsLoadingUnified(false);
       return;
     }
 

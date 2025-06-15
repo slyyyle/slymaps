@@ -5,9 +5,11 @@ import type {
   ObaRoute, 
   ObaRouteGeometry, 
   ObaVehicleLocation,
-  ObaStopSearchResult 
+  ObaStopSearchResult,
+  ObaScheduleEntry
 } from '@/types/oba';
 import type { Route as MapboxRoute } from '@/types/directions';
+import type { PointOfInterest } from '@/types/core';
 
 export interface RouteEntity {
   id: string;
@@ -16,9 +18,20 @@ export interface RouteEntity {
   
   // OBA Data
   obaRoute?: ObaRoute;
+  // individual route segments for OBA shapes
+  segments?: ObaRouteGeometry[];
+  // branch variants (headsign branches)
+  branches?: Array<{ branchIdx: number; name: string; segments: ObaRouteGeometry[]; stops: PointOfInterest[] }>;
+  // stops per segment for OBA shapes
+  stopsBySegment?: PointOfInterest[][];
+  // fallback single geometry (first segment)
   geometry?: ObaRouteGeometry;
   vehicles?: ObaVehicleLocation[];
-  stops?: ObaStopSearchResult[];
+  // currently selected segment index
+  selectedSegmentIndex?: number;
+  stops?: PointOfInterest[];  // legacy flattened list
+  // schedule entries for this route
+  schedule?: ObaScheduleEntry[];
   
   // Mapbox Data  
   mapboxRoute?: MapboxRoute;
@@ -38,6 +51,8 @@ interface RouteStoreState {
   // Navigation state
   routeStart: Coordinates | null;
   routeEnd: Coordinates | null;
+  // Stepping-stone origin stop for route jumping
+  originStopId: string | null;
 }
 
 interface RouteStoreActions {
@@ -55,6 +70,8 @@ interface RouteStoreActions {
   // Navigation
   setRouteCoordinates: (start: Coordinates | null, end: Coordinates | null) => void;
   getRouteCoordinates: () => { start: Coordinates | null; end: Coordinates | null };
+  // Stepping-stone origin stop setter
+  setOriginStop: (stopId: string | null) => void;
   
   // Cleanup
   clearAllRoutes: () => void;
@@ -74,6 +91,8 @@ export const useRouteStore = create<RouteStore>()(
     activeRouteId: null,
     routeStart: null,
     routeEnd: null,
+    // Stepping-stone origin stop for route jumping
+    originStopId: null,
 
     // Route management
     addRoute: (route: Partial<RouteEntity>) => {
@@ -155,13 +174,19 @@ export const useRouteStore = create<RouteStore>()(
       return { start: routeStart, end: routeEnd };
     },
 
+    // Stepping-stone origin stop setter
+    setOriginStop: (stopId: string | null) => {
+      set({ originStopId: stopId });
+    },
+
     // Cleanup
     clearAllRoutes: () => {
       set({
         routes: {},
         activeRouteId: null,
         routeStart: null,
-        routeEnd: null
+        routeEnd: null,
+        originStopId: null
       });
     },
 

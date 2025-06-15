@@ -13,6 +13,17 @@ export interface ProviderResponse {
   nextPage?: string;
 }
 
+interface OBAStop {
+  id: number | string;
+  name?: string;
+  code?: string;
+  lat: number;
+  lon: number;
+  routeIds?: string[];
+  direction?: string;
+  wheelchairBoarding?: boolean;
+}
+
 /**
  * Provider for OneBusAway stops near a location
  */
@@ -43,8 +54,8 @@ export class OneBusAwayProvider {
     if (!res.ok) throw new Error(`OneBusAway API error ${res.status}`);
     const json = await res.json();
 
-    const list = json.data?.list || [];
-    const pois: PointOfInterest[] = list.map((stop: any) => ({
+    const list = (json.data?.list ?? []) as OBAStop[];
+    const pois: PointOfInterest[] = list.map((stop: OBAStop) => ({
       id: `oba-${stop.id}`,
       name: stop.name || stop.code || 'Bus Stop',
       type: 'Transit Stop',
@@ -54,7 +65,7 @@ export class OneBusAwayProvider {
       code: stop.code,
       routeIds: stop.routeIds,
       description: stop.direction,
-      wheelchairBoarding: stop.wheelchairBoarding,
+      wheelchairBoarding: stop.wheelchairBoarding != null ? stop.wheelchairBoarding.toString() : undefined,
       properties: { stopId: stop.id }
     }));
 

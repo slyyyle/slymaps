@@ -2,8 +2,7 @@
 
 import React from 'react';
 import type { ViewState, MapRef } from 'react-map-gl/mapbox';
-import type { PointOfInterest, Coordinates } from '@/types/core';
-import type { FlyToOptions } from '@/hooks/map/use-map-navigation';
+import type { Coordinates } from '@/types/core';
 import { StandardMapView } from './interactive-mapbox';
 
 // NEW SEGREGATED APPROACH - Remove monolithic data integration
@@ -23,10 +22,8 @@ export interface MapViewProps {
   routeStartCoords?: Coordinates | null;
   routeEndCoords?: Coordinates | null;
   showTurnMarkers?: boolean;
-  obaRouteGeometry?: import('@/types/oba').ObaRouteGeometry | null;
-  obaStopArrivals?: import('@/types/oba').ObaArrivalDeparture[];
-  isLoadingArrivals?: boolean;
-  onSelectRouteForPath?: (routeId: string) => void;
+  obaRouteSegments?: import('@/types/oba').ObaRouteGeometry[];
+  obaRouteStops?: import('@/types/oba').ObaStopSearchResult[];
   obaVehicleLocations?: import('@/types/oba').ObaVehicleLocation[];
   onSetDestination?: (coords: Coordinates) => void;
   

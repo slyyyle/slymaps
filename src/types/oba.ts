@@ -1,7 +1,7 @@
 // === ONEBUSAWAY (OBA) TYPES ===
 // Types related to OneBusAway transit API
 
-import type { PointOfInterest, Coordinates } from './core';
+import type { PointOfInterest } from './core';
 
 export interface ObaArrivalDeparture {
   routeId: string;
@@ -31,6 +31,7 @@ export interface ObaRouteGeometry {
   };
   properties: {
     routeId: string;
+    segmentIndex?: number; // optional index of segment
   };
 }
 
@@ -180,6 +181,10 @@ export interface ObaStopSchedule {
   date: string;
   stopRouteSchedules: Array<{
     routeId: string;
+    stopRouteDirectionSchedules: Array<{
+      // May include frequency-based scheduling information
+      scheduleFrequencies?: Array<Record<string, unknown>>;
+      // The actual stop times for this direction
     scheduleStopTimes: Array<{
       tripId: string;
       serviceId: string;
@@ -187,4 +192,17 @@ export interface ObaStopSchedule {
       departureTime: number;
     }>;
   }>;
+  }>;
+}
+
+// Extended schedule result including API references
+export interface ObaStopScheduleWithRefs {
+  entry: ObaStopSchedule;
+  references?: {
+    agencies?: ObaAgency[];
+    routes?: ObaRoute[];
+    stops?: any[];
+    trips?: any[];
+    situations?: any[];
+  };
 } 

@@ -1,12 +1,12 @@
 import { useCallback, useRef } from 'react';
 import { useRouteStore } from '@/stores/use-route-store';
 import { usePOIStore } from '@/stores/use-poi-store';
-import type { Coordinates, PointOfInterest } from '@/types/core';
-import type { ObaRoute, ObaRouteGeometry, ObaVehicleLocation } from '@/types/oba';
-import type { Route as MapboxRoute } from '@/types/directions';
+import type { Coordinates, PointOfInterest, TransitMode } from '@/types/core';
+import type { ObaStopSearchResult } from '@/types/oba';
 import { 
   getRouteDetails,
-  getVehiclesForRoute 
+  getVehiclesForRoute,
+  getScheduleForRoute
 } from '@/services/oba';
 import { getDirections } from '@/services/mapbox';
 
@@ -17,6 +17,9 @@ interface RouteHandlerProps {
 export function useRouteHandler({ enableVehicleTracking = true }: RouteHandlerProps = {}) {
   const routeStore = useRouteStore();
   const poiStore = usePOIStore();
+  
+  // Action to mark stepping-stone origin stop for route jumps
+  const setOriginStop = routeStore.setOriginStop;
   
   // 🔧 STABLE REFS: Prevent re-render loops
   const enableVehicleTrackingRef = useRef(enableVehicleTracking);
@@ -29,7 +32,8 @@ export function useRouteHandler({ enableVehicleTracking = true }: RouteHandlerPr
     try {
       console.log(`🚌 Fetching OBA route details for ${routeId}`);
       
-      const { routeGeometry, routeInfo, stops } = await getRouteDetails(routeId);
+      const { routeInfo, branches } = await getRouteDetails(routeId);
+      console.log(`🚌 addOBARoute(${routeId}) → branches: ${branches.length}, default stops: ${branches[0]?.stops.length}`);
       
       if (!routeInfo) {
         throw new Error(`Route ${routeId} not found`);
@@ -39,40 +43,82 @@ export function useRouteHandler({ enableVehicleTracking = true }: RouteHandlerPr
       const storeRouteId = routeStore.addRoute({
         id: `oba-${routeId}`,
         obaRoute: routeInfo,
-        geometry: routeGeometry || undefined,
-        stops: stops as any || []
+        // individual segments for default branch (branch 0)
+        segments: branches[0]?.segments,
+        // branch variants
+        branches,
+        // stops per branch (for backward compatibility)
+        stopsBySegment: branches.map(b => b.stops as PointOfInterest[]),
+        // fallback to first branch first segment geometry
+        geometry: branches[0]?.segments[0],
+        // initialize selected branch index
+        selectedSegmentIndex: 0,
+        // legacy flattened stops list (default branch)
+        stops: branches[0]?.stops,
+        // initial empty schedule, will be populated shortly
+        schedule: []
       });
 
       // Add stops as search results
-      if (stops && stops.length > 0) {
-        stops.forEach(stop => {
-          const poi: PointOfInterest = {
-            id: stop.id,
-            name: stop.name,
-            description: `Stop #${stop.code} - ${stop.direction} bound`,
-            type: 'Bus Stop',
-            latitude: stop.latitude,
-            longitude: stop.longitude,
-            isSearchResult: false,
-            properties: {
-              source: 'oba',
-              stop_code: stop.code,
-              direction: stop.direction,
-              route_ids: stop.routeIds,
-              wheelchair_boarding: stop.wheelchairBoarding
-            }
-          };
-          
-          poiStore.addSearchResult(poi, `route-${routeId}-stops`);
-        });
+      branches[0]?.stops.forEach(stop => {
+        const poi: PointOfInterest = {
+          id: stop.id,
+          name: stop.name,
+          description: `Stop #${stop.code} - ${stop.direction} bound`,
+          type: 'Bus Stop',
+          latitude: stop.latitude,
+          longitude: stop.longitude,
+          isObaStop: true,
+          isSearchResult: false,
+          properties: {
+            source: 'oba',
+            stop_code: stop.code,
+            direction: stop.direction,
+            route_ids: stop.routeIds,
+            wheelchair_boarding: stop.wheelchairBoarding
+          }
+        };
+        poiStore.addSearchResult(poi, `route-${routeId}-stops`);
+      });
+
+      // Fetch vehicles if enabled, but don't block route loading on failure
+      if (enableVehicleTrackingRef.current) {
+        try {
+          const vehicles = await getVehiclesForRoute(routeId);
+          if (vehicles.length > 0) {
+            routeStore.updateRoute(storeRouteId, { vehicles });
+          }
+        } catch (vehError) {
+          console.warn(`🚌 Vehicle fetch failed for route ${routeId}:`, vehError);
+        }
       }
 
-      // Fetch vehicles if enabled
-      if (enableVehicleTrackingRef.current) {
-        const vehicles = await getVehiclesForRoute(routeId);
-        if (vehicles.length > 0) {
-          routeStore.updateRoute(storeRouteId, { vehicles });
-        }
+      // Fetch route schedule and parse nested stopTimes into our schedule entries
+      try {
+        const raw = (await getScheduleForRoute(routeId)) as any;
+        const serviceId = raw.serviceIds?.[0] ?? '';
+        const routeIdStr = raw.routeId;
+        const scheduleDateMs: number = raw.scheduleDate || 0;
+        const parsedSchedule = (raw.stopTripGroupings || []).flatMap((grouping: any) => {
+          const direction = grouping.directionId ?? '';
+          const headsigns: string[] = grouping.tripHeadsigns || [];
+          const trips: any[] = grouping.tripsWithStopTimes || [];
+          return trips.map((trip: any, idx: number) => ({
+            serviceId,
+            tripId: trip.tripId,
+            routeId: routeIdStr,
+            stopTimes: (trip.stopTimes || []).map((st: any) => ({
+              stopId: st.stopId,
+              arrivalTime: scheduleDateMs + (st.arrivalTime || 0) * 1000,
+              departureTime: scheduleDateMs + (st.departureTime || 0) * 1000,
+            })),
+            direction,
+            headsign: headsigns[idx] || direction,
+          }));
+        });
+        routeStore.updateRoute(storeRouteId, { schedule: parsedSchedule });
+      } catch (schedError) {
+        console.warn(`🚌 Schedule fetch failed for route ${routeId}:`, schedError);
       }
 
       return storeRouteId;
@@ -82,11 +128,32 @@ export function useRouteHandler({ enableVehicleTracking = true }: RouteHandlerPr
     }
   }, []);
 
-  const addMapboxRoute = useCallback(async (start: Coordinates, end: Coordinates, mode = 'driving-traffic') => {
+  const selectRoute = useCallback((routeId: string | null) => {
+    // Clear any previous stepping-stone origin stop on direct selection
+    setOriginStop(null);
+    routeStore.selectRoute(routeId);
+    
+    if (routeId) {
+      const route = routeStore.getRoute(routeId);
+      console.log(`🎯 Selected route: ${route?.obaRoute?.shortName || routeId}`);
+    }
+  }, [setOriginStop]);
+
+  // Add route from a specific stop (stepping-stone behavior)
+  const addOBARouteFromStop = useCallback(async (routeId: string, stopId: string) => {
+    const storeRouteId = await addOBARoute(routeId);
+    // Select the new route without clearing originStop
+    routeStore.selectRoute(storeRouteId);
+    // Mark the stepping-stone origin stop
+    setOriginStop(stopId);
+    return storeRouteId;
+  }, [addOBARoute, routeStore, setOriginStop]);
+
+  const addMapboxRoute = useCallback(async (start: Coordinates, end: Coordinates, mode: TransitMode = 'driving-traffic'): Promise<string> => {
     try {
       console.log(`🗺️ Calculating Mapbox route from ${start.latitude},${start.longitude} to ${end.latitude},${end.longitude}`);
       
-      const route = await getDirections(start, end, mode as any);
+      const route = await getDirections(start, end, mode);
       
       if (!route) {
         throw new Error('No route found');
@@ -125,7 +192,7 @@ export function useRouteHandler({ enableVehicleTracking = true }: RouteHandlerPr
   const linkPOIToRoute = useCallback((poiId: string, routeId: string) => {
     // This could be enhanced to maintain POI-route relationships
     // For now, we just ensure both exist
-    const poi = poiStore.getAllStoredPOIs().find((p: any) => p.id === poiId);
+    const poi = poiStore.getAllStoredPOIs().find(p => p.id === poiId);
     const route = routeStore.getRoute(routeId);
     
     if (poi && route) {
@@ -136,24 +203,28 @@ export function useRouteHandler({ enableVehicleTracking = true }: RouteHandlerPr
     return false;
   }, []);
 
-  const selectRoute = useCallback((routeId: string | null) => {
-    routeStore.selectRoute(routeId);
-    
-    if (routeId) {
-      const route = routeStore.getRoute(routeId);
-      console.log(`🎯 Selected route: ${route?.obaRoute?.shortName || routeId}`);
-    }
-  }, []);
-
   const clearRouteSelection = useCallback(() => {
     routeStore.selectRoute(null);
     routeStore.setRouteCoordinates(null, null);
+  }, []);
+
+  // Allow selecting which segment to display
+  const selectSegment = useCallback((routeId: string, segmentIndex: number) => {
+    const route = routeStore.getRoute(routeId);
+    if (!route) return;
+    routeStore.updateRoute(routeId, { selectedSegmentIndex: segmentIndex });
+  }, []);
+
+  const getSelectedSegmentIndex = useCallback((routeId: string): number => {
+    const route = routeStore.getRoute(routeId);
+    return route?.selectedSegmentIndex ?? 0;
   }, []);
 
   // Return stable interface
   return {
     // Route management
     addOBARoute,
+    addOBARouteFromStop,
     addMapboxRoute,
     updateRouteVehicles,
     selectRoute,
@@ -169,5 +240,9 @@ export function useRouteHandler({ enableVehicleTracking = true }: RouteHandlerPr
     linkPOIToRoute,
     deleteRoute: routeStore.deleteRoute,
     clearAllRoutes: routeStore.clearAllRoutes,
+    
+    // Segment selection
+    selectSegment,
+    getSelectedSegmentIndex,
   };
 } 

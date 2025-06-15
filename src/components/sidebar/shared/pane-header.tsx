@@ -11,7 +11,7 @@ interface PaneHeaderProps {
 
 export function PaneHeader({ title, onBack, className, children }: PaneHeaderProps) {
   return (
-    <div 
+    <div
       className={cn(
         "flex-shrink-0",
         className
@@ -22,8 +22,20 @@ export function PaneHeader({ title, onBack, className, children }: PaneHeaderPro
       }}
     >
       <div className="p-4">
-        <div className="flex items-center gap-2">
-          <BackButton onClick={onBack} />
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <BackButton onClick={onBack} />
+            {title && (
+              <h2 className="text-lg font-semibold" style={{ color: 'hsl(var(--foreground))' }}>
+                {title}
+              </h2>
+            )}
+          </div>
+          {children && (
+            <div className="flex items-center gap-2">
+              {children}
+            </div>
+          )}
         </div>
       </div>
     </div>

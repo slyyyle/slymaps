@@ -58,7 +58,7 @@ export function useOSMHandler({ enableAutoEnrichment = true }: OSMHandlerProps =
 
   const enrichPOIWithOSM = useCallback(async (poiId: string) => {
     try {
-      const poi = poiStore.getAllStoredPOIs().find((p: any) => p.id === poiId);
+      const poi = poiStore.getAllStoredPOIs().find(p => p.id === poiId);
       if (!poi) return false;
 
       const osmMatch = await osmService.findMatchingPOI(poi.name, poi.latitude, poi.longitude);

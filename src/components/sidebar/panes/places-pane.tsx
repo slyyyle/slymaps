@@ -122,13 +122,13 @@ export function PlacesPane({ onBack, mapRef, compact = false }: PlacesPaneProps)
   // Get all POIs from the store (now including favorites flag)
   const allPois = dataIntegration.pois.getAllPOIs();
   // Separate out saved (favorited) POIs
-  const savedPois = allPois.filter(poi => (poi as any).favorites);
+  const savedPois = allPois.filter(poi => poi.favorites);
   const currentLocation = dataIntegration.location.getCurrentLocation();
   
   // Categorize POIs
-  const searchResultPois = allPois.filter(poi => poi.isSearchResult && !(poi as any).favorites);
-  const nativePois = allPois.filter(poi => (poi.isNativePoi || poi.id.startsWith('native-poi-')) && !(poi as any).favorites);
-  const customPois = allPois.filter(poi => !poi.isSearchResult && !poi.isNativePoi && !poi.id.startsWith('native-poi-') && !(poi as any).favorites);
+  const searchResultPois = allPois.filter(poi => poi.isSearchResult && !poi.favorites);
+  const nativePois = allPois.filter(poi => (poi.isNativePoi || poi.id.startsWith('native-poi-')) && !poi.favorites);
+  const customPois = allPois.filter(poi => !poi.isSearchResult && !poi.isNativePoi && !poi.id.startsWith('native-poi-') && !poi.favorites);
   
   const handleDeletePoi = (poiId: string, poiName: string) => {
     console.log(`🗑️ Deleting POI: ${poiName} (${poiId})`);
@@ -194,9 +194,9 @@ export function PlacesPane({ onBack, mapRef, compact = false }: PlacesPaneProps)
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => dataIntegration.pois.favoritePOI(poi.id, !(poi as any).favorites)}
-                  className={`h-6 w-6 p-0 ${(poi as any).favorites ? 'text-destructive' : 'text-muted-foreground'}`}
-                  title={(poi as any).favorites ? 'Unsave' : 'Save'}
+                  onClick={() => dataIntegration.pois.favoritePOI(poi.id, !poi.favorites)}
+                  className={`h-6 w-6 p-0 ${poi.favorites ? 'text-destructive' : 'text-muted-foreground'}`}
+                  title={poi.favorites ? 'Unsave' : 'Save'}
                 >
                   <Icons.Heart className="h-4 w-4" />
                 </Button>

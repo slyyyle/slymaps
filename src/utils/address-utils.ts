@@ -59,7 +59,7 @@ export function formatAddressLines(address: AddressInput): string[] {
   return formattedRaw
     .split('\n')
     .filter((line: string) => line.trim());
-}
+} 
 
 // Add variant-based formatter for street / city / zip layouts
 export type AddressVariant = 'single' | 'double' | 'triple';

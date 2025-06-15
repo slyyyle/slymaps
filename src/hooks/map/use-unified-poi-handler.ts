@@ -5,6 +5,8 @@ import { usePOIStore } from '@/stores/use-poi-store';
 import { useOSMHandler } from './use-osm-handler';
 import { useRouteHandler } from './use-route-handler';
 import { osmService } from '@/services/osm-service';
+import type { PointOfInterest } from '@/types/core';
+import type { CreatedPOI } from '@/stores/use-poi-store';
 
 /**
  * Unified POI Handler
@@ -95,7 +97,7 @@ export function useUnifiedPOIHandler({
   }, []);
 
   // 🆕 OSM ENRICHMENT: Helper function to enrich native POIs with OSM data
-  const enrichNativePOIWithOSM = useCallback(async (nativePoi: any) => {
+  const enrichNativePOIWithOSM = useCallback(async (nativePoi: PointOfInterest) => {
     try {
       console.log(`🌍 Fetching OSM data for native POI: ${nativePoi.name}`);
       
@@ -206,11 +208,11 @@ export function useUnifiedPOIHandler({
   const handleCreatedPOIClick = interactionManager.handleCreatedPOIClick;
 
   // High-level operations
-  const handleSearchResult = useCallback((poi: any, searchQuery: string) => {
+  const handleSearchResult = useCallback((poi: PointOfInterest, searchQuery: string) => {
     return poiStore.addSearchResult(poi, searchQuery);
   }, []);
 
-  const handlePOICreation = useCallback((poi: any, customData?: any) => {
+  const handlePOICreation = useCallback((poi: PointOfInterest, customData?: Partial<CreatedPOI>) => {
     return poiStore.addCreatedPOI(poi, customData);
   }, []);
 

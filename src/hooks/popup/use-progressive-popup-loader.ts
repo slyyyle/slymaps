@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { usePopupStore } from '@/stores/use-popup-store';
-import { findNearbyTransit, getArrivalsForStop } from '@/services/oba';
+import { findNearbyTransit, getStopSchedule } from '@/services/oba';
 import { osmService } from '@/services/osm-service';
 import type { 
   POI, 
@@ -12,12 +12,17 @@ import type {
   Coordinates,
   OSMCoordinates 
 } from '@/types/popup';
+import type { ObaArrivalDeparture } from '@/types/oba';
+
+// In-memory cache for transit arrivals by stop ID
+const arrivalsCache: Map<string, ObaArrivalDeparture[]> = new Map();
 
 // Connection-aware loading strategy
 const getConnectionQuality = (): 'fast' | 'slow' | 'minimal' => {
   if (typeof navigator === 'undefined') return 'fast';
   
-  const connection = (navigator as any).connection;
+  const nav = navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string } };
+  const connection = nav.connection;
   if (!connection) return 'fast';
   
   if (connection.saveData || connection.effectiveType === '2g') return 'minimal';
@@ -48,46 +53,119 @@ export const useProgressivePopupLoader = (poi: POI | null) => {
   // 🔧 STABLE REFERENCES: Your proven pattern - empty deps
   const loadTransitSection = useCallback(async () => {
     if (!poi) return null;
-    
-    console.log(`🚌 Loading transit data for POI: ${poi.name}`);
-    
-    try {
-      // Find nearby transit stops
-      const nearbyTransit = await findNearbyTransit(
-        toOBACoordinates(poi), 
-        500 // 500m radius
-      );
-      
-      // Get real-time arrivals for nearby stops (limit to first 3 stops)
-      const transitStops = nearbyTransit.stops.slice(0, 3);
-      const arrivalPromises = transitStops.map(async (stop) => {
-        try {
-          const arrivals = await getArrivalsForStop(stop.id);
-          return { stop, arrivals: arrivals.slice(0, 3) }; // Max 3 arrivals per stop
-        } catch (error) {
-          console.warn(`Failed to get arrivals for stop ${stop.id}:`, error);
-          return { stop, arrivals: [] };
-        }
-      });
-      
-      const stopArrivals = await Promise.all(arrivalPromises);
-      
-      return {
-        stops: nearbyTransit.stops,
-        routes: nearbyTransit.routes,
-        stopArrivals,
-        searchLocation: nearbyTransit.searchLocation
+    // Always use static GTFS schedule for OBA stops
+    if (poi.isObaStop) {
+      const props = poi.properties as Record<string, any> | undefined;
+      const stop = {
+        id: poi.id,
+        name: poi.name,
+        code: props?.stop_code as string,
+        direction: props?.direction as string | undefined,
+        latitude: poi.latitude,
+        longitude: poi.longitude,
+        routeIds: (props?.route_ids as string[]) || [],
+        distance: 0,
       };
+      // Placeholder for schedule references
+      let references: { agencies?: import('@/types/oba').ObaAgency[]; routes?: import('@/types/oba').ObaRoute[] } | undefined;
+      console.log(`📅 Fetching static schedule for stop: ${poi.id}`);
+      // NEW: Check in-memory cache for existing arrivals
+      if (arrivalsCache.has(poi.id)) {
+        const cachedArrivals = arrivalsCache.get(poi.id)!;
+        console.log(`🗄️ Using cached arrivals for stop: ${poi.id}`, cachedArrivals);
+        return {
+          stops: [stop],
+          routes: [],
+          stopArrivals: [{ stop, arrivals: cachedArrivals }],
+          searchLocation: { latitude: poi.latitude, longitude: poi.longitude, radius: 0 },
+          agencies: references?.agencies,
+          referenceRoutes: references?.routes
+        } as TransitSectionData;
+      }
+      // Fetch schedule result and references
+      const scheduleResult = await getStopSchedule(poi.id);
+      const schedule = scheduleResult.entry;
+      references = scheduleResult.references;
+      try {
+        const now = Date.now();
+        const rawRouteSchedules = Array.isArray(schedule.stopRouteSchedules)
+          ? schedule.stopRouteSchedules
+          : [];
+        if (rawRouteSchedules.length === 0) {
+          console.warn(`No stopRouteSchedules in schedule for stop ${poi.id}:`, schedule);
+        }
+        const allArrivals = rawRouteSchedules.flatMap(routeSched => {
+          // Each route schedule can have multiple direction schedules
+          const directionArray = Array.isArray(routeSched.stopRouteDirectionSchedules)
+            ? routeSched.stopRouteDirectionSchedules
+            : [];
+          if (directionArray.length === 0) {
+            console.warn(`No stopRouteDirectionSchedules for route ${routeSched.routeId} at stop ${poi.id}`);
+          }
+          return directionArray.flatMap(dirSched => {
+            const rawTimes = Array.isArray(dirSched.scheduleStopTimes)
+              ? dirSched.scheduleStopTimes
+              : [];
+            if (rawTimes.length === 0) {
+              console.warn(`No scheduleStopTimes in direction sched for route ${routeSched.routeId} at stop ${poi.id}`);
+            }
+            return rawTimes.map(st => ({
+              routeId: routeSched.routeId,
+              routeShortName: routeSched.routeId.split('_')[1] || routeSched.routeId,
+              tripId: st.tripId,
+              tripHeadsign: '',
+              stopId: poi.id,
+              scheduledArrivalTime: st.arrivalTime,
+              predictedArrivalTime: null,
+              status: 'scheduled',
+              vehicleId: undefined,
+              distanceFromStop: undefined,
+              lastUpdateTime: undefined
+            }));
+          });
+        });
+        // Show all arrivals within the next 3 hours
+        const horizonTime = now + 3 * 60 * 60 * 1000;
+        const upcoming = allArrivals
+          .filter(a => {
+            const useTime = a.predictedArrivalTime || a.scheduledArrivalTime;
+            return useTime >= now && useTime <= horizonTime;
+          })
+          .sort((a, b) => {
+            const timeA = a.predictedArrivalTime || a.scheduledArrivalTime;
+            const timeB = b.predictedArrivalTime || b.scheduledArrivalTime;
+            return timeA - timeB;
+          });
+        // NEW: Cache the computed arrivals
+        arrivalsCache.set(poi.id, upcoming);
+      return {
+          stops: [stop],
+          routes: [],
+          stopArrivals: [{ stop, arrivals: upcoming }],
+          searchLocation: { latitude: poi.latitude, longitude: poi.longitude, radius: 0 },
+          agencies: references?.agencies,
+          referenceRoutes: references?.routes
+        } as TransitSectionData;
     } catch (error) {
-      console.error('Transit section loading failed:', error);
-      throw error;
+        console.error(`Schedule loading failed for ${poi.id}:`, error);
+        return {
+          stops: [{ ...stop, routeIds: [] }],
+          routes: [],
+          stopArrivals: [{ stop, arrivals: [] }],
+          searchLocation: { latitude: poi.latitude, longitude: poi.longitude, radius: 0 },
+          agencies: references?.agencies,
+          referenceRoutes: references?.routes
+        } as TransitSectionData;
+      }
     }
-  }, []); // Empty deps = stable forever
+    // For non-OBA POIs, no transit data
+    return null;
+  }, [poi]);
 
   const loadHoursSection = useCallback(async () => {
     if (!poi) return null;
     
-    console.log(`🕐 Loading hours data for POI: ${poi.name}`);
+    console.log(` Loading hours data for POI: ${poi.name}`);
     
     try {
       // 🆕 Check if POI already has OSM enrichment data (for native POIs)
@@ -213,8 +291,10 @@ export const useProgressivePopupLoader = (poi: POI | null) => {
     const connectionQuality = getConnectionQuality();
     console.log(`🌐 Connection quality: ${connectionQuality}, starting progressive load`);
     
-    // Layer 1: Transit (highest priority - immediate)
+    // Layer 1: Transit (highest priority - immediate) - only for specific OBA stop POIs
+    if (poi.isObaStop) {
     loadSection('transit', loadTransitSection);
+    }
     
     if (connectionQuality === 'minimal') {
       // On slow connections, only load transit
@@ -261,11 +341,12 @@ export const useProgressivePopupLoader = (poi: POI | null) => {
 
   // Auto-start loading when POI changes
   useEffect(() => {
+    // When POI changes, clear and start loading once
     setCurrentPOI(poi);
     if (poi) {
       startProgressiveLoad();
     }
-  }, [poi?.id, setCurrentPOI, startProgressiveLoad]);
+  }, [poi?.id]);
 
   return {
     // Section states

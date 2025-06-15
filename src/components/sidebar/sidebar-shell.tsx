@@ -13,6 +13,8 @@ import { useThemeStore } from '@/stores/theme-store';
 import { Button } from '@/components/ui/button';
 import { Icons } from '@/components/icons';
 import { UnifiedSearchBox } from '@/components/search/unified-search';
+import { useUnifiedPOIHandler } from '@/hooks/map/use-unified-poi-handler';
+import { useRouteHandler } from '@/hooks/map/use-route-handler';
 import { MAPBOX_ACCESS_TOKEN } from '@/lib/constants';
 
 export type PaneType = 'home' | 'directions' | 'transit' | 'places' | 'style' | null;
@@ -33,6 +35,8 @@ export function SidebarShell({
   const [activePane, setActivePane] = useState<PaneType>(defaultPane);
   const { sidebarTheme } = useThemeStore();
   const dataIntegration = useDataIntegration();
+  const unifiedHandler = useUnifiedPOIHandler({ map: mapRef?.current ?? null });
+  const routeHandler = useRouteHandler({ enableVehicleTracking: true });
 
   // Get POI list for search and saved
   const allPois = dataIntegration.pois.getAllPOIs();
@@ -110,12 +114,32 @@ export function SidebarShell({
               <UnifiedSearchBox
                 accessToken={MAPBOX_ACCESS_TOKEN}
                 mapRef={mapRef}
-                onResult={(coords) => {
-                  if (mapRef?.current) {
-                    mapRef.current.getMap().flyTo({ center: [coords.longitude, coords.latitude], zoom: 15 });
-                  }
+                onLocationSelect={(poi) => {
+                  unifiedHandler.handleSearchResultClick(poi);
                 }}
                 onClear={() => {}}
+                onRouteSelect={async (routeId) => {
+                  const storeRouteId = await routeHandler.addOBARoute(routeId);
+                  routeHandler.selectRoute(storeRouteId);
+                  // Switch to transit pane
+                  setActivePane('transit');
+                  const route = routeHandler.getRoute(storeRouteId);
+                  const mapInstance = mapRef?.current?.getMap();
+                  if (mapInstance && route?.geometry) {
+                    const coordsArr = route.geometry.geometry.coordinates;
+                    let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+                    coordsArr.forEach(([lon, lat]) => {
+                      minLng = Math.min(minLng, lon);
+                      minLat = Math.min(minLat, lat);
+                      maxLng = Math.max(maxLng, lon);
+                      maxLat = Math.max(maxLat, lat);
+                    });
+                    mapInstance.fitBounds(
+                      [[minLng, minLat], [maxLng, maxLat]],
+                      { padding: 20, duration: 2000 }
+                    );
+                  }
+                }}
                 placeholder="Search places, transit, routes..."
                 className="w-full"
               />
@@ -130,7 +154,7 @@ export function SidebarShell({
             <PlacesPane compact onBack={handleCloseSidebar} mapRef={mapRef} />
           </>
         ) : (
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-h-0">
             {activePane === 'directions' && (
               <DirectionsPane onBack={handleBackToMenu} mapRef={mapRef} />
             )}
@@ -138,7 +162,7 @@ export function SidebarShell({
               <HomePane onBack={handleBackToMenu} mapRef={mapRef} />
             )}
             {activePane === 'transit' && (
-              <TransitPane onBack={handleBackToMenu} />
+              <TransitPane onBack={handleBackToMenu} mapRef={mapRef} />
             )}
             {activePane === 'places' && (
               <PlacesPane onBack={handleBackToMenu} mapRef={mapRef} />

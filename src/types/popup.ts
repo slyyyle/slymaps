@@ -1,6 +1,6 @@
 // src/types/popup.ts - New types for enhanced popup system
-import type { GeoJSONSource, MapMouseEvent, MapTouchEvent } from 'mapbox-gl'
-import type { ObaArrivalDeparture, ObaNearbySearchResult } from './oba'
+import type { MapMouseEvent, MapTouchEvent } from 'mapbox-gl'
+import type { ObaArrivalDeparture } from './oba'
 import type { OSMPoiData } from '../services/osm-service'
 
 // Core POI interface that bridges your different POI sources
@@ -14,6 +14,7 @@ export interface POI {
   maki?: string
   osmId?: string
   source: 'mapbox' | 'search' | 'stored' | 'created' | 'osm'
+  isObaStop?: boolean
   properties?: Record<string, any>
 }
 
@@ -59,6 +60,9 @@ export interface TransitSectionData {
     longitude: number
     radius: number
   }
+  // Optional API reference data
+  agencies?: import('./oba').ObaAgency[]
+  referenceRoutes?: import('./oba').ObaRoute[]
 }
 
 // Coordinate system bridge utilities

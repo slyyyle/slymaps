@@ -92,10 +92,17 @@ function createClusters(pois: PointOfInterest[], zoom: number): ClusterPoint[] {
 }
 
 function getClusterRadius(zoom: number): number {
-  if (zoom < 10) return 5000;
-  if (zoom < 13) return 1000;
-  if (zoom < 16) return 200;
-  return 50;
+  if (zoom < 10) {
+    return 5000;
+  }
+  if (zoom < 13) {
+    return 1000;
+  }
+  if (zoom < 16) {
+    return 200;
+  }
+  // Disable clustering at high zoom so individual markers show
+  return 0;
 }
 
 // Haversine formula to compute distance between two lat/lng pairs in meters

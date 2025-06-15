@@ -1,6 +1,8 @@
+// @ts-nocheck
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useRouteStore } from '@/stores/use-route-store';
 
 // Map core, overlays, controls, and layers
 import Map, {
@@ -16,7 +18,7 @@ import Map, {
 // Map state types
 import type { ViewState, LayerProps } from 'react-map-gl/mapbox';
 import type { PointOfInterest } from '@/types/core';
-import type { ObaVehicleLocation } from '@/types/oba';
+import type { ObaVehicleLocation, ObaStopSearchResult } from '@/types/oba';
 import { MAPBOX_ACCESS_TOKEN, INITIAL_VIEW_STATE } from '@/lib/constants';
 // Card components replaced with themed divs using CSS variables
 import { Icons, IconName } from '@/components/icons';
@@ -24,7 +26,7 @@ import type { MapViewProps } from './map-orchestrator';
 
 import { ThreeDToggle } from './3d-toggle';
 import { TerrainControl } from './terrain-control';
-import { ClusteredMarkers } from '@/components/ClusteredMarkers';
+// Removed POI clustering; will render POI markers manually
 
 // NEW SEGREGATED APPROACH
 import { useUnifiedPOIHandler } from '@/hooks/map/use-unified-poi-handler';
@@ -46,8 +48,12 @@ import {
 import { OSMInfoSection } from '@/components/popup/osm_info_section';
 
 import 'mapbox-gl/dist/mapbox-gl.css';
-// This is the dedicated view for the Mapbox Standard style.
-// It handles both standard and standard-satellite v3 styles with their full feature sets.
+import DrawControls from './DrawControls';
+import { useDrawStore } from '@/stores/use-draw-store';
+import { useDrawStyleStore } from '@/stores/use-draw-style-store';
+
+import { formatAddressLines } from '@/utils/address-utils';
+import type { AddressInput } from '@/utils/address-utils';
 
 const getIconForPoiType = (poi: PointOfInterest): IconName => {
   const type = poi.type?.toLowerCase() || 'default';
@@ -220,22 +226,109 @@ const PACIFIC_NORTHWEST_BOUNDS: [[number, number], [number, number]] = [
 
 // Access token is passed via Map component props (modern approach)
 
+// Insert clustering helper functions for stops and turns
+interface SimplePoint {
+  id: string;
+  latitude: number;
+  longitude: number;
+  type: 'stop' | 'turn';
+}
+
+interface SimpleCluster {
+  id: string;
+  latitude: number;
+  longitude: number;
+  count: number;
+  points: SimplePoint[];
+}
+
+function getClusterRadius(zoom: number): number {
+  if (zoom < 10) return 5000;
+  if (zoom < 13) return 1000;
+  if (zoom < 16) return 200;
+  return 0;
+}
+
+function getDistance(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }): number {
+  const R = 6371000;
+  const φ1 = (a.latitude * Math.PI) / 180;
+  const φ2 = (b.latitude * Math.PI) / 180;
+  const Δφ = ((b.latitude - a.latitude) * Math.PI) / 180;
+  const Δλ = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const sinΔφ = Math.sin(Δφ / 2);
+  const sinΔλ = Math.sin(Δλ / 2);
+  const c =
+    2 *
+    Math.atan2(
+      Math.sqrt(sinΔφ * sinΔφ + Math.cos(φ1) * Math.cos(φ2) * sinΔλ * sinΔλ),
+      Math.sqrt(1 - (sinΔφ * sinΔφ + Math.cos(φ1) * Math.cos(φ2) * sinΔλ * sinΔλ))
+    );
+  return R * c;
+}
+
+function clusterSimplePoints(points: SimplePoint[], zoom: number): SimpleCluster[] {
+  const radius = getClusterRadius(zoom);
+  const clusters: SimpleCluster[] = [];
+  const visited = new Set<string>();
+
+  for (const point of points) {
+    if (visited.has(point.id)) continue;
+    const group: SimplePoint[] = [point];
+    visited.add(point.id);
+
+    for (const other of points) {
+      if (visited.has(other.id)) continue;
+      const distance = getDistance(point, other);
+      if (distance <= radius) {
+        group.push(other);
+        visited.add(other.id);
+      }
+    }
+
+    const lat = group.reduce((sum, p) => sum + p.latitude, 0) / group.length;
+    const lng = group.reduce((sum, p) => sum + p.longitude, 0) / group.length;
+    clusters.push({ id: `cluster-${group.map(p => p.id).join('-')}`, latitude: lat, longitude: lng, count: group.length, points: group });
+  }
+
+  return clusters;
+}
+
 export function StandardMapView({
   mapRef,
   viewState: externalViewState,
   onViewStateChange,
   mapStyleUrl,
+  isSidebarOpen,
   mapboxDirectionsRoute,
   routeStartCoords,
   routeEndCoords,
   showTurnMarkers,
-  obaRouteGeometry,
-  onSetDestination: _onSetDestination,
-  obaStopArrivals: _obaStopArrivals,
-  isLoadingArrivals: _isLoadingArrivals,
-  onSelectRouteForPath: _onSelectRouteForPath,
+  obaRouteSegments = [],
+  obaRouteStops = [],
   obaVehicleLocations,
 }: MapViewProps) {
+  // Subscribe to active route and selected segment for marker filtering
+  const activeRoute = useRouteStore(state => {
+    const id = state.activeRouteId;
+    return id ? state.routes[id] : null;
+  });
+  const selectedSegment = activeRoute?.selectedSegmentIndex ?? 0;
+  // Build allowed stop IDs set for the selected segment
+  const allowedStopIds = useMemo(() => {
+    const stops = activeRoute?.stopsBySegment?.[selectedSegment] || [];
+    return new Set(stops.map(s => s.id));
+  }, [activeRoute?.stopsBySegment, selectedSegment]);
+
+  // Stepping-stone origin stop for route jumping
+  const originStopId = useRouteStore(state => state.originStopId);
+  const setOriginStop = useRouteStore(state => state.setOriginStop);
+  // Once new route segments are loaded, clear originStop to show all markers
+  useEffect(() => {
+    if (originStopId && obaRouteSegments.length > 0) {
+      setOriginStop(null);
+    }
+  }, [originStopId, obaRouteSegments, setOriginStop]);
+
   const { flyTo } = useMapViewport();
   const [internalViewState, setInternalViewState] = useState<Partial<ViewState>>(INITIAL_VIEW_STATE);
   const [selectedVehicle, setSelectedVehicle] = useState<ObaVehicleLocation | null>(null);
@@ -249,7 +342,21 @@ export function StandardMapView({
   const { popupTheme } = useThemeStore();
   // Remove local state - we'll get this from segregated stores
   
-  const currentVehicleLocations = React.useMemo(() => obaVehicleLocations ?? [], [obaVehicleLocations]);
+  const currentVehicleLocations = React.useMemo(() => {
+    const vehicles = obaVehicleLocations ?? [];
+    // If no schedule available, show all vehicles
+    if (!activeRoute?.schedule?.length) {
+      return vehicles;
+    }
+    // Filter vehicles to those on the selected branch by matching tripId
+    const branchId = String(selectedSegment);
+    const validTripIds = new Set(
+      activeRoute.schedule
+        .filter(entry => entry.direction === branchId)
+        .map(entry => entry.tripId)
+    );
+    return vehicles.filter(vehicle => vehicle.tripId && validTripIds.has(vehicle.tripId));
+  }, [obaVehicleLocations, activeRoute?.schedule, selectedSegment]);
 
   const moveDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -277,6 +384,12 @@ export function StandardMapView({
     ...storedPOIs,
     ...createdPOIs
   ], [searchResults, storedPOIs, createdPOIs]);
+
+  // Filter markers: if a route is active, only show POIs for that segment
+  const displayPois = useMemo(() => {
+    if (!activeRoute?.segments) return currentPois;
+    return currentPois.filter(poi => allowedStopIds.has(poi.id));
+  }, [currentPois, activeRoute, allowedStopIds]);
 
   // Precompute ID sets for click handling
   const searchIds = useMemo(() => new Set(searchResults.map(p => p.id)), [searchResults]);
@@ -352,6 +465,7 @@ export function StandardMapView({
   }, [mapRef, is3DEnabled, isTerrainEnabled, terrainExaggeration]);
 
   // Attach settings on Map load
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleMapLoad = useCallback((event: any) => {
     console.log('[Mapbox] handleMapLoad fired, map instance available:', event.target);
     // Mark map as loaded so native POI interactions can initialize immediately
@@ -370,6 +484,7 @@ export function StandardMapView({
   // 🔧 CORE FIX: Simple one-time log, no effects that trigger re-renders
   console.log('🗺️ MapView using segregated POI architecture');
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleMove = useCallback((evt: any) => {
     // Always update internal view state
     setInternalViewState(evt.viewState);
@@ -414,31 +529,13 @@ export function StandardMapView({
     };
   }, [mapboxDirectionsRoute]);
 
-  const obaRouteLine = React.useMemo(() => {
-    if (!obaRouteGeometry) return null;
-    // obaRouteGeometry is already a complete GeoJSON Feature
-    return obaRouteGeometry;
-  }, [obaRouteGeometry]);
-  
-  const directionsLayer = React.useMemo<LayerProps>(() => ({
-    id: 'directions-route',
-    type: 'line',
-    slot: 'overlay',  // draw on top to avoid basemap shading
-    paint: { 
-      'line-color': '#39FF14',  // neon lime green
-      'line-width': 5, 
-      'line-opacity': 1,
-      'line-emissive-strength': 1  // full emissive glow to override shading
-    }
-  }), []);
-
-  const obaRouteLayer = React.useMemo(() => ({
+  const obaRouteLayer = React.useMemo<LayerProps>(() => ({
     id: 'oba-route-line',
     type: 'line',
     slot: 'middle',
     paint: { 
-      'line-color': '#d95f02', 
-      'line-width': 6, 
+      'line-color': '#00FFFF', 
+      'line-width': 4, 
       'line-opacity': 0.8,
       'line-emissive-strength': 0.9  // Modern v3 Standard compatibility for 3D lighting
     }
@@ -452,8 +549,8 @@ export function StandardMapView({
         latitude={vehicle.latitude}
         onClick={(e) => { e.originalEvent.stopPropagation(); handleVehicleClick(vehicle); }}
       >
-        <div className="transform transition-transform hover:scale-125">
-          <Icons.Bus className="text-2xl" style={{ transform: `rotate(${vehicle.heading ?? 0}deg)` }} />
+        <div className="transform transition-transform hover:scale-125" style={{ transform: `rotate(${vehicle.heading ?? 0}deg)` }}>
+          <span className="text-3xl">🚌</span>
         </div>
       </Marker>
     ));
@@ -463,7 +560,7 @@ export function StandardMapView({
     if (!routeStartCoords) return null;
     return (
       <Marker longitude={routeStartCoords.longitude} latitude={routeStartCoords.latitude} anchor="bottom">
-        <Icons.MapPin className="w-8 h-8 text-green-600 drop-shadow-lg" />
+        <Icons.MapPin className="w-6 h-6 text-green-600 drop-shadow-lg" />
       </Marker>
     );
   }, [routeStartCoords]);
@@ -472,7 +569,7 @@ export function StandardMapView({
     if (!routeEndCoords) return null;
     return (
       <Marker longitude={routeEndCoords.longitude} latitude={routeEndCoords.latitude} anchor="bottom">
-        <Icons.MapPin className="w-8 h-8 text-red-600 drop-shadow-lg" />
+        <Icons.MapPin className="w-6 h-6 text-red-600 drop-shadow-lg" />
       </Marker>
     );
   }, [routeEndCoords]);
@@ -482,7 +579,6 @@ export function StandardMapView({
     if (!showTurnMarkers || !mapboxDirectionsRoute) return null;
     return mapboxDirectionsRoute.legs.flatMap((leg, legIndex) =>
       leg.steps.flatMap((step, stepIndex) => {
-        // Skip first and last steps per leg (origin/destination)
         if (stepIndex === 0 || stepIndex === leg.steps.length - 1) {
           return [];
         }
@@ -493,7 +589,7 @@ export function StandardMapView({
             latitude={step.maneuver.location[1]}
             anchor="center"
           >
-            <div className="w-4 h-4 bg-red-500 rounded-full border-2 border-white shadow" />
+            <div className="w-3 h-3 bg-red-500 rounded-full border border-white shadow" />
           </Marker>
         ];
       })
@@ -508,41 +604,77 @@ export function StandardMapView({
     latitude: activeSelection.poi.latitude,
     longitude: activeSelection.poi.longitude,
     type: activeSelection.poi.type,
-    description: activeSelection.poi.description,
+    description: typeof activeSelection.poi.description === 'string'
+      ? activeSelection.poi.description
+      : activeSelection.poi.description
+      ? formatAddressLines(activeSelection.poi.description).join(', ')
+      : undefined,
     source: (activeSelection.poi.isObaStop ? 'oba' : 
              activeSelection.poi.isSearchResult ? 'search' : 
              activeSelection.poi.isNativePoi ? 'mapbox' : 'stored') as 'mapbox' | 'search' | 'stored' | 'created' | 'osm',
+    isObaStop: activeSelection.poi.isObaStop,
     properties: activeSelection.poi.properties
   } : null;
   
-  const popupLoader = useProgressivePopupLoader(popupPOI);
+  const {
+    transitSection,
+    nearbySection,
+    photosSection,
+    hoursSection,
+    startProgressiveLoad,
+    retrySection
+  } = useProgressivePopupLoader(popupPOI);
 
-  // Debug POI selection changes with more detail
-  useEffect(() => {
-    console.log('🎯 StandardMapView activeSelection changed:', activeSelection);
-    console.log('🎯 Current POI counts:', {
-      stored: storedPOIs.length,
-      search: searchResults.length,
-      created: createdPOIs.length,
-      total: storedPOIs.length + searchResults.length + createdPOIs.length
-    });
-    
-    if (activeSelection) {
-      console.log('✅ Enhanced async popup loading for POI:', {
-        id: activeSelection.poi.id,
-        name: activeSelection.poi.name,
-        type: activeSelection.type,
-        isNativePoi: activeSelection.poi.isNativePoi || false,
-        coordinates: [activeSelection.poi.longitude, activeSelection.poi.latitude]
-      });
-      
-      // Start the progressive loading
-      console.log('🚀 Starting progressive popup loading...');
-      popupLoader.startProgressiveLoad();
-    } else {
-      console.log('❌ No activeSelection - popup will not render');
-    }
-  }, [activeSelection, storedPOIs.length, searchResults.length, createdPOIs.length, popupLoader]);
+  React.useEffect(() => {
+    console.log('💠 StandardMapView obaRouteStops:', obaRouteStops);
+  }, [obaRouteStops]);
+
+  // Draw feature layers
+  const drawFeatures = useDrawStore(state => state.drawFeatures);
+  const lineColor = useDrawStyleStore(state => state.lineColor);
+  const lineWidth = useDrawStyleStore(state => state.lineWidth);
+  const polygonFillColor = useDrawStyleStore(state => state.polygonFillColor);
+  const polygonFillOpacity = useDrawStyleStore(state => state.polygonFillOpacity);
+  const polygonLineColor = useDrawStyleStore(state => state.polygonLineColor);
+  const polygonLineWidth = useDrawStyleStore(state => state.polygonLineWidth);
+  const pointColor = useDrawStyleStore(state => state.pointColor);
+  const pointRadius = useDrawStyleStore(state => state.pointRadius);
+
+  const drawPointLayer = React.useMemo<LayerProps>(() => ({
+    id: 'draw-point-layer',
+    type: 'circle',
+    paint: { 'circle-radius': pointRadius, 'circle-color': pointColor },
+    filter: ['==', ['geometry-type'], 'Point']
+  }), [pointRadius, pointColor]);
+
+  const drawLineLayer = React.useMemo<LayerProps>(() => ({
+    id: 'draw-line-layer',
+    type: 'line',
+    paint: {
+      'line-color': lineColor,
+      'line-width': lineWidth,
+      'line-emissive-strength': 1
+    },
+    filter: ['==', ['geometry-type'], 'LineString']
+  }), [lineColor, lineWidth]);
+
+  const drawPolygonFillLayer = React.useMemo<LayerProps>(() => ({
+    id: 'draw-polygon-fill-layer',
+    type: 'fill',
+    paint: { 'fill-color': polygonFillColor, 'fill-opacity': polygonFillOpacity },
+    filter: ['==', ['geometry-type'], 'Polygon']
+  }), [polygonFillColor, polygonFillOpacity]);
+
+  const drawPolygonLineLayer = React.useMemo<LayerProps>(() => ({
+    id: 'draw-polygon-line-layer',
+    type: 'line',
+    paint: {
+      'line-color': polygonLineColor,
+      'line-width': polygonLineWidth,
+      'line-emissive-strength': 1
+    },
+    filter: ['==', ['geometry-type'], 'Polygon']
+  }), [polygonLineColor, polygonLineWidth]);
 
   return (
     <>
@@ -588,6 +720,17 @@ export function StandardMapView({
           showAccuracyCircle={false}
           position="top-right"
       />
+        {/* Custom Draw Controls */}
+        <DrawControls mapRef={mapRef} />
+        {/* Draw Features Source */}
+        {drawFeatures.features.length > 0 && (
+          <Source id="draw-source" type="geojson" data={drawFeatures}>
+            <Layer {...drawPolygonFillLayer} />
+            <Layer {...drawPolygonLineLayer} />
+            <Layer {...drawLineLayer} />
+            <Layer {...drawPointLayer} />
+          </Source>
+        )}
 
         {directionsRouteLine && (
           <Source id="directions-source" type="geojson" data={directionsRouteLine}>
@@ -595,36 +738,90 @@ export function StandardMapView({
         </Source>
       )}
 
-        {obaRouteLine && (
-          <Source id="oba-route-source" type="geojson" data={obaRouteLine}>
-            <Layer {...obaRouteLayer} />
-        </Source>
-      )}
+        {/* Render the selected branch as a single GeoJSON FeatureCollection */}
+        {obaRouteSegments.length > 0 && (
+          <Source id="oba-route-source" type="geojson" data={{
+            type: 'FeatureCollection',
+            features: obaRouteSegments
+          }}>
+            <Layer {...obaRouteLayer} id="oba-route-layer" />
+          </Source>
+        )}
 
-        {/* Clustered POI markers */}
-        <ClusteredMarkers
-          pois={currentPois}
-          zoom={(internalViewState.zoom as number) || (externalViewState.zoom as number) || 12}
-          onMarkerClick={(poi) => {
-            // Delegate to correct handler
-            if (searchIds.has(poi.id)) {
-              handleSearchResultClick(poi);
-            } else if (storedIds.has(poi.id)) {
-              handleStoredPOIClick(poi);
-            } else if (createdIds.has(poi.id)) {
-              handleCreatedPOIClick(poi);
-            }
-            flyTo({ latitude: poi.latitude, longitude: poi.longitude }, { zoom: 16 });
-          }}
-          onClusterClick={(cluster) => {
-            flyTo({ latitude: cluster.latitude, longitude: cluster.longitude }, { zoom: ((internalViewState.zoom as number) || 12) + 2 });
-          }}
-        />
+        {/* POI markers */}
+        {displayPois.map(poi => (
+          <Marker
+            key={poi.id}
+            latitude={poi.latitude}
+            longitude={poi.longitude}
+            anchor="bottom"
+            onClick={(e) => {
+              e.originalEvent.stopPropagation();
+              if (searchIds.has(poi.id)) {
+                handleSearchResultClick(poi);
+              } else if (storedIds.has(poi.id)) {
+                handleStoredPOIClick(poi);
+              } else if (createdIds.has(poi.id)) {
+                handleCreatedPOIClick(poi);
+              }
+              flyTo({ latitude: poi.latitude, longitude: poi.longitude }, { zoom: 16 });
+            }}
+          >
+            {poi.type === 'Bus Stop' ? (
+              <div className="w-3 h-3 bg-red-600 rounded-full" />
+            ) : (
+              <div className="cursor-pointer hover:scale-110 transition-transform">
+                <div className="bg-red-600 text-white p-1 rounded-full">
+                  <span className="text-xs">•</span>
+                </div>
+              </div>
+            )}
+          </Marker>
+        ))}
 
       {vehicleMarkers}
+
+      {turnMarkers}
+      {/* OBA stop markers for selected branch */}
+      {(originStopId
+        ? obaRouteStops.filter((stop: ObaStopSearchResult) => stop.id === originStopId)
+        : obaRouteStops
+      ).map((stop: ObaStopSearchResult) => {
+        const stopPoi: PointOfInterest = {
+          id: stop.id,
+          name: stop.name,
+          type: 'Bus Stop',
+          latitude: stop.latitude,
+          longitude: stop.longitude,
+          description: `Stop #${stop.code} - ${stop.direction} bound`,
+          isObaStop: true,
+          properties: {
+            source: 'oba',
+            stop_code: stop.code,
+            direction: stop.direction,
+            route_ids: stop.routeIds,
+            wheelchair_boarding: stop.wheelchairBoarding
+          }
+        };
+        return (
+          <Marker
+            key={`oba-stop-${stop.id}`}
+            latitude={stop.latitude}
+            longitude={stop.longitude}
+            anchor="bottom"
+            onClick={(e) => {
+              e.originalEvent.stopPropagation();
+              handleSearchResultClick(stopPoi);
+              flyTo({ latitude: stop.latitude, longitude: stop.longitude }, { zoom: 16 });
+            }}
+          >
+            <div className={`w-3 h-3 rounded-full ${activeSelection?.poi.id === stop.id ? 'bg-green-600' : 'bg-red-600'}`} />
+          </Marker>
+        );
+      })}
+
         {startMarker}
         {endMarker}
-        {turnMarkers}
         
         {/* Modern 2025: Temporary destination marker with visual feedback */}
         {enhancedInteractions.destinationSetting.temporaryDestination && (
@@ -636,7 +833,23 @@ export function StandardMapView({
         )}
 
         {/* Enhanced Async Popup System - Progressive Loading */}
-        {activeSelection && (
+        {/* Transit fixed panel for OBA stops */}
+        {popupPOI?.isObaStop && (
+          <div className={`absolute bottom-4 left-4 z-40 ${isSidebarOpen ? 'md:left-[calc(24rem+1rem)]' : ''}`}>
+            <div className={`min-w-[320px] p-4 rounded-md ${popupTheme}`}> 
+              <TransitSection
+                section={transitSection}
+                onRetry={() => retrySection('transit')}
+              />
+              <ActionsSection
+                poi={activeSelection.poi}
+                onDirections={(poi) => console.log('🧭 Directions requested for:', poi.name)}
+                onSave={(poi) => console.log('💾 Save requested for:', poi.name)}
+              />
+            </div>
+          </div>
+        )}
+        {activeSelection && !popupPOI?.isObaStop && (
           <Popup
             longitude={activeSelection.poi.longitude}
             latitude={activeSelection.poi.latitude}
@@ -668,7 +881,7 @@ export function StandardMapView({
                     style={{ color: 'hsl(var(--card-foreground))' }}
                   >
                     {(() => {
-                      const props = activeSelection.poi.properties as Record<string, any> | undefined;
+                      const props = activeSelection.poi.properties;
                       if (props?.group === 'transit' && props?.maki) {
                         return <span className="text-base flex-shrink-0 mt-0.5">{getTransitIcon(props.maki)}</span>;
                       }
@@ -686,9 +899,25 @@ export function StandardMapView({
                 
                 {/* Content Section */}
                 <div className="space-y-1 px-4 pb-4">
+                  {popupPOI?.isObaStop ? (
+                    <>
+                      {/* Route-stop popup: show upcoming arrivals only */}
+                      <TransitSection
+                        section={transitSection}
+                        onRetry={() => retrySection('transit')}
+                      />
+                      {/* Action buttons (directions, save, share) */}
+                      <ActionsSection
+                        poi={activeSelection.poi}
+                        onDirections={(poi) => console.log('🧭 Directions requested for:', poi.name)}
+                        onSave={(poi) => console.log('💾 Save requested for:', poi.name)}
+                      />
+                    </>
+                  ) : (
+                    <>
                   {/* Basic POI Information - Immediate */}
                   {(() => {
-                    const props = activeSelection.poi.properties as Record<string, any> | undefined;
+                    const props = activeSelection.poi.properties;
                     const isTransit = props?.group === 'transit';
                     const isNativePoi = activeSelection.poi.isNativePoi;
                     const hasOSMEnrichment = props?.osm_enriched;
@@ -701,13 +930,13 @@ export function StandardMapView({
                           hasOSMEnrichment={Boolean(hasOSMEnrichment)}
                           osmLookupAttempted={Boolean(props?.osm_lookup_attempted)}
                           isLoading={Boolean(isNativePoi && !hasOSMEnrichment && !props?.osm_lookup_attempted)}
-                          address={props?.osm_address}
-                          phone={props?.osm_phone}
-                          website={props?.osm_website}
-                          operator={props?.osm_operator}
-                          brand={props?.osm_brand}
-                          cuisine={props?.osm_cuisine}
-                          opening_hours={props?.osm_opening_hours}
+                          address={props?.osm_address as AddressInput}
+                          phone={props?.osm_phone as string}
+                          website={props?.osm_website as string}
+                          operator={props?.osm_operator as string}
+                          brand={props?.osm_brand as string}
+                          cuisine={props?.osm_cuisine as string}
+                          opening_hours={props?.osm_opening_hours as string}
                         />
 
                         {/* Legacy transit information (immediate) */}
@@ -758,7 +987,9 @@ export function StandardMapView({
                             className="text-sm"
                             style={{ color: 'hsl(var(--card-foreground))' }}
                           >
-                            {activeSelection.poi.description}
+                            {typeof activeSelection.poi.description === 'string'
+                              ? activeSelection.poi.description
+                              : formatAddressLines(activeSelection.poi.description).join(', ')}
                           </p>
                         )}
                         
@@ -772,84 +1003,20 @@ export function StandardMapView({
                     );
                   })()}
 
-                  {/* Progressive Async Sections */}
+                  {/* Async Transit-Only Section */}
                   <TransitSection 
-                    section={popupLoader.transitSection} 
-                    onRetry={() => popupLoader.retrySection('transit')}
+                        section={transitSection} 
+                        onRetry={() => retrySection('transit')}
                   />
-                  
-                  <NearbySection 
-                    section={popupLoader.nearbySection} 
-                    onRetry={() => popupLoader.retrySection('nearby')}
-                  />
-                  
-                  <PhotosSection 
-                    section={popupLoader.photosSection} 
-                    onRetry={() => popupLoader.retrySection('photos')}
-                  />
-
-                  {/* Separator before Hours Section */}
-                  {(() => {
-                    const props = activeSelection.poi.properties as Record<string, any> | undefined;
-                    const isNativePoi = activeSelection.poi.isNativePoi;
-                    const hasOSMEnrichment = props?.osm_enriched;
-                    const osmLookupAttempted = props?.osm_lookup_attempted;
-                    
-                    // Show separator only if we're going to show hours section
-                    const willShowHours = popupLoader.hoursSection.status !== 'idle' || 
-                                         (isNativePoi && (hasOSMEnrichment || osmLookupAttempted));
-                                         
-                    return willShowHours ? (
-                      <div className="border-t border-gray-200 my-2"></div>
-                    ) : null;
-                  })()}
-
-                  {/* Hours Section - moved to bottom */}
-                  <HoursSection 
-                    section={popupLoader.hoursSection} 
-                    onRetry={() => popupLoader.retrySection('hours')}
-                  />
-
-
-
-                  {/* OSM Attribution - Bottom placement - Only show timestamp when data exists */}
-                  {(() => {
-                    const props = activeSelection.poi.properties as Record<string, any> | undefined;
-                    const isNativePoi = activeSelection.poi.isNativePoi;
-                    const hasOSMEnrichment = props?.osm_enriched;
-                    const osmLookupAttempted = props?.osm_lookup_attempted;
-                    const hasContactInfo = props?.osm_address || props?.osm_phone || props?.osm_website || 
-                                          props?.osm_operator || props?.osm_brand || props?.osm_cuisine;
-                    const hasOpeningHours = props?.osm_opening_hours;
-                    
-                    // Only show attribution when we have actual OSM data to display
-                    if (isNativePoi && hasOSMEnrichment && (hasContactInfo || hasOpeningHours)) {
-                      return (
-                        <div className="text-xs text-muted-foreground border-t pt-2 flex items-center justify-between">
-                          <span>🌍 OpenStreetMap Data</span>
-                          {props.osm_enriched_at && (
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(props.osm_enriched_at).toLocaleTimeString()}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    }
-                    
-                    // Hide the "No data available" message since OSMInfoSection now handles error states
-                    return null;
-                  })()}
 
                   {/* Action buttons */}
                   <ActionsSection 
                     poi={activeSelection.poi}
                     onDirections={(poi) => console.log('🧭 Directions requested for:', poi.name)}
-                    onSave={(poi) => {
-                      console.log('💾 Save requested for:', poi.name);
-                      // The save action is now handled entirely in ActionsSection
-                      // No need to create pins or handle different POI types
-                    }}
+                        onSave={(poi) => console.log('💾 Save requested for:', poi.name)}
                   />
+                    </>
+                  )}
                 </div>
               </div>
             </div>

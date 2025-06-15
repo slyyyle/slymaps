@@ -1,4 +1,6 @@
 import { usePOIStore } from '@/stores/use-poi-store';
+import { useRouteStore } from '@/stores/use-route-store';
+import { useDataStore } from '@/stores/use-data-store';
 
 /**
  * Development helper functions for managing application state
@@ -12,14 +14,24 @@ export const clearAllStores = () => {
     return;
   }
 
-  const store = usePOIStore.getState();
-  
-  // Clear all POI stores by setting initial state
-  store.cleanup();
-  store.clearSearchResults();
-  store.clearSelection();
+  // Clear POI store
+  const poiStore = usePOIStore.getState();
+  poiStore.cleanup();
+  poiStore.clearSearchResults();
+  poiStore.clearSelection();
 
-  console.log('✅ All stores cleared successfully');
+  // Clear Route store
+  const routeStore = useRouteStore.getState();
+  routeStore.clearAllRoutes();
+  // Optional: cleanup for route store (no-op by default)
+  routeStore.cleanup();
+
+  // Reset main Data store and clear expired cache
+  const dataStore = useDataStore.getState();
+  dataStore.resetStore();
+  dataStore.cleanupExpiredData();
+
+  console.log('✅ Dev helper: all stores and caches cleared successfully');
 };
 
 // Make the function available globally in development
