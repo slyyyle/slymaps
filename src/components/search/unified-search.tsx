@@ -1,16 +1,16 @@
 "use client";
 
 import React, { useState, useCallback, useRef } from 'react';
-import { useDataIntegration } from '@/hooks/data/use-data-integration';
+import { useSearchHistory } from '@/hooks/search/use-search-history';
 import { useUnifiedSearch } from '@/hooks/search/use-unified-search';
 import { useSearchResultHandling } from '../../hooks/search/use-search-result-handling';
 import { useSearchActions } from '@/hooks/search/use-search-actions';
 import { MapboxSearchBox } from '@/components/search/mapbox-searchbox';
 import { SearchActions } from '@/components/search/search-actions';
 import { UnifiedSuggestionsDropdown } from '@/components/search/unified-suggestions-dropdown';
-import type { Coordinates, PointOfInterest } from '@/types/core';
+import type { Coordinates, Place } from '@/types/core';
 import type { MapboxRetrieveFeature, MapboxSuggestion, MapboxRetrieveResponse } from '@/types/mapbox';
-import type { ObaStopSearchResult, UnifiedSearchSuggestion } from '@/types/oba';
+import type { ObaStopSearchResult, UnifiedSearchSuggestion } from '@/types/transit/oba';
 import type { MapRef } from 'react-map-gl/mapbox';
 import { convertMapboxSuggestionsToUnified } from '@/utils/search-utils';
 
@@ -20,7 +20,7 @@ interface UnifiedSearchBoxProps {
   onClear: () => void;
   onRouteSelect?: (routeId: string) => void;
   onStopSelect?: (stop: ObaStopSearchResult) => void;
-  onLocationSelect?: (poi: PointOfInterest) => void;
+  onLocationSelect?: (poi: Place) => void;
   onTransitNearby?: (coords: Coordinates) => void;
   currentLocation?: Coordinates;
   // Types of suggestions to show: 'place','stop','route'
@@ -59,9 +59,7 @@ export function UnifiedSearchBox({
   disabled: _disabled = false,
   suggestionTypes = ['place','stop','route'],
 }: UnifiedSearchBoxProps) {
-  const dataIntegration = useDataIntegration();
-  const { searches } = dataIntegration;
-  const { addSearch } = searches;
+  const { addSearchHistory } = useSearchHistory();
   const searchBoxRef = useRef<HTMLDivElement>(null);
   const [currentQuery, setCurrentQuery] = useState('');
   const [mapboxSuggestions, setMapboxSuggestions] = useState<MapboxSuggestion[]>([]);
@@ -119,7 +117,7 @@ export function UnifiedSearchBox({
       latitude: result.geometry.coordinates[1],
       longitude: result.geometry.coordinates[0],
     };
-    addSearch(currentQuery, { mapboxFeatures: [], pois: [], routes: [] }, coords);
+    addSearchHistory({ query: currentQuery, metadata: { mapboxFeatures: [], pois: [], routes: [], coords } });
 
     // Delegate to existing retrieve handler to add POI, select, and fly
     searchResultHandling.handleSearchBoxRetrieve(result);
@@ -129,7 +127,7 @@ export function UnifiedSearchBox({
     (searchBoxRef.current as any)?.setValue(displayName);
     setCurrentQuery(displayName);
     onValueChange?.(displayName);
-  }, [searchResultHandling, unifiedSearch, addSearch, currentQuery, onValueChange]);
+  }, [searchResultHandling, unifiedSearch, addSearchHistory, currentQuery, onValueChange]);
 
   // Handle Mapbox suggestions from the search box
   const handleMapboxSuggestionsChange = useCallback((suggestions: MapboxSuggestion[]) => {
@@ -181,7 +179,7 @@ export function UnifiedSearchBox({
       (searchBoxRef.current as any)?.setValue(displayText);
       setCurrentQuery(displayText);
       onValueChange?.(displayText);
-      addSearch(currentQuery, { mapboxFeatures: [], pois: [], routes: [] });
+      addSearchHistory({ query: currentQuery, metadata: { mapboxFeatures: [], pois: [], routes: [] } });
     } else if (suggestion.type === 'stop') {
       // Stop selection: invoke stop handler, update input, and record
       searchResultHandling.handleUnifiedSelect(suggestion);
@@ -190,13 +188,13 @@ export function UnifiedSearchBox({
       (searchBoxRef.current as any)?.setValue(displayText);
       setCurrentQuery(displayText);
       onValueChange?.(displayText);
-        addSearch(currentQuery, { mapboxFeatures: [], pois: [], routes: [] }, { latitude: stopData.latitude, longitude: stopData.longitude });
+        addSearchHistory({ query: currentQuery, metadata: { mapboxFeatures: [], pois: [], routes: [], coords: { latitude: stopData.latitude, longitude: stopData.longitude } } });
     }
 
     // Clear suggestions
     setMapboxSuggestions([]);
     unifiedSearch.clearSearchResults();
-  }, [accessToken, handleSearchBoxRetrieve, searchResultHandling, sessionToken, unifiedSearch, onValueChange, addSearch, currentQuery, onRouteSelect]);
+  }, [accessToken, handleSearchBoxRetrieve, searchResultHandling, sessionToken, unifiedSearch, onValueChange, addSearchHistory, currentQuery, onRouteSelect]);
 
   if (!accessToken) {
     return (

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useDataIntegration } from '../data/use-data-integration';
+import { useMapRouteHandler } from '@/hooks/map';
 import type { Coordinates } from '@/types/core';
 
 interface DestinationSettingState {
@@ -12,7 +12,8 @@ interface DestinationSettingState {
 }
 
 export function useDestinationSetting() {
-  const dataIntegration = useDataIntegration();
+  const routeHandler = useMapRouteHandler();
+  const { getRouteCoordinates, addMapboxRoute, selectRoute } = routeHandler;
   
   const [state, setState] = useState<DestinationSettingState>({
     temporaryDestination: null,
@@ -43,15 +44,19 @@ export function useDestinationSetting() {
   }, [state.isSettingDestination]);
 
   // Confirm the temporary destination
-  const confirmDestination = useCallback((coords: Coordinates) => {
-    dataIntegration.directions.setDirectionsDestination(coords);
-    
+  const confirmDestination = useCallback(async (coords: Coordinates) => {
+    const { start } = getRouteCoordinates();
+    if (start) {
+      const storeId = await addMapboxRoute(start, coords);
+      // Select the newly added route so it becomes active
+      selectRoute(storeId);
+    }
     setState({
       temporaryDestination: null,
       isSettingDestination: false,
       mode: 'idle'
     });
-  }, [dataIntegration.directions]);
+  }, [getRouteCoordinates, addMapboxRoute, selectRoute]);
 
   // Cancel destination setting
   const cancelDestinationSetting = useCallback(() => {
@@ -63,24 +68,21 @@ export function useDestinationSetting() {
   }, []);
 
   // Quick set destination (for search results, POI clicks, etc.)
-  const setDestinationDirect = useCallback((coords: Coordinates) => {
-    dataIntegration.directions.setDirectionsDestination(coords);
-  }, [dataIntegration.directions]);
-
-  // Get the current destination from the directions state
-  const getCurrentDestination = useCallback(() => {
-    return dataIntegration.directions.getDirectionsState().destination;
-  }, [dataIntegration.directions]);
+  const setDestinationDirect = useCallback(async (coords: Coordinates) => {
+    const { start } = getRouteCoordinates();
+    if (start) {
+      await addMapboxRoute(start, coords);
+    }
+  }, [getRouteCoordinates, addMapboxRoute]);
 
   // Clear the current destination
   const clearDestination = useCallback(() => {
-    dataIntegration.directions.setDirectionsDestination(null);
-  }, [dataIntegration.directions]);
+    routeHandler.clearRouteSelection();
+  }, [routeHandler]);
 
   return {
     // State
     ...state,
-    currentDestination: getCurrentDestination(),
     
     // Actions
     startDestinationSetting,

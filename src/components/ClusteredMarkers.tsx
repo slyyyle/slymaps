@@ -1,19 +1,19 @@
 import React, { useMemo } from 'react';
 import { Marker } from 'react-map-gl/mapbox';
-import type { PointOfInterest } from '@/types/core';
+import type { Place } from '@/types/core';
 
 export interface ClusterPoint {
   id: string;
   latitude: number;
   longitude: number;
   count: number;
-  pois: PointOfInterest[];
+  pois: Place[];
 }
 
 interface ClusteredMarkersProps {
-  pois: PointOfInterest[];
+  pois: Place[];
   zoom: number;
-  onMarkerClick: (poi: PointOfInterest) => void;
+  onMarkerClick: (poi: Place) => void;
   onClusterClick: (cluster: ClusterPoint) => void;
 }
 
@@ -43,7 +43,7 @@ export function ClusteredMarkers({ pois, zoom, onMarkerClick, onClusterClick }: 
           ) : (
             <div className="cursor-pointer hover:scale-110 transition-transform">
               {/* Render individual POI marker, delegate to parent onMarkerClick */}
-              <div className="bg-red-600 text-white p-1 rounded-full">
+              <div className="bg-blue-600 text-white p-1 rounded-full">
                 {/* Could insert a custom icon here if desired */}
                 <span className="text-xs">•</span>
               </div>
@@ -55,7 +55,7 @@ export function ClusteredMarkers({ pois, zoom, onMarkerClick, onClusterClick }: 
   );
 }
 
-function createClusters(pois: PointOfInterest[], zoom: number): ClusterPoint[] {
+function createClusters(pois: Place[], zoom: number): ClusterPoint[] {
   const radiusMeters = getClusterRadius(zoom);
   const clusters: ClusterPoint[] = [];
   const visited = new Set<string>();

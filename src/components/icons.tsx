@@ -59,8 +59,10 @@ import {
   Eye,
   RotateCcw,
   Circle,
+  CircleDot,
   Heart,
   TrendingUp,
+  Loader2,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -131,8 +133,10 @@ export const Icons = {
   Eye,
   Refresh: RotateCcw,
   Circle,
+  CircleDot,
   Heart,
   TrendingUp,
+  Loader2,
   Lightbulb: () => (
     <svg 
       width="16" 

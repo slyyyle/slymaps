@@ -1,17 +1,17 @@
 "use client";
 
 import React from 'react';
-import { useDataIntegration } from '@/hooks/data/use-data-integration';
+import { useMapRouteHandler } from '@/hooks/map';
 import { Button } from '../ui/button';
 import { Icons } from '../icons';
 
 export function DirectionsPopup() {
-  const dataIntegration = useDataIntegration();
-  const { start, destination } = dataIntegration.directions.getDirectionsState();
+  const { getRouteCoordinates, clearRouteSelection } = useMapRouteHandler();
+  const { start, end: destination } = getRouteCoordinates();
   const isVisible = !!destination;
 
   const handleClose = () => {
-    dataIntegration.directions.setDirectionsDestination(null);
+    clearRouteSelection();
   };
 
   if (!isVisible) {

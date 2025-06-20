@@ -1,7 +1,7 @@
 import type {Metadata} from 'next';
-import './globals.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
+import './globals.css';
 import { Providers } from '@/components/Providers';
 
 export const metadata: Metadata = {

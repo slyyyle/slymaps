@@ -1,10 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PaneHeader } from '../shared/pane-header';
-import { ThemeSelector } from '../../map/ThemeSelector';
+import { ThemeSelector } from '@/components/map/ThemeSelector';
 import { useThemeStore } from '../../../stores/theme-store';
-import { Label } from '@/components/ui/label';
+import { useDrawStore } from '../../../stores/draw';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { MAP_STYLES } from '@/lib/constants';
+import { StyleSelector } from '@/components/map/style-selector';
+import { StyleOptions } from '@/components/draw/StyleOptions';
+import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
-import { useDrawStyleStore } from '../../../stores/use-draw-style-store';
+import { useMapViewport } from '@/hooks/map/use-map-navigation';
+import { useMapStyleConfig } from '@/hooks/map/use-map-style-config';
 
 interface StylePaneProps {
   onBack: () => void;
@@ -12,136 +18,122 @@ interface StylePaneProps {
 
 export function StylePane({ onBack }: StylePaneProps) {
   const { popupTheme, setTheme } = useThemeStore();
-  const lineColor = useDrawStyleStore(state => state.lineColor);
-  const setLineColor = useDrawStyleStore(state => state.setLineColor);
-  const lineWidth = useDrawStyleStore(state => state.lineWidth);
-  const setLineWidth = useDrawStyleStore(state => state.setLineWidth);
-  const polygonFillColor = useDrawStyleStore(state => state.polygonFillColor);
-  const setPolygonFillColor = useDrawStyleStore(state => state.setPolygonFillColor);
-  const polygonFillOpacity = useDrawStyleStore(state => state.polygonFillOpacity);
-  const setPolygonFillOpacity = useDrawStyleStore(state => state.setPolygonFillOpacity);
-  const polygonLineColor = useDrawStyleStore(state => state.polygonLineColor);
-  const setPolygonLineColor = useDrawStyleStore(state => state.setPolygonLineColor);
-  const polygonLineWidth = useDrawStyleStore(state => state.polygonLineWidth);
-  const setPolygonLineWidth = useDrawStyleStore(state => state.setPolygonLineWidth);
-  const pointColor = useDrawStyleStore(state => state.pointColor);
-  const setPointColor = useDrawStyleStore(state => state.setPointColor);
-  const pointRadius = useDrawStyleStore(state => state.pointRadius);
-  const setPointRadius = useDrawStyleStore(state => state.setPointRadius);
+  const {
+    lineColor,
+    setLineColor,
+    lineWidth,
+    setLineWidth,
+    polygonFillColor,
+    setPolygonFillColor,
+    polygonFillOpacity,
+    setPolygonFillOpacity,
+    polygonLineColor,
+    setPolygonLineColor,
+    polygonLineWidth,
+    setPolygonLineWidth,
+    pointColor,
+    setPointColor,
+    pointRadius,
+    setPointRadius,
+  } = useDrawStore(state => ({
+    lineColor: state.lineColor,
+    setLineColor: state.setLineColor,
+    lineWidth: state.lineWidth,
+    setLineWidth: state.setLineWidth,
+    polygonFillColor: state.polygonFillColor,
+    setPolygonFillColor: state.setPolygonFillColor,
+    polygonFillOpacity: state.polygonFillOpacity,
+    setPolygonFillOpacity: state.setPolygonFillOpacity,
+    polygonLineColor: state.polygonLineColor,
+    setPolygonLineColor: state.setPolygonLineColor,
+    polygonLineWidth: state.polygonLineWidth,
+    setPolygonLineWidth: state.setPolygonLineWidth,
+    pointColor: state.pointColor,
+    setPointColor: state.setPointColor,
+    pointRadius: state.pointRadius,
+    setPointRadius: state.setPointRadius,
+  }));
+
+  const [activeTab, setActiveTab] = useState<'themes' | 'mapstyle' | 'drawing'>('themes');
+  const [selectedMapStyleId, setSelectedMapStyleId] = useState<string>(MAP_STYLES[0].id);
+  const { mapRef } = useMapViewport();
+  const mapStyleUrl = MAP_STYLES.find(s => s.id === selectedMapStyleId)?.url || MAP_STYLES[0].url;
+  const { toggle3D, toggleTerrain } = useMapStyleConfig({ mapRef, mapStyleUrl });
+  const [is3dEnabled, setIs3dEnabled] = useState<boolean>(false);
+  const [isTerrainEnabled, setIsTerrainEnabled] = useState<boolean>(false);
+  const [terrainExaggeration, setTerrainExaggeration] = useState<number>(1.2);
+
+  React.useEffect(() => {
+    toggle3D(is3dEnabled);
+  }, [is3dEnabled, toggle3D]);
+  React.useEffect(() => {
+    toggleTerrain(isTerrainEnabled, terrainExaggeration);
+  }, [isTerrainEnabled, terrainExaggeration, toggleTerrain]);
 
   return (
     <div className="flex flex-col h-full">
-      <PaneHeader 
-        title="Map Style" 
-        onBack={onBack}
-      />
+      <PaneHeader title="Style" onBack={onBack} />
       
       <div className="flex-1 overflow-y-auto">
-        <div className="p-4 space-y-6">
-          <div>
-            <h3 className="text-sm font-medium mb-3">Interface Themes</h3>
-            <p className="text-xs text-muted-foreground mb-4">
-              Choose a theme for the sidebar, popups, and overlays
-            </p>
-            <ThemeSelector 
-              currentTheme={popupTheme}
-              onThemeChange={setTheme}
-            />
-          </div>
-          
-          <div>
-            <h3 className="text-sm font-medium mb-3">Drawing Styles</h3>
-            <p className="text-xs text-muted-foreground mb-4">
-              Customize color and thickness of drawn features
-            </p>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'themes' | 'mapstyle' | 'drawing')} className="p-4 space-y-4">
+          <TabsList>
+            <TabsTrigger value="themes">Interface Themes</TabsTrigger>
+            <TabsTrigger value="mapstyle">Map Style</TabsTrigger>
+            <TabsTrigger value="drawing">Drawing Styles</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="themes">
             <div className="space-y-4">
-              <div>
-                <Label htmlFor="line-color" className="text-xs">Line Color</Label>
-                <input
-                  id="line-color"
-                  type="color"
-                  value={lineColor}
-                  onChange={(e) => setLineColor(e.target.value)}
-                  className="mt-1 block w-full h-10 p-0 border border-input rounded-md"
-                />
+              <p className="text-xs text-muted-foreground mb-4">
+                Choose a theme for the sidebar, popups, and overlays
+              </p>
+              <ThemeSelector currentTheme={popupTheme} onThemeChange={setTheme} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="mapstyle">
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground mb-4">
+                Select a base map style
+              </p>
+              <StyleSelector
+                styles={MAP_STYLES}
+                currentStyleId={selectedMapStyleId}
+                onStyleChange={(value) => setSelectedMapStyleId(value)}
+              />
+            </div>
+            <div className="space-y-4 pt-4">
+              <p className="text-xs text-muted-foreground mb-2">3D & Terrain</p>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Show 3D Objects</span>
+                <Switch checked={is3dEnabled} onCheckedChange={setIs3dEnabled} />
               </div>
-              <div>
-                <Label htmlFor="line-width" className="text-xs">Line Thickness</Label>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Enable Terrain</span>
+                <Switch checked={isTerrainEnabled} onCheckedChange={setIsTerrainEnabled} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Terrain Exaggeration</span>
                 <Slider
-                  id="line-width"
+                  value={[terrainExaggeration]}
+                  onValueChange={(vals) => setTerrainExaggeration(vals[0])}
                   min={1}
-                  max={10}
-                  step={1}
-                  value={[lineWidth]}
-                  onValueChange={([value]) => setLineWidth(value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="polygon-fill-color" className="text-xs">Polygon Fill Color</Label>
-                <input
-                  id="polygon-fill-color"
-                  type="color"
-                  value={polygonFillColor}
-                  onChange={(e) => setPolygonFillColor(e.target.value)}
-                  className="mt-1 block w-full h-10 p-0 border border-input rounded-md"
-                />
-              </div>
-              <div>
-                <Label htmlFor="polygon-fill-opacity" className="text-xs">Polygon Fill Opacity</Label>
-                <Slider
-                  id="polygon-fill-opacity"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={[polygonFillOpacity]}
-                  onValueChange={([value]) => setPolygonFillOpacity(value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="polygon-line-color" className="text-xs">Polygon Border Color</Label>
-                <input
-                  id="polygon-line-color"
-                  type="color"
-                  value={polygonLineColor}
-                  onChange={(e) => setPolygonLineColor(e.target.value)}
-                  className="mt-1 block w-full h-10 p-0 border border-input rounded-md"
-                />
-              </div>
-              <div>
-                <Label htmlFor="polygon-line-width" className="text-xs">Polygon Border Thickness</Label>
-                <Slider
-                  id="polygon-line-width"
-                  min={1}
-                  max={10}
-                  step={1}
-                  value={[polygonLineWidth]}
-                  onValueChange={([value]) => setPolygonLineWidth(value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="point-color" className="text-xs">Point Color</Label>
-                <input
-                  id="point-color"
-                  type="color"
-                  value={pointColor}
-                  onChange={(e) => setPointColor(e.target.value)}
-                  className="mt-1 block w-full h-10 p-0 border border-input rounded-md"
-                />
-              </div>
-              <div>
-                <Label htmlFor="point-radius" className="text-xs">Point Radius</Label>
-                <Slider
-                  id="point-radius"
-                  min={1}
-                  max={20}
-                  step={1}
-                  value={[pointRadius]}
-                  onValueChange={([value]) => setPointRadius(value)}
+                  max={5}
+                  step={0.1}
                 />
               </div>
             </div>
-          </div>
-        </div>
+          </TabsContent>
+
+          <TabsContent value="drawing">
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground mb-4">
+                Customize color and thickness of drawn features
+              </p>
+              <StyleOptions />
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

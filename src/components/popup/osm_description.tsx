@@ -9,7 +9,6 @@ interface OSMDescriptionProps {
   phone?: string;
   website?: string;
   operator?: string;
-  brand?: string;
   cuisine?: string;
   amenity?: string;
   shop?: string;
@@ -22,7 +21,6 @@ export const OSMDescription: React.FC<OSMDescriptionProps> = ({
   phone,
   website,
   operator,
-  brand,
   cuisine,
   amenity,
   shop,
@@ -98,16 +96,6 @@ export const OSMDescription: React.FC<OSMDescriptionProps> = ({
       icon: '🏢',
       content: (
         <span className="text-xs" style={{ color: 'hsl(var(--foreground))' }}>{operator}</span>
-      )
-    });
-  }
-
-  if (brand) {
-    contactItems.push({
-      key: 'brand',
-      icon: '🏷️',
-      content: (
-        <span className="text-xs" style={{ color: 'hsl(var(--foreground))' }}>{brand}</span>
       )
     });
   }

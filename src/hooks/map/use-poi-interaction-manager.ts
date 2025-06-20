@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { MapRef } from 'react-map-gl/maplibre';
-import type { PointOfInterest, Coordinates } from '@/types/core';
+import type { Place, Coordinates } from '@/types/core';
 
 /**
  * Centralized POI Interaction Manager
@@ -12,11 +12,11 @@ import type { PointOfInterest, Coordinates } from '@/types/core';
  * 4. User-created POIs (persistent) - handled via React markers
  */
 
-export type POIInteractionType = 'native' | 'stored' | 'search' | 'created';
+export type PlaceInteractionType = 'native' | 'stored' | 'search' | 'created';
 
 export interface POIInteractionEvent {
-  type: POIInteractionType;
-  poi: PointOfInterest;
+  type: PlaceInteractionType;
+  poi: Place;
   coordinates: Coordinates;
   source: 'click' | 'hover' | 'context';
 }
@@ -24,7 +24,7 @@ export interface POIInteractionEvent {
 interface POIInteractionManagerProps {
   map: MapRef | null;
   onPOIInteraction: (event: POIInteractionEvent) => void;
-  enabledTypes?: POIInteractionType[];
+  enabledTypes?: PlaceInteractionType[];
 }
 
 export function usePOIInteractionManager({
@@ -65,7 +65,7 @@ export function usePOIInteractionManager({
       type: 'click',
       target: { featuresetId: 'poi', importId: 'basemap' },
       handler: ({ feature }: { feature: { id: string; properties: Record<string, unknown>; geometry: { coordinates: [number, number] } } }) => {
-        const ephemeralPoi: PointOfInterest = {
+        const ephemeralPoi: Place = {
           id: `native-ephemeral-${feature.id}-${Date.now()}`,
           name: (feature.properties.name as string) || 'Native POI',
           type: mapNativeFeatureType(feature.properties),
@@ -91,11 +91,10 @@ export function usePOIInteractionManager({
     });
 
     interactionSetupRef.current = true;
-    console.log('✅ Native POI interactions enabled');
   }, []); // 🔧 CORE FIX: Empty dependencies = stable forever
 
   // 🔧 CORE FIX: Stable handlers that don't recreate
-  const handleStoredPOIClick = useCallback((poi: PointOfInterest) => {
+  const handleStoredPlaceClick = useCallback((poi: Place) => {
     const event: POIInteractionEvent = {
       type: 'stored',
       poi,
@@ -105,7 +104,7 @@ export function usePOIInteractionManager({
     onPOIInteractionRef.current(event);
   }, []); // No dependencies = stable forever
 
-  const handleSearchResultClick = useCallback((poi: PointOfInterest) => {
+  const handleSearchResultClick = useCallback((poi: Place) => {
     const event: POIInteractionEvent = {
       type: 'search',
       poi,
@@ -115,7 +114,7 @@ export function usePOIInteractionManager({
     onPOIInteractionRef.current(event);
   }, []);
 
-  const handleCreatedPOIClick = useCallback((poi: PointOfInterest) => {
+  const handleCreatedPlaceClick = useCallback((poi: Place) => {
     const event: POIInteractionEvent = {
       type: 'created',
       poi,
@@ -130,6 +129,18 @@ export function usePOIInteractionManager({
     mapRef.current = map;
     
     if (!map) {
+      // Clean up previous interactions when map is removed
+      const prevMap = mapRef.current;
+      if (prevMap) {
+        const prevMapInstance = prevMap.getMap();
+        if (prevMapInstance) {
+          try {
+            prevMapInstance.removeInteraction('poi-interaction-native');
+          } catch (e) {
+            // Interaction doesn't exist, that's fine
+          }
+        }
+      }
       interactionSetupRef.current = false;
       return;
     }
@@ -146,12 +157,24 @@ export function usePOIInteractionManager({
     } else {
       mapInstance.once('style.load', handleStyleLoad);
     }
+
+    // Cleanup function for when map ref changes
+    return () => {
+      if (mapInstance) {
+        try {
+          mapInstance.removeInteraction('poi-interaction-native');
+        } catch (e) {
+          // Interaction doesn't exist, that's fine
+        }
+      }
+      interactionSetupRef.current = false;
+    };
   }, [map, setupNativeInteractions]); // 🔧 CORE FIX: Only depends on map reference
 
   return {
-    handleStoredPOIClick,
+    handleStoredPlaceClick,
     handleSearchResultClick,
-    handleCreatedPOIClick,
+    handleCreatedPlaceClick,
     isNativeInteractionActive: interactionSetupRef.current
   };
 }

@@ -1,12 +1,13 @@
 import React from 'react';
 import { PaneHeader } from '../shared/pane-header';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useDataIntegration } from '@/hooks/data/use-data-integration';
+import { usePlaceIntegration } from '@/hooks/data/use-place-integration';
+import { useGeoPosition } from '@/hooks/data/use-geo-position';
 import { Icons } from '@/components/icons';
-import type { PointOfInterest } from '@/types/core';
+import type { Place } from '@/types/core';
 import { OSMDescription } from '@/components/popup/osm_description';
 import type { MapRef } from 'react-map-gl/mapbox';
 import { cn } from '@/lib/cn';
@@ -115,45 +116,46 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 };
 
 export function PlacesPane({ onBack, mapRef, compact = false }: PlacesPaneProps) {
-  const dataIntegration = useDataIntegration();
-  // Pull recent search history
-  // const recentSearches = dataIntegration.searches.getRecentSearches();
+  const placeIntegration = usePlaceIntegration();
+  const { position: currentLocation, loading: locationLoading, error: locationError } = useGeoPosition();
   
-  // Get all POIs from the store (now including favorites flag)
-  const allPois = dataIntegration.pois.getAllPOIs();
+  // Get all POIs from the store
+  const allPois = placeIntegration.getAllPlaces();
   // Separate out saved (favorited) POIs
-  const savedPois = allPois.filter(poi => poi.favorites);
-  const currentLocation = dataIntegration.location.getCurrentLocation();
+  const savedPois = allPois.filter(poi => (poi as any).isFavorite);
   
   // Categorize POIs
-  const searchResultPois = allPois.filter(poi => poi.isSearchResult && !poi.favorites);
-  const nativePois = allPois.filter(poi => (poi.isNativePoi || poi.id.startsWith('native-poi-')) && !poi.favorites);
-  const customPois = allPois.filter(poi => !poi.isSearchResult && !poi.isNativePoi && !poi.id.startsWith('native-poi-') && !poi.favorites);
+  const searchResultPois = allPois.filter(poi => (poi as any).isSearchResult && !(poi as any).isFavorite);
+  const nativePois = allPois.filter(poi => ((poi as any).isNativePoi || poi.id.startsWith('native-poi-')) && !(poi as any).isFavorite);
+  const customPois = allPois.filter(poi => !(poi as any).isSearchResult && !(poi as any).isNativePoi && !poi.id.startsWith('native-poi-') && !(poi as any).isFavorite);
   
   const handleDeletePoi = (poiId: string, poiName: string) => {
     console.log(`🗑️ Deleting POI: ${poiName} (${poiId})`);
-    dataIntegration.pois.deletePOI(poiId);
+    placeIntegration.deleteStoredPlace(poiId);
+    placeIntegration.deleteCreatedPlace(poiId);
   };
   
-  const handleSelectPoi = (poi: PointOfInterest) => {
-    dataIntegration.pois.selectPOI(poi.id);
+  const handleSelectPoi = (poi: Place, category: string) => {
+    const typeMap: Record<string, string> = { favorite: 'stored', search: 'search', native: 'native', custom: 'created' };
+    const interactionType = typeMap[category] || 'search';
+    placeIntegration.selectPlace(poi, interactionType);
     // Close sidebar on mobile or keep open on desktop
     // User can manually close if needed
   };
   
   const handleClearAllSearchResults = () => {
     console.log('🧹 Clearing all search result POIs from Places pane');
-    dataIntegration.pois.clearSearchResults();
+    placeIntegration.clearSearchResults();
   };
   
   const handleClearAllNative = () => {
     console.log('🧹 Clearing all native POIs from Places pane');
     nativePois.forEach(poi => {
-      dataIntegration.pois.deletePOI(poi.id);
+      placeIntegration.deleteStoredPlace(poi.id);
     });
   };
 
-  const renderPoiCard = (poi: PointOfInterest, _category: string) => {
+  const renderPoiCard = (poi: Place, _category: string) => {
     const distance = currentLocation ? 
       calculateDistance(
         currentLocation.latitude, 
@@ -184,23 +186,21 @@ export function PlacesPane({ onBack, mapRef, compact = false }: PlacesPaneProps)
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => { handleSelectPoi(poi); if (mapRef?.current) { mapRef.current.getMap().flyTo({ center: [poi.longitude, poi.latitude], zoom: 15 }); } }}
+                onClick={() => { handleSelectPoi(poi, _category); if (mapRef?.current) { mapRef.current.getMap().flyTo({ center: [poi.longitude, poi.latitude], zoom: 15 }); } }}
                 className="h-6 w-6 p-0"
                 title="Fly to POI"
               >
                 <Icons.MapPin className="h-4 w-4" />
               </Button>
-              {_category === 'search' && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => dataIntegration.pois.favoritePOI(poi.id, !poi.favorites)}
-                  className={`h-6 w-6 p-0 ${poi.favorites ? 'text-destructive' : 'text-muted-foreground'}`}
-                  title={poi.favorites ? 'Unsave' : 'Save'}
-                >
-                  <Icons.Heart className="h-4 w-4" />
-                </Button>
-              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => placeIntegration.toggleFavorite(poi.id)}
+                className={`h-6 w-6 p-0 ${(poi as any).isFavorite ? 'text-destructive' : 'text-muted-foreground'}`}
+                title={(poi as any).isFavorite ? 'Unsave' : 'Save'}
+              >
+                <Icons.Heart className="h-4 w-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -240,7 +240,7 @@ export function PlacesPane({ onBack, mapRef, compact = false }: PlacesPaneProps)
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => savedPois.forEach(poi => dataIntegration.pois.deletePOI(poi.id))}
+                  onClick={() => savedPois.forEach(poi => placeIntegration.deleteStoredPlace(poi.id))}
                   className="text-xs text-muted-foreground hover:text-destructive"
                 >
                   Clear All
@@ -317,53 +317,6 @@ export function PlacesPane({ onBack, mapRef, compact = false }: PlacesPaneProps)
               <p className="text-xs text-muted-foreground">
                 Recent searches will appear here for quick pinning!
               </p>
-            </div>
-          )}
-          
-          {/* Development Tools - Only show in development */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="border-t pt-4 mt-6">
-              <h3 className="text-sm font-medium mb-3 text-orange-600">🛠️ Dev Tools</h3>
-              <div className="space-y-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    if (confirm('Reset entire store? This will clear all data.')) {
-                      const { resetStore, exportData } = dataIntegration.diagnostics;
-                      console.log('📁 Store before reset:', exportData());
-                      resetStore();
-                      window.location.reload(); // Force refresh after reset
-                    }
-                  }}
-                  className="w-full text-xs"
-                >
-                  🗑️ Reset Entire Store
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const stats = dataIntegration.diagnostics.getDataStats();
-                    console.log('📊 Store Stats:', stats);
-                    alert(`POIs: ${stats.poisCount}, Routes: ${stats.routesCount}, Searches: ${stats.searchesCount}`);
-                  }}
-                  className="w-full text-xs"
-                >
-                  📊 Show Store Stats
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    dataIntegration.diagnostics.cleanupExpiredData();
-                    console.log('🧹 Cleaned up expired data');
-                  }}
-                  className="w-full text-xs"
-                >
-                  🧹 Clean Expired Data
-                </Button>
-              </div>
             </div>
           )}
           

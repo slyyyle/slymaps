@@ -16,7 +16,7 @@ export function BackButton({ onClick, label = "Back", className }: BackButtonPro
       size="sm"
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 p-2 transition-all duration-200",
+        "flex items-center p-2 transition-all duration-200",
         className
       )}
       style={{
@@ -28,12 +28,6 @@ export function BackButton({ onClick, label = "Back", className }: BackButtonPro
         className="h-4 w-4" 
         style={{ color: 'hsl(var(--muted-foreground))' }}
       />
-      <span 
-        className="text-sm"
-        style={{ color: 'hsl(var(--muted-foreground))' }}
-      >
-        {label}
-      </span>
     </Button>
   );
 } 

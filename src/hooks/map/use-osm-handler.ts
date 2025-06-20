@@ -1,14 +1,15 @@
 import { useCallback, useRef } from 'react';
-import { osmService } from '@/services/osm-service';
-import { usePOIStore } from '@/stores/use-poi-store';
-import type { PointOfInterest } from '@/types/core';
+import { useOSMData } from '@/hooks/data/use-osm-data';
+import { usePlaceStore } from '@/stores/use-place-store';
+import type { Place } from '@/types/core';
 
 interface OSMHandlerProps {
   enableAutoEnrichment?: boolean;
 }
 
 export function useOSMHandler({ enableAutoEnrichment = true }: OSMHandlerProps = {}) {
-  const poiStore = usePOIStore();
+  const poiStore = usePlaceStore();
+  const { fetchNearbyOSMPois, findMatchingPOI, geocode: osmGeocode, reverseGeocode: osmReverseGeocode } = useOSMData();
   
   // 🔧 STABLE REFS: Prevent re-render loops
   const enableAutoEnrichmentRef = useRef(enableAutoEnrichment);
@@ -20,10 +21,10 @@ export function useOSMHandler({ enableAutoEnrichment = true }: OSMHandlerProps =
   const fetchAndAddOSMPOIs = useCallback(async (lat: number, lon: number, radius: number = 50) => {
     try {
       console.log(`📍 Fetching OSM POIs around ${lat}, ${lon} (radius: ${radius}m)`);
-      const osmPois = await osmService.fetchPOIData(lat, lon, radius);
+      const osmPois = await fetchNearbyOSMPois(lat, lon, radius);
       
       osmPois.forEach(osmPoi => {
-        const poi: PointOfInterest = {
+        const poi: Place = {
           id: `osm-${osmPoi.coordinates.lat}-${osmPoi.coordinates.lon}`,
           name: osmPoi.name || 'Unknown POI',
           description: osmPoi.address || '',
@@ -58,13 +59,13 @@ export function useOSMHandler({ enableAutoEnrichment = true }: OSMHandlerProps =
 
   const enrichPOIWithOSM = useCallback(async (poiId: string) => {
     try {
-      const poi = poiStore.getAllStoredPOIs().find(p => p.id === poiId);
+      const poi = poiStore.getAllStoredPlaces().find((p: any) => p.id === poiId);
       if (!poi) return false;
 
-      const osmMatch = await osmService.findMatchingPOI(poi.name, poi.latitude, poi.longitude);
+      const osmMatch = await findMatchingPOI(poi.name, poi.latitude, poi.longitude);
       if (!osmMatch) return false;
 
-      poiStore.updateStoredPOI(poiId, {
+      poiStore.updateStoredPlace(poiId, {
         properties: {
           ...poi.properties,
           osm_amenity: osmMatch.amenity,
@@ -89,15 +90,15 @@ export function useOSMHandler({ enableAutoEnrichment = true }: OSMHandlerProps =
   }, []);
 
   const geocodeAddress = useCallback(async (address: string) => {
-    return await osmService.geocodeAddress(address);
+    return await osmGeocode(address);
   }, []);
 
   const reverseGeocode = useCallback(async (lat: number, lon: number) => {
-    return await osmService.reverseGeocode(lat, lon);
+    return await osmReverseGeocode(lat, lon);
   }, []);
 
   const getProperAddressForPOI = useCallback(async (lat: number, lon: number) => {
-    const result = await osmService.reverseGeocode(lat, lon);
+    const result = await osmReverseGeocode(lat, lon);
     return result?.address || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
   }, []);
 

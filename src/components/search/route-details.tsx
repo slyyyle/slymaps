@@ -1,8 +1,8 @@
 "use client";
 
 import React from 'react';
-import type { PointOfInterest } from '@/types/core';
-import type { CurrentOBARouteDisplayData } from '@/types/oba';
+import type { Place } from '@/types/core';
+import type { CurrentOBARouteDisplayData } from '@/types/transit/oba';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Icons } from '@/components/icons';
@@ -10,7 +10,7 @@ import { useMapViewport } from '@/hooks/map/use-map-navigation';
 
 interface RouteDetailsProps {
   currentOBARouteDisplayData: CurrentOBARouteDisplayData;
-  onSelectPoiFromList: (poi: PointOfInterest) => void;
+  onSelectPoiFromList: (poi: Place) => void;
 }
 
 export function RouteDetails({ 
@@ -37,7 +37,7 @@ export function RouteDetails({
         {currentOBARouteDisplayData.stops.length > 0 ? (
           <ScrollArea className="h-[300px] pr-2">
             <ul className="space-y-1.5">
-              {currentOBARouteDisplayData.stops.map((stop: PointOfInterest) => (
+              {currentOBARouteDisplayData.stops.map((stop: Place) => (
                 <li key={stop.id}>
                   <Button
                     variant="ghost"

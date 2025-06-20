@@ -2,6 +2,9 @@ import type { MapStyle } from '@/types/core';
 
 export const MAPBOX_ACCESS_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
 export const ONEBUSAWAY_API_KEY = process.env.NEXT_PUBLIC_ONEBUSAWAY_API_KEY || '';
+// OTP_BASE_URL should be the base URL of your OTP server (e.g., http://localhost:8080),
+// without any path suffix; the client will append the correct GraphQL path.
+export const OTP_BASE_URL = process.env.NEXT_PUBLIC_OTP_BASE_URL || '';
 
 export const CAPITOL_HILL_COORDS = {
   longitude: -122.3207,
@@ -23,9 +26,10 @@ export const MAP_STYLES: MapStyle[] = [
 ];
 
 export const TRANSIT_MODES = [
-  { id: 'driving-traffic', name: 'Driving' },
+  { id: 'driving', name: 'Driving' },
   { id: 'walking', name: 'Walking' },
   { id: 'cycling', name: 'Cycling' },
+  { id: 'transit', name: 'Transit' },
   // Mapbox Directions API supports 'transit' but it's often limited.
   // OneBusAway would be better for detailed public transit.
 ];

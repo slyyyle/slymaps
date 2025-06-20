@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { getSearchSuggestions, searchStops, searchRoutesByName } from '@/services/oba';
 import type { Coordinates } from '@/types/core';
-import type { UnifiedSearchSuggestion } from '@/types/oba';
+import type { UnifiedSearchSuggestion } from '@/types/transit/oba';
 
 interface UseUnifiedSearchOptions {
   currentLocation?: Coordinates;
@@ -106,11 +106,8 @@ export function useUnifiedSearch({ currentLocation }: UseUnifiedSearchOptions) {
       return;
     }
 
-    // Only search OBA for transit-like queries to prevent resource not found errors
-    const isTransitQuery = isLikelyTransitQuery(query);
-    console.log(`🔍 Query "${query}" is ${isTransitQuery ? 'transit-like' : 'place-like'} - ${isTransitQuery ? 'searching OBA' : 'skipping OBA'}`);
-    
-    if (!isTransitQuery) {
+    // FIXED: Only search OBA for transit-like queries, not all queries
+    if (!isLikelyTransitQuery(query)) {
       setUnifiedSuggestions([]);
       setShowSuggestionsDropdown(false);
       return;

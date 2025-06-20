@@ -1,12 +1,13 @@
 import { useCallback } from 'react';
 import type { MapRef } from 'react-map-gl/maplibre';
-import { usePOIInteractionManager, type POIInteractionEvent, type POIInteractionType } from './use-poi-interaction-manager';
-import { usePOIStore } from '@/stores/use-poi-store';
+import { usePOIInteractionManager, type POIInteractionEvent, type PlaceInteractionType } from './use-poi-interaction-manager';
+import { usePlaceStore } from '@/stores/use-place-store';
 import { useOSMHandler } from './use-osm-handler';
 import { useRouteHandler } from './use-route-handler';
+import { useOSMData } from '@/hooks/data/use-osm-data';
 import { osmService } from '@/services/osm-service';
-import type { PointOfInterest } from '@/types/core';
-import type { CreatedPOI } from '@/stores/use-poi-store';
+import type { Place } from '@/types/core';
+import type { CreatedPlace } from '@/stores/use-place-store';
 
 /**
  * Unified POI Handler
@@ -29,35 +30,21 @@ export function useUnifiedPOIHandler({
   enableOSMEnrichment = true,
   enableRouteIntegration = true
 }: UnifiedPOIHandlerProps) {
-  const poiStore = usePOIStore();
+  const poiStore = usePlaceStore();
+  const { findMatchingPOI, reverseGeocode: osmReverseGeocode } = useOSMData();
   const osmHandler = useOSMHandler({ enableAutoEnrichment: enableOSMEnrichment });
   const routeHandler = useRouteHandler({ enableVehicleTracking: enableRouteIntegration });
 
   // 🔧 CORE FIX: Single stable handler function with no dependencies
   const handlePOIInteraction = useCallback((interaction: POIInteractionEvent) => {
-    console.log(`🎯 POI interaction (${interaction.type}):`, interaction.poi.name);
-    console.log('🎯 Full interaction data:', {
-      type: interaction.type,
-      poi: {
-        id: interaction.poi.id,
-        name: interaction.poi.name,
-        coordinates: [interaction.poi.longitude, interaction.poi.latitude],
-        isNativePoi: interaction.poi.isNativePoi || false,
-        properties: interaction.poi.properties
-      },
-      source: interaction.source
-    });
-    
-    // Handle different interaction types
+    // Handle different interaction types without console noise
     switch (interaction.type) {
       case 'native':
-        console.log('📍 Selecting native POI in store...');
         // Native POIs are ephemeral - select but don't store
         poiStore.selectPOI(interaction.poi, 'native');
         
         // 🆕 OSM ENRICHMENT: Automatically enrich native POI with OSM data (async, non-blocking)
         if (enableOSMEnrichment) {
-          console.log('🌍 Enriching native POI with OSM data...');
           // Run enrichment asynchronously without blocking the popup
           setTimeout(() => {
             enrichNativePOIWithOSM(interaction.poi).catch(error => 
@@ -68,13 +55,11 @@ export function useUnifiedPOIHandler({
         break;
         
       case 'stored':
-        console.log('💾 Selecting stored POI in store...');
         // Stored POIs - just select
         poiStore.selectPOI(interaction.poi, 'stored');
         break;
         
       case 'search':
-        console.log('🔍 Selecting search result POI in store...');
         // Search results - select and optionally enhance with OSM data
         poiStore.selectPOI(interaction.poi, 'search');
         if (enableOSMEnrichment && !interaction.poi.properties?.osm_enriched) {
@@ -83,40 +68,30 @@ export function useUnifiedPOIHandler({
         break;
         
       case 'created':
-        console.log('🎨 Selecting created POI in store...');
         // Created POIs - just select
         poiStore.selectPOI(interaction.poi, 'created');
         break;
     }
     
-    // Verify the selection was set
-    setTimeout(() => {
-      const currentSelection = poiStore.getActiveSelection();
-      console.log('🔍 Active selection after POI interaction:', currentSelection);
-    }, 10);
+    // Verify the selection was set (no console noise)
   }, []);
 
   // 🆕 OSM ENRICHMENT: Helper function to enrich native POIs with OSM data
-  const enrichNativePOIWithOSM = useCallback(async (nativePoi: PointOfInterest) => {
+  const enrichNativePOIWithOSM = useCallback(async (nativePoi: Place) => {
     try {
-      console.log(`🌍 Fetching OSM data for native POI: ${nativePoi.name}`);
-      
-      // Find matching OSM POI
-      const osmMatch = await osmService.findMatchingPOI(
-        nativePoi.name, 
-        nativePoi.latitude, 
-        nativePoi.longitude
-      );
+      // Fetching OSM data for native POI
+      // Find matching OSM POI directly via service (not nested queries)
+      const osmMatch = await osmService.findMatchingPOI(nativePoi.name, nativePoi.latitude, nativePoi.longitude);
       
       if (osmMatch) {
-        console.log('✨ Found OSM match:', osmMatch);
+        // Found OSM match
         // Prepare address (fallback reverse geocoding if it's just raw coords)
         let address = osmMatch.address;
         const coordPattern = /^-?\d+\.\d+,\s*-?\d+\.\d+$/;
-        if (!address || coordPattern.test(address)) {
+        if (!address || (typeof address === 'string' && coordPattern.test(address))) {
           try {
-            console.log('🌍 Fallback reverse geocoding for address');
-            const rev = await osmService.reverseGeocode(nativePoi.latitude, nativePoi.longitude);
+            // Fallback reverse geocoding for address
+            const rev = await osmReverseGeocode(nativePoi.latitude, nativePoi.longitude);
             if (rev?.address) address = rev.address;
           } catch (err) {
             console.warn('Fallback reverse geocode failed:', err);
@@ -142,58 +117,14 @@ export function useUnifiedPOIHandler({
           }
         };
         poiStore.selectPOI(enrichedPoi, 'native');
-        console.log('🎯 Updated native POI selection with OSM enrichment');
+        // Updated native POI selection with OSM enrichment
       } else {
-        console.log('❌ No OSM match for native POI, attempting reverse geocode fallback');
-        try {
-          const rev = await osmService.reverseGeocode(nativePoi.latitude, nativePoi.longitude);
-          if (rev?.address) {
-            const enrichedPoi = {
-              ...nativePoi,
-              properties: {
-                ...nativePoi.properties,
-                osm_address: rev.address,
-                osm_enriched: true,
-                osm_enriched_at: Date.now()
-              }
-            };
-            poiStore.selectPOI(enrichedPoi, 'native');
-            console.log('🎯 Updated native POI selection with fallback reverse geocode');
-            return;
-          }
-        } catch (err) {
-          console.warn('Reverse geocode fallback failed:', err);
-        }
-        // Final fallback: mark lookup attempted but failed
-        const failedEnrichmentPoi = {
-          ...nativePoi,
-          properties: {
-            ...nativePoi.properties,
-            osm_lookup_attempted: true,
-            osm_lookup_attempted_at: Date.now()
-          }
-        };
-        poiStore.selectPOI(failedEnrichmentPoi, 'native');
-        console.log('🎯 Updated native POI selection with failed OSM lookup');
+        // No OSM match found for native POI
       }
     } catch (error) {
-      console.error('Failed to enrich native POI with OSM data:', error);
-      
-      // Mark as attempted but failed due to error
-      const failedEnrichmentPoi = {
-        ...nativePoi,
-        properties: {
-          ...nativePoi.properties,
-          osm_lookup_attempted: true,
-          osm_lookup_attempted_at: Date.now(),
-          osm_lookup_error: error instanceof Error ? error.message : 'Unknown error'
+      console.warn('OSM enrichment failed for native POI:', error);
         }
-      };
-      
-      poiStore.selectPOI(failedEnrichmentPoi, 'native');
-      console.log('🎯 Updated native POI selection with OSM lookup error flag');
-    }
-  }, []);
+  }, [osmReverseGeocode, poiStore]);
 
   // Set up native interactions with the stable handler
   const interactionManager = usePOIInteractionManager({
@@ -203,17 +134,17 @@ export function useUnifiedPOIHandler({
   });
 
   // 🔧 STABLE HANDLERS: These are memoized in the interaction manager
-  const handleStoredPOIClick = interactionManager.handleStoredPOIClick;
+  const handleStoredPlaceClick = interactionManager.handleStoredPlaceClick;
   const handleSearchResultClick = interactionManager.handleSearchResultClick;
-  const handleCreatedPOIClick = interactionManager.handleCreatedPOIClick;
+  const handleCreatedPlaceClick = interactionManager.handleCreatedPlaceClick;
 
   // High-level operations
-  const handleSearchResult = useCallback((poi: PointOfInterest, searchQuery: string) => {
+  const handleSearchResult = useCallback((poi: Place, searchQuery: string) => {
     return poiStore.addSearchResult(poi, searchQuery);
   }, []);
 
-  const handlePOICreation = useCallback((poi: PointOfInterest, customData?: Partial<CreatedPOI>) => {
-    return poiStore.addCreatedPOI(poi, customData);
+  const handlePOICreation = useCallback((poi: Place, customData?: Partial<CreatedPlace>) => {
+    return poiStore.addCreatedPlace(poi, customData);
   }, []);
 
   const promoteSearchResultToStored = useCallback((searchResultId: string) => {
@@ -221,7 +152,7 @@ export function useUnifiedPOIHandler({
   }, []);
 
   const deleteCustomPOI = useCallback((poiId: string) => {
-    poiStore.deleteCreatedPOI(poiId);
+    poiStore.deleteCreatedPlace(poiId);
   }, []);
 
   const clearSelection = useCallback(() => {
@@ -229,18 +160,18 @@ export function useUnifiedPOIHandler({
   }, []);
 
   // Data access - direct store calls (no memoization needed)
-  const getStoredPOIs = poiStore.getAllStoredPOIs;
+  const getStoredPlaces = poiStore.getAllStoredPlaces;
   const getSearchResults = poiStore.getSearchResults;
-  const getCreatedPOIs = poiStore.getAllCreatedPOIs;
+  const getCreatedPlaces = poiStore.getAllCreatedPlaces;
   const getAllPOIs = poiStore.getAllPOIs;
   const getActiveSelection = poiStore.getActiveSelection;
 
   // Return stable interface
   return {
     // Interaction handlers for React markers - STABLE
-    handleStoredPOIClick,
+    handleStoredPlaceClick,
     handleSearchResultClick,
-    handleCreatedPOIClick,
+    handleCreatedPlaceClick,
     
     // High-level POI operations
     handleSearchResult,
@@ -250,9 +181,9 @@ export function useUnifiedPOIHandler({
     clearSelection,
     
     // Data access - direct store methods
-    getStoredPOIs,
+    getStoredPlaces,
     getSearchResults,
-    getCreatedPOIs,
+    getCreatedPlaces,
     getAllPOIs,
     getActiveSelection,
     

@@ -8,7 +8,8 @@ import { TransitPane } from './panes/transit-pane';
 import { PlacesPane } from './panes/places-pane';
 import { StylePane } from './panes/style-pane';
 import { HomePane } from './panes/home-pane';
-import { useDataIntegration } from '@/hooks/data/use-data-integration';
+import { usePlaceIntegration } from '@/hooks/data/use-place-integration';
+import { useTransitIntegration } from '@/hooks/data/use-transit-integration';
 import { useThemeStore } from '@/stores/theme-store';
 import { Button } from '@/components/ui/button';
 import { Icons } from '@/components/icons';
@@ -16,6 +17,9 @@ import { UnifiedSearchBox } from '@/components/search/unified-search';
 import { useUnifiedPOIHandler } from '@/hooks/map/use-unified-poi-handler';
 import { useRouteHandler } from '@/hooks/map/use-route-handler';
 import { MAPBOX_ACCESS_TOKEN } from '@/lib/constants';
+import { BackButton } from './shared/back-button';
+import { useTransitStore } from '@/stores/transit';
+import type { TransitStore } from '@/stores/use-transit-store';
 
 export type PaneType = 'home' | 'directions' | 'transit' | 'places' | 'style' | null;
 
@@ -34,12 +38,18 @@ export function SidebarShell({
 }: SidebarShellProps) {
   const [activePane, setActivePane] = useState<PaneType>(defaultPane);
   const { sidebarTheme } = useThemeStore();
-  const dataIntegration = useDataIntegration();
+  const placeIntegration = usePlaceIntegration();
   const unifiedHandler = useUnifiedPOIHandler({ map: mapRef?.current ?? null });
   const routeHandler = useRouteHandler({ enableVehicleTracking: true });
 
+  // Get active route for transit pane header
+  const activeRoute = useTransitStore((state: TransitStore) => {
+    const id = state.activeRouteId;
+    return id ? state.routes[id] : null;
+  });
+
   // Get POI list for search and saved
-  const allPois = dataIntegration.pois.getAllPOIs();
+  const allPois = placeIntegration.getAllPlaces();
   const savedPois = allPois.filter(poi => (poi as any).favorites);
   const searchResultPois = allPois.filter(poi => poi.isSearchResult && !(poi as any).favorites);
 
@@ -53,12 +63,24 @@ export function SidebarShell({
   };
 
   const handleBackToMenu = () => {
+    handleClearRoute();
     setActivePane(null);
   };
 
   const handleCloseSidebar = () => {
+    handleClearRoute();
     setActivePane(null);
     onClose?.();
+  };
+
+  const handleClearRoute = () => {
+    routeHandler.clearAllRoutes();
+    unifiedHandler.clearSelection();
+  };
+
+  // Start navigation: hide sidebar but leave route in place
+  const handleStartNavigation = () => {
+    setActivePane(null);
   };
 
   return (
@@ -81,16 +103,24 @@ export function SidebarShell({
           borderBottom: '1px solid hsl(var(--border))'
         }}
       >
+        <div className="flex items-center gap-2">
+          {(activePane === 'transit' || activePane === 'directions') && (
+            <BackButton onClick={handleBackToMenu} />
+          )}
         <h2 
           className="text-lg font-semibold"
           style={{ color: 'hsl(var(--foreground))' }}
         >
-          {activePane ? (
+          {activePane === 'transit' && activeRoute ? (
+            `Route ${activeRoute.obaRoute?.shortName || 'Unknown'}`
+          ) : activePane ? (
             activePane.charAt(0).toUpperCase() + activePane.slice(1)
           ) : (
             'SlyMaps'
           )}
         </h2>
+        </div>
+        <div className="flex items-center gap-2">
         <Button 
           variant="ghost" 
           size="icon" 
@@ -103,6 +133,7 @@ export function SidebarShell({
         >
           <Icons.Close className="h-4 w-4" />
         </Button>
+        </div>
       </div>
 
       {/* Main content area - no search section */}
@@ -156,13 +187,13 @@ export function SidebarShell({
         ) : (
           <div className="flex-1 flex flex-col min-h-0">
             {activePane === 'directions' && (
-              <DirectionsPane onBack={handleBackToMenu} mapRef={mapRef} />
+              <DirectionsPane mapRef={mapRef} onBeginTrip={handleStartNavigation} />
             )}
             {activePane === 'home' && (
               <HomePane onBack={handleBackToMenu} mapRef={mapRef} />
             )}
             {activePane === 'transit' && (
-              <TransitPane onBack={handleBackToMenu} mapRef={mapRef} />
+              <TransitPane mapRef={mapRef} />
             )}
             {activePane === 'places' && (
               <PlacesPane onBack={handleBackToMenu} mapRef={mapRef} />

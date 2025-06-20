@@ -1,4 +1,5 @@
-import type { PointOfInterest } from '@/types/core';
+import type { Place } from '@/types/core';
+import { RawOverpassResponseSchema } from '@/schemas/overpass';
 
 export interface SearchParams {
   lat: number;
@@ -8,7 +9,7 @@ export interface SearchParams {
 }
 
 export interface ProviderResponse {
-  pois: PointOfInterest[];
+  pois: Place[];
   hasMore: boolean;
   nextPage?: string;
 }
@@ -55,7 +56,9 @@ out center meta;`;
 
     try {
       const data = await req;
-      return this.parseResponse(data);
+      // Validate raw JSON
+      const parsed = RawOverpassResponseSchema.parse(data);
+      return this.parseResponse(parsed);
     } finally {
       this.requestQueue = this.requestQueue.filter(r => r !== req);
     }
@@ -77,7 +80,7 @@ out center meta;`;
   }
 
   private parseResponse(data: RawOverpassResponse): ProviderResponse {
-    const pois: PointOfInterest[] = [];
+    const pois: Place[] = [];
     (data.elements || []).forEach((el: RawOverpassElement) => {
       const lat = el.lat ?? el.center?.lat;
       const lng = el.lon ?? el.center?.lon;

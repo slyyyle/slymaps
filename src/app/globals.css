@@ -1368,12 +1368,7 @@ body.theme-ocean .quick-settings-label {
     /* Remove all borders and padding */
     border: none !important;
     border-radius: 20px;
-    box-shadow: 
-      0 25px 50px -12px rgba(0, 0, 0, 0.12),
-      0 16px 25px -8px rgba(0, 0, 0, 0.08),
-      0 4px 12px -3px rgba(0, 0, 0, 0.05),
-      inset 0 1px 0 rgba(255, 255, 255, 0.6),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    box-shadow: none !important;
     
     /* Typography and spacing improvements */
     padding: 0 !important;
@@ -1394,52 +1389,28 @@ body.theme-ocean .quick-settings-label {
   .mapbox-popup-container.dark .mapboxgl-popup-content {
     background: rgba(15, 23, 42, 0.9);
     border: none !important;
-    box-shadow: 
-      0 25px 50px -12px rgba(0, 0, 0, 0.4),
-      0 16px 25px -8px rgba(0, 0, 0, 0.3),
-      0 4px 12px -3px rgba(0, 0, 0, 0.2),
-      inset 0 1px 0 rgba(59, 130, 246, 0.2),
-      inset 0 0 0 1px rgba(59, 130, 246, 0.1);
+    box-shadow: none !important;
   }
 
   /* 🌌 MIDNIGHT THEME - Deep space glass */
   .mapbox-popup-container.midnight .mapboxgl-popup-content {
     background: rgba(12, 10, 32, 0.92);
     border: none !important;
-    box-shadow: 
-      0 30px 60px -15px rgba(12, 10, 32, 0.6),
-      0 20px 35px -10px rgba(76, 29, 149, 0.3),
-      0 8px 20px -5px rgba(96, 165, 250, 0.2),
-      inset 0 1px 0 rgba(96, 165, 250, 0.3),
-      inset 0 0 0 1px rgba(96, 165, 250, 0.15),
-      0 0 20px rgba(96, 165, 250, 0.1);
+    box-shadow: none !important;
   }
 
   /* 💜 NEON THEME - Cyberpunk glass */
   .mapbox-popup-container.neon .mapboxgl-popup-content {
     background: rgba(17, 12, 34, 0.9);
     border: none !important;
-    box-shadow: 
-      0 25px 50px -12px rgba(17, 12, 34, 0.5),
-      0 16px 25px -8px rgba(168, 85, 247, 0.3),
-      0 4px 12px -3px rgba(236, 72, 153, 0.2),
-      inset 0 1px 0 rgba(168, 85, 247, 0.4),
-      inset 0 0 0 1px rgba(168, 85, 247, 0.2),
-      0 0 30px rgba(168, 85, 247, 0.15),
-      0 0 60px rgba(236, 72, 153, 0.08);
+    box-shadow: none !important;
   }
 
   /* 🌊 OCEAN THEME - Deep water glass */
   .mapbox-popup-container.ocean .mapboxgl-popup-content {
     background: rgba(8, 47, 73, 0.9);
     border: none !important;
-    box-shadow: 
-      0 25px 50px -12px rgba(8, 47, 73, 0.5),
-      0 16px 25px -8px rgba(6, 182, 212, 0.2),
-      0 4px 12px -3px rgba(16, 185, 129, 0.15),
-      inset 0 1px 0 rgba(16, 185, 129, 0.3),
-      inset 0 0 0 1px rgba(6, 182, 212, 0.15),
-      0 0 25px rgba(16, 185, 129, 0.1);
+    box-shadow: none !important;
   }
 
 
@@ -1598,12 +1569,7 @@ body.theme-ocean .quick-settings-label {
     .mapboxgl-popup-content:not(.mapbox-popup-container *) {
       background: rgba(17, 24, 39, 0.9);
       border: 1px solid rgba(55, 65, 81, 0.4);
-      box-shadow: 
-        0 25px 50px -12px rgba(0, 0, 0, 0.4),
-        0 16px 25px -8px rgba(0, 0, 0, 0.3),
-        0 4px 12px -3px rgba(0, 0, 0, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+      box-shadow: none !important;
     }
 
     .mapboxgl-popup-close-button:not(.mapbox-popup-container *) {
@@ -1628,9 +1594,7 @@ body.theme-ocean .quick-settings-label {
     .mapboxgl-popup-content:not(.mapbox-popup-container *) {
       background: rgba(255, 255, 255, 0.98);
       border: 2px solid #000000;
-      box-shadow: 
-        0 8px 24px rgba(0, 0, 0, 0.3),
-        inset 0 0 0 1px #ffffff;
+      box-shadow: none !important;
     }
 
     .mapboxgl-popup-close-button:not(.mapbox-popup-container *) {
@@ -2031,6 +1995,32 @@ body.theme-ocean .quick-settings-label {
   border: none !important;
 }
 
+/* Stop Details section backgrounds - ORANGE GRADIENTS */
+.mapbox-popup-container .bg-orange-50 {
+  background: linear-gradient(135deg,
+    rgba(249, 115, 22, 0.2) 0%,
+    rgba(234, 88, 12, 0.15) 50%,
+    rgba(194, 65, 12, 0.12) 100%
+  ) !important;
+  color: hsl(var(--foreground)) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+/* Vehicle details section backgrounds - PINK GRADIENTS */
+.mapbox-popup-container .bg-pink-50 {
+  background: linear-gradient(135deg,
+    rgba(244, 114, 182, 0.2) 0%,
+    rgba(236, 72, 153, 0.15) 50%,
+    rgba(219, 39, 119, 0.12) 100%
+  ) !important;
+  color: hsl(var(--foreground)) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
 }
 
 /* Draw control styling - match other Mapbox controls */
@@ -2136,4 +2126,155 @@ body.theme-dark .mapbox-gl-draw .mapbox-gl-draw_trash:hover {
 }
 .mapbox-gl-draw_ctrl-draw-btn.mapbox-gl-draw_trash {
   background-color: rgba(107, 114, 128, 0.15) !important; /* gray tint for trash */
+}
+
+/* Custom DrawControls styling for wrapper and buttons */
+.mapboxgl-ctrl.mapboxgl-ctrl-draw-controls {
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  backdrop-filter: blur(12px) !important;
+}
+.mapboxgl-ctrl-draw-controls .quick-settings-panel {
+  background: transparent !important;
+  padding: 0.5rem !important;
+}
+.mapboxgl-ctrl-draw-controls button {
+  width: 40px !important;
+  height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: hsl(var(--foreground)) !important;
+  transition: transform 0.1s ease !important;
+}
+.mapboxgl-ctrl-draw-controls button:hover {
+  background-color: hsla(var(--primary), 0.1) !important;
+  transform: scale(1.1) !important;
+}
+.mapboxgl-ctrl-draw-controls button svg {
+  filter: brightness(1.2) contrast(1.2) !important;
+}
+
+/* ===== ENSURE MAPBOX POPUPS HAVE ROUNDED CORNERS ===== */
+.mapbox-popup-container .mapboxgl-popup-content {
+  border-radius: 1.25rem !important;
+}
+
+/* Custom: hide default triangular tip for fully rounded popups */
+.mapbox-popup-container .mapboxgl-popup-tip {
+  display: none !important;
+}
+
+/* Custom override for vehicle tracker popup background */
+.vehicle-popup .mapboxgl-popup-content {
+  background: hsl(var(--card)) !important;
+}
+
+/* Theme-specific vehicle popup backgrounds */
+.vehicle-popup.dark .mapboxgl-popup-content {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.vehicle-popup.midnight .mapboxgl-popup-content {
+  background: rgba(12, 10, 32, 0.92) !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.vehicle-popup.neon .mapboxgl-popup-content {
+  background: rgba(17, 12, 34, 0.9) !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.vehicle-popup.ocean .mapboxgl-popup-content {
+  background: rgba(8, 47, 73, 0.9) !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Override inner div backgrounds in vehicle popup */
+.vehicle-popup .mapboxgl-popup-content > div {
+  background: transparent !important;
+}
+
+/* Theme-specific overrides for vehicle popup inner content */
+.vehicle-popup.dark .mapboxgl-popup-content > div {
+  background: transparent !important;
+  color: rgb(248 250 252) !important;
+}
+
+.vehicle-popup.midnight .mapboxgl-popup-content > div {
+  background: transparent !important;
+  color: rgb(248 250 252) !important;
+}
+
+.vehicle-popup.neon .mapboxgl-popup-content > div {
+  background: transparent !important;
+  color: rgb(248 250 252) !important;
+}
+
+.vehicle-popup.ocean .mapboxgl-popup-content > div {
+  background: transparent !important;
+  color: rgb(165 243 252) !important;
+}
+
+/* Override colored section backgrounds in vehicle popup */
+.vehicle-popup .bg-yellow-50 {
+  background: rgba(251, 191, 36, 0.2) !important;
+}
+
+.vehicle-popup .bg-pink-50 {
+  background: rgba(244, 114, 182, 0.2) !important;
+}
+
+.vehicle-popup .bg-red-50 {
+  background: rgba(239, 68, 68, 0.2) !important;
+}
+
+/* Theme-specific colored sections */
+.vehicle-popup.dark .bg-yellow-50,
+.vehicle-popup.midnight .bg-yellow-50,
+.vehicle-popup.neon .bg-yellow-50 {
+  background: rgba(251, 191, 36, 0.15) !important;
+  color: rgb(254, 240, 138) !important;
+}
+
+.vehicle-popup.dark .bg-pink-50,
+.vehicle-popup.midnight .bg-pink-50,
+.vehicle-popup.neon .bg-pink-50 {
+  background: rgba(244, 114, 182, 0.15) !important;
+  color: rgb(251, 207, 232) !important;
+}
+
+.vehicle-popup.dark .bg-red-50,
+.vehicle-popup.midnight .bg-red-50,
+.vehicle-popup.neon .bg-red-50 {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: rgb(254, 202, 202) !important;
+}
+
+.vehicle-popup.ocean .bg-yellow-50 {
+  background: rgba(251, 191, 36, 0.2) !important;
+  color: rgb(254, 240, 138) !important;
+}
+
+.vehicle-popup.ocean .bg-pink-50 {
+  background: rgba(244, 114, 182, 0.2) !important;
+  color: rgb(251, 207, 232) !important;
+}
+
+.vehicle-popup.ocean .bg-red-50 {
+  background: rgba(239, 68, 68, 0.2) !important;
+  color: rgb(254, 202, 202) !important;
+}
+
+/* Remove all popup shadows */
+.mapbox-popup-container .mapboxgl-popup-content,
+.mapboxgl-popup-content {
+  box-shadow: none !important;
 }

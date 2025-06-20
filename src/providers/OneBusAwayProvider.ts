@@ -1,4 +1,5 @@
-import type { PointOfInterest } from '@/types/core';
+import type { Place } from '@/types/core';
+import { OneBusAwayResponseSchema } from '@/schemas/onebusaway';
 
 export interface SearchParams {
   lat: number;
@@ -8,7 +9,7 @@ export interface SearchParams {
 }
 
 export interface ProviderResponse {
-  pois: PointOfInterest[];
+  pois: Place[];
   hasMore: boolean;
   nextPage?: string;
 }
@@ -52,10 +53,12 @@ export class OneBusAwayProvider {
 
     const res = await fetch(url);
     if (!res.ok) throw new Error(`OneBusAway API error ${res.status}`);
-    const json = await res.json();
+    const raw = await res.json();
+    // Validate raw JSON
+    const validated = OneBusAwayResponseSchema.parse(raw);
+    const list = validated.data.list || [];
 
-    const list = (json.data?.list ?? []) as OBAStop[];
-    const pois: PointOfInterest[] = list.map((stop: OBAStop) => ({
+    const pois: Place[] = list.map((stop: OBAStop) => ({
       id: `oba-${stop.id}`,
       name: stop.name || stop.code || 'Bus Stop',
       type: 'Transit Stop',

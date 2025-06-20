@@ -5,7 +5,7 @@
 
 import { SEARCH_CONFIG } from '@/constants/search-config';
 import type { MapboxSuggestion } from '@/types/mapbox';
-import type { UnifiedSearchSuggestion } from '@/types/oba';
+import type { UnifiedSearchSuggestion } from '@/types/transit/oba';
 
 /**
  * Determine optimal zoom level based on Mapbox accuracy metadata

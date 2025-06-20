@@ -1,25 +1,27 @@
 import { useCallback } from 'react';
-import { useDataIntegration } from '@/hooks/data/use-data-integration';
+import { usePlaceIntegration } from '@/hooks/data/use-place-integration';
+import { useTransitIntegration } from '@/hooks/data/use-transit-integration';
 import { useMapViewport } from '@/hooks/map/use-map-navigation';
 import { SEARCH_CONFIG } from '@/constants/search-config';
 import { extractAddressComponents } from '@/utils/search-utils';
 import type { Coordinates } from '@/types/core';
 import type { MapboxRetrieveFeature } from '@/types/mapbox';
-import type { UnifiedSearchSuggestion, ObaStopSearchResult } from '@/types/oba';
+import type { UnifiedSearchSuggestion, ObaStopSearchResult } from '@/types/transit/oba';
 import type { AddressInput } from '@/utils/address-utils';
-import type { PointOfInterest } from '@/types/core';
+import type { Place } from '@/types/core';
 
 interface UseSearchResultHandlingOptions {
   onResult?: (coords: Coordinates, name?: string) => void;
   onRouteSelect?: (routeId: string) => void;
   onStopSelect?: (stop: ObaStopSearchResult) => void;
-  onLocationSelect?: (poi: PointOfInterest) => void;
+  onLocationSelect?: (poi: Place) => void;
   onValueChange?: (value: string) => void;
 }
 
 export function useSearchResultHandling(options: UseSearchResultHandlingOptions) {
   const { onResult, onRouteSelect, onStopSelect, onLocationSelect, onValueChange } = options;
-  const dataIntegration = useDataIntegration();
+  const placeIntegration = usePlaceIntegration();
+  const transitIntegration = useTransitIntegration();
   const { flyTo } = useMapViewport();
 
   // Handle SearchBox result selection (onRetrieve callback) - 2025 Mapbox Search Box API
@@ -39,8 +41,8 @@ export function useSearchResultHandling(options: UseSearchResultHandlingOptions)
     const placeName = result.properties.full_address || result.properties.name;
     
     // Keep only the most recent 5 search result POIs
-    const currentPOIs = dataIntegration.pois.getAllPOIs();
-    const previousSearchResults = currentPOIs.filter(poi => poi.isSearchResult);
+    const currentPOIs = placeIntegration.getAllPlaces();
+    const previousSearchResults = currentPOIs.filter(poi => (poi as any).isSearchResult);
     // Sort ascending by retrieval time
     const sortedResults = previousSearchResults.sort((a, b) => {
       const aTime = (a as any).searchResultData?.retrievedAt ? new Date((a as any).searchResultData.retrievedAt).getTime() : 0;
@@ -53,7 +55,7 @@ export function useSearchResultHandling(options: UseSearchResultHandlingOptions)
       const numToRemove = sortedResults.length - (maxResults - 1);
       sortedResults.slice(0, numToRemove).forEach(poi => {
         console.log(`🗑️ Removing old search result: ${poi.name}`);
-        dataIntegration.pois.deletePOI(poi.id);
+        placeIntegration.deleteSearchResult(poi.id);
       });
     }
     
@@ -104,11 +106,11 @@ export function useSearchResultHandling(options: UseSearchResultHandlingOptions)
     console.log('📍 Adding 2025 search result POI:', searchResultPoi.name);
     
     // Add the POI to the store
-    const poiId = dataIntegration.pois.addPOI(searchResultPoi);
+    const poiId = placeIntegration.addSearchResult(searchResultPoi, placeName);
     console.log('✅ 2025 search result POI added with ID:', poiId);
     
     // Select the POI in the store
-    dataIntegration.pois.selectPOI(poiId);
+    placeIntegration.selectPlace(searchResultPoi, 'search');
     
     // Determine optimal zoom level based on feature type and accuracy
     let zoomLevel: number = SEARCH_CONFIG.ZOOM_LEVELS.ADDRESS; // Default
@@ -157,31 +159,19 @@ export function useSearchResultHandling(options: UseSearchResultHandlingOptions)
     if (onValueChange) {
       onValueChange('');
     }
-  }, [dataIntegration, onResult, flyTo, onValueChange, onLocationSelect]);
+  }, [placeIntegration, onResult, flyTo, onValueChange, onLocationSelect]);
 
   // Handle unified suggestion selection (both transit and places)
   const handleUnifiedSelect = useCallback((suggestion: UnifiedSearchSuggestion) => {
     if (suggestion.type === 'route' && onRouteSelect) {
-      const routeData = suggestion.data as unknown as import('@/types/oba').ObaRouteSearchResult;
-      // Add route to route store
-      dataIntegration.routes.addRoute(routeData);
-      // Also add as a search-result POI for sidebar listing
-      const routePoi: PointOfInterest = {
-        id: suggestion.id,
-        name: suggestion.title,
-        type: 'Route',
-        latitude: 0,
-        longitude: 0,
-        isSearchResult: true,
-        properties: { source: 'oba-route' }
-      };
-      dataIntegration.pois.addPOI(routePoi);
-      // Trigger route selection handler (fly and pane transition)
+      const routeData = suggestion.data as any;
+      const storeId = transitIntegration.addRoute(routeData);
+      transitIntegration.selectRoute(storeId);
+      // Only trigger onRouteSelect; do not create or select a POI for route
       onRouteSelect(suggestion.id);
     } else if (suggestion.type === 'stop') {
-      const stopData = suggestion.data as ObaStopSearchResult;
-      // Build POI object for the stop
-      const poi: PointOfInterest = {
+      const stopData = suggestion.data as any;
+      const poi: Place = {
         id: stopData.id,
         name: stopData.name,
         type: 'Bus Stop',
@@ -193,24 +183,21 @@ export function useSearchResultHandling(options: UseSearchResultHandlingOptions)
         properties: {
           source: 'oba',
           stop_code: stopData.code,
-        direction: stopData.direction,
+          direction: stopData.direction,
           route_ids: stopData.routeIds,
           wheelchair_boarding: stopData.wheelchairBoarding
         }
       };
-      // Add and select the POI in the store
-      dataIntegration.pois.addPOI(poi);
-      dataIntegration.pois.selectPOI(poi.id);
-      // Invoke unified location handler if provided
+      const stopPoiId = placeIntegration.addSearchResult(poi, poi.name);
+      placeIntegration.selectPlace(poi, 'search');
       if (onLocationSelect) {
         onLocationSelect(poi);
       } else {
-        // Fallback to individual callbacks
         if (onStopSelect) onStopSelect(stopData);
-        if (onResult) onResult({ longitude: stopData.longitude, latitude: stopData.latitude }, stopData.name);
+        if (onResult) onResult({ latitude: stopData.latitude, longitude: stopData.longitude }, stopData.name);
       }
     }
-  }, [onRouteSelect, onStopSelect, onResult, onLocationSelect, dataIntegration]);
+  }, [placeIntegration, transitIntegration, onRouteSelect, onStopSelect, onResult, onLocationSelect]);
 
   return {
     handleSearchBoxRetrieve,

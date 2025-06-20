@@ -2,6 +2,7 @@
 // Fetches real POI data to replace mock data
 
 import type { AddressInput } from '@/utils/address-utils';
+import { OSMPoiDataSchema } from '@/schemas/osm';
 
 export interface OSMElement {
   type: 'node' | 'way' | 'relation';
@@ -290,15 +291,18 @@ class OSMService {
    * Fetch POI data around specific coordinates
    */
   async fetchPOIData(lat: number, lon: number, radius: number = 50): Promise<OSMPoiData[]> {
+    // Use AbortController to enforce a timeout in case Overpass API hangs
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     try {
       const query = this.buildQuery(lat, lon, radius);
-      
       const response = await fetch(this.overpassUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: `data=${encodeURIComponent(query)}`
+        body: `data=${encodeURIComponent(query)}`,
+        signal: controller.signal
       });
 
       if (!response.ok) {
@@ -307,15 +311,22 @@ class OSMService {
 
       const data = await response.json();
       const elements: OSMElement[] = data.elements || [];
-      
-      return elements
+      const rawPois = elements
         .map(element => this.normalizeOSMData(element))
         .filter((poi): poi is OSMPoiData => poi !== null)
         .slice(0, 20); // Limit to 20 results
-        
+
+      // Validate the parsed POI data
+      return OSMPoiDataSchema.array().parse(rawPois);
     } catch (error) {
+      if ((error as any).name === 'AbortError') {
+        console.warn('OSM fetch timed out after 5 seconds');
+      } else {
       console.warn('Failed to fetch OSM data:', error);
+      }
       return [];
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

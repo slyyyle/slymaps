@@ -13,7 +13,9 @@
   "dependencies": {
     "@fragaria/address-formatter": "^6.5.0",
     "@hookform/resolvers": "^4.1.3",
+    "@mapbox/mapbox-gl-directions": "^4.3.1",
     "@mapbox/mapbox-gl-draw": "^1.5.0",
+    "@mapbox/mapbox-gl-traffic": "^1.0.2",
     "@mapbox/polyline": "^1.2.1",
     "@mapbox/search-js-react": "^1.1.0",
     "@radix-ui/react-accordion": "^1.2.3",
@@ -43,9 +45,11 @@
     "date-fns": "^3.6.0",
     "dotenv": "^16.5.0",
     "firebase": "^11.8.1",
+    "graphql": "^16.11.0",
+    "graphql-request": "^7.2.0",
     "lucide-react": "^0.475.0",
     "mapbox-gl": "^3.12.0",
-    "next": "15.2.3",
+    "next": "^15.3.3",
     "patch-package": "^8.0.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
@@ -69,6 +73,7 @@
     "eslint-config-next": "15.3.3",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "worker-loader": "^3.0.8"
   }
 }

@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useDestinationSetting } from '../navigation/use-destination-setting';
 import { useLocationState } from '../data/use-location-state';
-import type { Coordinates, PointOfInterest } from '@/types/core';
+import type { Coordinates, Place } from '@/types/core';
 import type { MapMouseEvent } from 'mapbox-gl';
 import type { MapRef } from 'react-map-gl/maplibre';
 
 export function useEnhancedMapInteractions(mapRef?: MapRef | null) {
   const destinationSetting = useDestinationSetting();
-  const { poiCreationHandler } = useLocationState();
+  const { poiCreationHandler, isCreatingPOI } = useLocationState();
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
   
   // Stable refs to avoid re-render loops
   const destinationSettingRef = useRef(destinationSetting);
   const poiCreationHandlerRef = useRef(poiCreationHandler);
+  const isCreatingPOIRef = useRef(isCreatingPOI);
   
   // Keep refs up to date without triggering effects
   useEffect(() => {
@@ -21,7 +22,8 @@ export function useEnhancedMapInteractions(mapRef?: MapRef | null) {
   
   useEffect(() => {
     poiCreationHandlerRef.current = poiCreationHandler;
-  }, [poiCreationHandler]);
+    isCreatingPOIRef.current = isCreatingPOI;
+  }, [poiCreationHandler, isCreatingPOI]);
 
   /**
    * Modern map click handler following 2025 interaction patterns
@@ -45,10 +47,9 @@ export function useEnhancedMapInteractions(mapRef?: MapRef | null) {
     console.log('🗺️ Map clicked:', coords);
 
     // Priority 1: POI Creation mode (highest priority)
-    const currentPoiHandler = poiCreationHandlerRef.current;
-    if (currentPoiHandler) {
+    if (isCreatingPOIRef.current && poiCreationHandlerRef.current) {
       console.log('📍 POI creation mode - creating POI at clicked location');
-      currentPoiHandler(coords);
+      poiCreationHandlerRef.current(coords);
       return;
     }
 
@@ -60,16 +61,8 @@ export function useEnhancedMapInteractions(mapRef?: MapRef | null) {
       if (handled) return;
     }
 
-    // Priority 3: Clear any active selections (fallback)
-    console.log('🧹 Fallback: clearing active selections');
-    
-    // Close any native Mapbox popups
-    const existingPopups = document.querySelectorAll('.mapboxgl-popup');
-    if (existingPopups.length > 0) {
-      existingPopups.forEach(popup => popup.remove());
-    }
-
-    // Could add other cleanup actions here
+    // No special interactions, do nothing
+    return;
   }, []); // No dependencies to avoid loops
 
   /**
@@ -95,7 +88,7 @@ export function useEnhancedMapInteractions(mapRef?: MapRef | null) {
   /**
    * Handle POI clicks with enhanced feedback
    */
-  const handlePoiClick = useCallback((poi: PointOfInterest) => {
+  const handlePoiClick = useCallback((poi: Place) => {
     console.log('📍 POI clicked:', poi.name);
     
     // Could add enhanced POI interaction logic here
@@ -112,7 +105,7 @@ export function useEnhancedMapInteractions(mapRef?: MapRef | null) {
     mapInstanceRef.current = mapInstance;
     
     // Only add click listener when in special interaction modes
-    const needsClickHandler = !!poiCreationHandler || destinationSetting.isSettingDestination;
+    const needsClickHandler = isCreatingPOIRef.current || destinationSetting.isSettingDestination;
     
     if (needsClickHandler) {
       console.log('🖱️ Adding enhanced click handler for special modes');

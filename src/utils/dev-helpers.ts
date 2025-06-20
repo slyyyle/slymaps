@@ -1,6 +1,6 @@
-import { usePOIStore } from '@/stores/use-poi-store';
-import { useRouteStore } from '@/stores/use-route-store';
-import { useDataStore } from '@/stores/use-data-store';
+import { usePlaceStore } from '@/stores/use-place-store';
+import { useTransitStore } from '@/stores/transit';
+// import { useDataStore } from '@/stores/use-data-store'; // legacy store removed
 
 /**
  * Development helper functions for managing application state
@@ -15,21 +15,18 @@ export const clearAllStores = () => {
   }
 
   // Clear POI store
-  const poiStore = usePOIStore.getState();
+  const poiStore = usePlaceStore.getState();
   poiStore.cleanup();
   poiStore.clearSearchResults();
   poiStore.clearSelection();
 
   // Clear Route store
-  const routeStore = useRouteStore.getState();
+  const routeStore = useTransitStore.getState();
   routeStore.clearAllRoutes();
   // Optional: cleanup for route store (no-op by default)
   routeStore.cleanup();
 
-  // Reset main Data store and clear expired cache
-  const dataStore = useDataStore.getState();
-  dataStore.resetStore();
-  dataStore.cleanupExpiredData();
+  // Legacy data store removed
 
   console.log('✅ Dev helper: all stores and caches cleared successfully');
 };
@@ -54,7 +51,3 @@ export const useDevHelpers = () => {
     clearAllStores
   };
 };
-
-export function AppSearchBox() {
-  // Implementation of AppSearchBox function
-} 

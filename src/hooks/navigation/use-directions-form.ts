@@ -5,17 +5,22 @@ import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { Coordinates, TransitMode } from '@/types/core';
-import { useDataIntegration } from '@/hooks/data/use-data-integration';
+import { MAPBOX_ACCESS_TOKEN } from '@/lib/constants';
+import { useGeoPosition } from '@/hooks/data/use-geo-position';
+import { useMapRouteHandler } from '@/hooks/map';
 import { useMapViewport } from '@/hooks/map/use-map-navigation';
 import { useToast } from '@/hooks/ui/use-toast';
 import { log } from '@/lib/logging';
+import * as Errors from '@/lib/errors';
+import { usePlaceIntegration } from '@/hooks/data/use-place-integration';
+import { useTransitStore } from '@/stores/transit';
+import { useDirectionsMode } from '@/contexts/DirectionsModeContext';
 
 const directionFormSchema = z.object({
   startLat: z.preprocess(val => typeof val === 'string' && val !== '' ? parseFloat(val) : val, z.number().min(-90).max(90)).optional().nullable(),
   startLng: z.preprocess(val => typeof val === 'string' && val !== '' ? parseFloat(val) : val, z.number().min(-180).max(180)).optional().nullable(),
   endLat: z.preprocess(val => typeof val === 'string' && val !== '' ? parseFloat(val) : val, z.number().min(-90).max(90)),
   endLng: z.preprocess(val => typeof val === 'string' && val !== '' ? parseFloat(val) : val, z.number().min(-180).max(180)),
-  mode: z.string().min(1, "Please select a transit mode."),
 });
 
 export type DirectionFormData = z.infer<typeof directionFormSchema>;
@@ -27,21 +32,19 @@ interface DestinationInfo {
 }
 
 export function useDirectionsForm() {
-  const dataIntegration = useDataIntegration();
   const { flyTo } = useMapViewport();
   const { toast } = useToast();
-
-  const {
-    config: { getMapboxAccessToken },
-    directions: { getDirectionsState, getDirections, setDirectionsDestination },
-    location: { getCurrentLocation },
-  } = dataIntegration;
-  
-  const currentLocation = getCurrentLocation();
-  const mapboxAccessToken = getMapboxAccessToken();
-  const { destination: directionsDestination, isLoading: isDirectionsLoading } = getDirectionsState();
+  const { position: currentLocation } = useGeoPosition();
+  const mapboxAccessToken = MAPBOX_ACCESS_TOKEN;
+  const routeHandler = useMapRouteHandler();
+  const { addMapboxRoute, clearRouteSelection, getRouteCoordinates, selectRoute } = routeHandler;
+  const setRouteCoordinates = useTransitStore(state => state.setRouteCoordinates);
+  const placeIntegration = usePlaceIntegration();
+  const [isLoading, setLoading] = useState(false);
+  const { mode: selectedMode } = useDirectionsMode();
 
   const [startAddressInputValue, setStartAddressInputValue] = useState('');
+  const [startInfo, setStartInfo] = useState<DestinationInfo | null>(null);
   const [endAddressInputValue, setEndAddressInputValue] = useState('');
   const [destinationInfo, setDestinationInfo] = useState<DestinationInfo | null>(null);
   const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
@@ -49,7 +52,6 @@ export function useDirectionsForm() {
   const form = useForm<DirectionFormData>({
     resolver: zodResolver(directionFormSchema),
     defaultValues: {
-      mode: 'walking',
     },
   });
 
@@ -81,18 +83,19 @@ export function useDirectionsForm() {
   }, [mapboxAccessToken]);
 
   useEffect(() => {
-    if (directionsDestination && mapboxAccessToken) {
-      reverseGeocode(directionsDestination).then(info => {
+    const dest = getRouteCoordinates().end;
+    if (dest && mapboxAccessToken) {
+      reverseGeocode(dest).then(info => {
         if (info) {
           setDestinationInfo(info);
-          form.setValue('endLat', directionsDestination.latitude);
-          form.setValue('endLng', directionsDestination.longitude);
+          form.setValue('endLat', dest.latitude);
+          form.setValue('endLng', dest.longitude);
         }
       });
     } else {
       setDestinationInfo(null);
     }
-  }, [directionsDestination, mapboxAccessToken, reverseGeocode, form]);
+  }, [getRouteCoordinates, mapboxAccessToken, reverseGeocode, form]);
   
   const handleUseMyLocation = useCallback(() => {
     if (currentLocation) {
@@ -111,20 +114,47 @@ export function useDirectionsForm() {
     }
   }, [currentLocation, form, flyTo, toast]);
 
-  const handleStartAddressSelect = useCallback((coords: Coordinates, name?: string) => {
+  const handleStartAddressSelect = useCallback(async (coords: Coordinates, name?: string) => {
+    // Clear any active place selection to prevent showing a popup for the start pin
+    placeIntegration.clearPlaceSelection();
     form.setValue('startLat', coords.latitude);
     form.setValue('startLng', coords.longitude);
-    setStartAddressInputValue(name || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`);
     flyTo(coords, { zoom: 18 });
-  }, [form, flyTo]);
+    // Reverse geocode for formatted display
+    if (mapboxAccessToken) {
+      const info = await reverseGeocode(coords);
+      if (info) {
+        setStartInfo(info);
+        setStartAddressInputValue(info.name || info.address);
+      } else {
+        setStartInfo(null);
+        setStartAddressInputValue(name || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`);
+      }
+    } else {
+      setStartInfo(null);
+      setStartAddressInputValue(name || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`);
+    }
+  }, [form, flyTo, mapboxAccessToken, reverseGeocode, placeIntegration]);
 
-  const handleDestinationAddressSelect = useCallback((coords: Coordinates, name?: string) => {
+  const handleDestinationAddressSelect = useCallback(async (coords: Coordinates, name?: string) => {
     form.setValue('endLat', coords.latitude);
     form.setValue('endLng', coords.longitude);
-    setEndAddressInputValue(name || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`);
-    setDirectionsDestination(coords);
     flyTo(coords, { zoom: 18 });
-  }, [form, setDirectionsDestination, flyTo]);
+    // Reverse geocode for formatted display
+    if (mapboxAccessToken) {
+      const info = await reverseGeocode(coords);
+      if (info) {
+        setDestinationInfo(info);
+        setEndAddressInputValue(info.name || info.address);
+      } else {
+        setDestinationInfo(null);
+        setEndAddressInputValue(name || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`);
+      }
+    } else {
+      setDestinationInfo(null);
+      setEndAddressInputValue(name || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`);
+    }
+  }, [form, flyTo, mapboxAccessToken, reverseGeocode]);
 
   const onSubmit: SubmitHandler<DirectionFormData> = async (data) => {
     if (!data.startLat || !data.startLng) {
@@ -139,16 +169,28 @@ export function useDirectionsForm() {
     const startCoords: Coordinates = { latitude: data.startLat, longitude: data.startLng };
     const endCoords: Coordinates = { latitude: data.endLat, longitude: data.endLng };
     
-    await getDirections(startCoords, endCoords, data.mode as TransitMode);
+    // Clear any active POI popup and search results before routing
+    placeIntegration.clearPlaceSelection();
+    placeIntegration.clearSearchResults();
+    setLoading(true);
+    try {
+      const storeId = await addMapboxRoute(startCoords, endCoords, selectedMode);
+      selectRoute(storeId);
+    } catch (error) {
+      console.error('Route calculation error:', error);
+      toast({ title: "Route Error", description: Errors.getErrorMessage(error, "Unable to calculate route."), variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
   
   const clearDestination = useCallback(() => {
-    setDirectionsDestination(null);
+    clearRouteSelection();
     setDestinationInfo(null);
     form.resetField('endLat');
     form.resetField('endLng');
     setEndAddressInputValue('');
-  }, [setDirectionsDestination, form]);
+  }, [clearRouteSelection, form]);
 
   return {
     form,
@@ -161,10 +203,10 @@ export function useDirectionsForm() {
     handleUseMyLocation,
     handleStartAddressSelect,
     handleDestinationAddressSelect,
-    isDirectionsLoading,
-    directionsDestination,
+    isLoading,
     isReverseGeocoding,
     destinationInfo,
     clearDestination,
+    startInfo,
   };
 } 

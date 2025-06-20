@@ -1,6 +1,6 @@
 import React from 'react';
 import { Icons } from '@/components/icons';
-import type { UnifiedSearchSuggestion } from '@/types/oba';
+import type { UnifiedSearchSuggestion } from '@/types/transit/oba';
 
 interface UnifiedSuggestionsDropdownProps {
   show: boolean;

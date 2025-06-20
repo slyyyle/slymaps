@@ -1,11 +1,9 @@
 import { useCallback } from 'react';
 import type { Coordinates } from '@/types/core';
 import { useToast } from '@/hooks/ui/use-toast';
-import { useDataIntegration } from './use-data-integration';
 
-// Simplified interface - only POI creation now, location is handled by native GeolocateControl
+// Simplified interface - only POI creation now handled manually
 export interface LocationActions {
-  // POI Creation actions
   startPOICreation: () => void;
   cancelPOICreation: () => void;
   createPOIAtLocation: (coords: Coordinates, type?: string, name?: string) => string;
@@ -13,49 +11,33 @@ export interface LocationActions {
 
 export function useLocationState() {
   const { toast } = useToast();
-  const dataIntegration = useDataIntegration();
 
-  // Get only POI creation state - location is handled natively now
-  const isCreatingPOI = dataIntegration.location.isCreatingPOI();
-
-  // Expose the POI creation handler for map components to use
-  const poiCreationHandler = dataIntegration.location.getPOICreationHandler();
-
-  // POI Creation actions
   const startPOICreation = useCallback(() => {
-    dataIntegration.location.startPOICreation();
-    
     toast({
       title: "Create Custom POI",
       description: "Click on the map to create a custom point of interest.",
     });
-  }, [dataIntegration.location, toast]);
+  }, [toast]);
 
-  const cancelPOICreation = useCallback(() => {
-    dataIntegration.location.cancelPOICreation();
-  }, [dataIntegration.location]);
+  const cancelPOICreation = useCallback(() => {}, []);
 
   const createPOIAtLocation = useCallback((coords: Coordinates, type?: string, name?: string) => {
-    const poiId = dataIntegration.location.createPOIAtLocation(coords, type, name);
-    
     toast({
       title: "POI Created",
       description: `Created "${name || 'Custom Location'}" at ${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`,
     });
+    // TODO: integrate with unified POI handler
+    return '';
+  }, [toast]);
     
-    return poiId;
-  }, [dataIntegration.location, toast]);
+  // No direct POI creation handler beyond the above actions
+  const poiCreationHandler = createPOIAtLocation;
 
-  const actions: LocationActions = {
+  return {
+    isCreatingPOI: false,
     startPOICreation,
     cancelPOICreation,
     createPOIAtLocation,
-  };
-
-  return {
-    // Only POI creation state
-    isCreatingPOI,
-    ...actions,
-    poiCreationHandler, // Expose the POI creation handler for map components
+    poiCreationHandler,
   };
 } 

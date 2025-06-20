@@ -10,8 +10,10 @@ import { Separator } from '@/components/ui/separator';
 import { Icons } from '@/components/icons';
 import { isValidApiKey } from '@/lib/errors';
 import { formatObaTime, getStatusColor } from '@/lib/time';
-import { useDataIntegration } from '@/hooks/data/use-data-integration';
-import type { ObaArrivalDeparture } from '@/types/oba';
+import { usePlaceIntegration } from '@/hooks/data/use-place-integration';
+import { useTransitIntegration } from '@/hooks/data/use-transit-integration';
+import { useStopArrivals } from '@/hooks/data/use-stop-arrivals';
+import type { ObaArrivalDeparture } from '@/types/transit/oba';
 
 interface StopInformationProps {
   apiKey: string;
@@ -24,13 +26,18 @@ export function StopInformation({
   onSelectRoute, 
   isBusy,
 }: StopInformationProps) {
-  const dataIntegration = useDataIntegration();
+  const placeIntegration = usePlaceIntegration();
+  const transitIntegration = useTransitIntegration();
 
-  // Data is now sourced directly from the centralized store
-  const selectedPoi = dataIntegration.pois.getActivePOI();
-  const arrivals = selectedPoi?.id ? dataIntegration.pois.getCachedArrivals(selectedPoi.id) ?? [] : [];
-  const isLoadingArrivals = selectedPoi ? dataIntegration.loading.isLoading('arrivals', selectedPoi.id) : false;
-  const obaReferencedRoutes = dataIntegration.routes.getReferencedRoutes();
+  const selectedPlace = placeIntegration.activePlace;
+
+  const stopId: string | null = selectedPlace?.id ?? null;
+  const {
+    scheduleQuery,
+    arrivals
+  } = useStopArrivals(stopId);
+  const isLoadingArrivals = scheduleQuery.isLoading;
+  const obaReferencedRoutes = transitIntegration.getReferencedRoutes();
 
   if (!isValidApiKey(apiKey)) {
     return (
@@ -48,7 +55,7 @@ export function StopInformation({
     );
   }
 
-  const currentObaStop = selectedPoi && selectedPoi.isObaStop ? selectedPoi : null;
+  const currentObaStop = selectedPlace && selectedPlace.isObaStop ? selectedPlace : null;
 
   const getRouteShortName = (routeId: string): string => {
     const refRoute = obaReferencedRoutes[routeId];

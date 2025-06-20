@@ -31,8 +31,6 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       document.body.classList.add(globalThemeClass);
     }
     
-    console.log(`🎨 Applied global theme: ${globalThemeClass} (from ${sidebarTheme})`);
-    
   }, [sidebarTheme]);
   
   return <>{children}</>;

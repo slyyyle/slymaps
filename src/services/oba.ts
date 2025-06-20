@@ -6,7 +6,7 @@
 import { ONEBUSAWAY_API_KEY } from '@/lib/constants';
 import { handleApiError, isValidApiKey } from '@/lib/errors';
 import { rateLimitedRequest, debouncedRateLimitedRequest } from '@/lib/api';
-import type { Coordinates, PointOfInterest } from '@/types/core';
+import type { Coordinates, Place } from '@/types/core';
 import type { 
   ObaRouteSearchResult, 
   ObaStopSearchResult, 
@@ -19,18 +19,16 @@ import type {
   ObaScheduleEntry,
   ObaTripDetails,
   ObaStopSchedule,
-  ObaStopScheduleWithRefs
-} from '@/types/oba';
+  ObaStopScheduleWithRefs,
+  ObaSituation
+} from '@/types/transit/oba';
 import polyline from '@mapbox/polyline';
 
 const OBA_BASE_URL = 'https://api.pugetsound.onebusaway.org/api/where';
 
 // NEW: Safely parse JSON or return null, and log raw text for debugging
 async function safeParseJsonResponse(response: Response): Promise<any | null> {
-  // Always read the full body as text
   const text = await response.text();
-  // Log raw response for debugging unexpected shapes
-  console.debug(`🔍 OBA raw response [${response.url}]:`, text);
   // Handle empty bodies
   if (!text || text.trim() === '') {
     console.warn(`Empty response body for ${response.url}`);
@@ -244,7 +242,7 @@ export async function getVehiclesForRoute(routeId: string): Promise<ObaVehicleLo
   }
 
   const data = await rateLimitedRequest(async () => {
-    const response = await fetch(`${OBA_BASE_URL}/trips-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includeReferences=false`);
+    const response = await fetch(`${OBA_BASE_URL}/trips-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includeReferences=true`);
 
     if (!response.ok) {
       // This will throw an error which will be caught by the calling hook
@@ -254,20 +252,76 @@ export async function getVehiclesForRoute(routeId: string): Promise<ObaVehicleLo
     return await response.json();
   }, `vehicles for route ${routeId}`);
   
+  // Debug: log raw trips-for-route API response
+  console.debug('🚍 trips-for-route raw response:', data);
+  
+  // Debug: log individual vehicle status objects
+  if (data.data?.list?.length > 0) {
+    console.debug('🚌 Sample vehicle status data:', {
+      totalVehicles: data.data.list.length,
+      sampleVehicle: data.data.list[0],
+      sampleStatus: data.data.list[0]?.status
+    });
+  }
+  
   const vehicles: ObaVehicleLocation[] = (data.data?.list as Array<Record<string, any>> || [])
     .map(entry => {
       const status = entry.status as Record<string, any>;
       const position = status?.position as Record<string, number> | undefined;
       if (!status?.vehicleId || !position) return null;
-      return {
+      
+      // Find trip reference to get headsign
+      const tripRef = data.data?.references?.trips?.find((trip: any) => trip.id === entry.tripId);
+      const tripHeadsign = tripRef?.tripHeadsign || null;
+      
+      // Determine if this is real-time predicted data
+      const predicted = status.predicted === true;
+      
+      // Debug logging for status extraction
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🚍 Raw OBA status for vehicle:', status.vehicleId, {
+          nextStop: status.nextStop,
+          nextStopTimeOffset: status.nextStopTimeOffset,
+          closestStop: status.closestStop,
+          closestStopTimeOffset: status.closestStopTimeOffset,
+          predicted: status.predicted,
+          phase: status.phase
+        });
+      }
+
+      const vehicleObject = {
         id: status.vehicleId,
         routeId,
         latitude: position.lat,
         longitude: position.lon,
         tripId: entry.tripId as string,
+        tripHeadsign,
         lastUpdateTime: status.lastLocationUpdateTime as number,
         heading: status.orientation as number,
+        // Add status fields for stop tracking
+        nextStopId: status.nextStop || null,
+        nextStopTimeOffset: status.nextStopTimeOffset || null,
+        closestStopId: status.closestStop || null,
+        closestStopTimeOffset: status.closestStopTimeOffset || null,
+        phase: status.phase || null,
+        predicted,
+        scheduleDeviation: status.scheduleDeviation || null,
+        distanceAlongTrip: status.distanceAlongTrip || null,
+        totalDistanceAlongTrip: status.totalDistanceAlongTrip || null,
       } as ObaVehicleLocation;
+
+      // Debug logging for vehicle object creation
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🚙 Created vehicle object:', status.vehicleId, {
+          nextStopId: vehicleObject.nextStopId,
+          nextStopTimeOffset: vehicleObject.nextStopTimeOffset,
+          closestStopId: vehicleObject.closestStopId,
+          predicted: vehicleObject.predicted,
+          allProps: Object.keys(vehicleObject)
+        });
+      }
+
+      return vehicleObject;
     })
     .filter((v): v is ObaVehicleLocation => v !== null);
 
@@ -279,8 +333,11 @@ export async function getVehiclesForRoute(routeId: string): Promise<ObaVehicleLo
  */
 export async function getRouteDetails(routeId: string): Promise<{
   routeInfo: ObaRoute | null;
-  branches: { branchIdx: number; name: string; segments: ObaRouteGeometry[]; stops: PointOfInterest[] }[];
+  branches: { branchIdx: number; name: string; segments: ObaRouteGeometry[]; stops: Place[] }[];
 }> {
+  // Ensure we use the raw OBA route ID (strip any store prefix)
+  const effectiveRouteId = routeId.startsWith('oba-') ? routeId.slice(4) : routeId;
+
   if (!routeId || typeof routeId !== 'string' || routeId.trim() === '') {
     throw new Error('A valid OneBusAway Route ID is required to fetch its details.');
   }
@@ -297,7 +354,8 @@ export async function getRouteDetails(routeId: string): Promise<{
 
   // For backward compatibility, still fetch full API response for stops and other data
   const data = await rateLimitedRequest(async () => {
-    const response = await fetch(`${OBA_BASE_URL}/stops-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includePolylines=true&includeReferences=true`);
+    const url = `${OBA_BASE_URL}/stops-for-route/${effectiveRouteId}.json?key=${ONEBUSAWAY_API_KEY}&includePolylines=true&includeReferences=true`;
+    const response = await fetch(url);
 
     if (!response.ok) {
       await handleApiError(response, `fetch route details for ${routeId}`);
@@ -311,7 +369,8 @@ export async function getRouteDetails(routeId: string): Promise<{
   // Extract route details from references
   let routeInfo: ObaRoute | null = null;
   if (dataData && references?.routes && Array.isArray(references.routes) && references.routes.length > 0) {
-    const refRoute = (references.routes as ObaRoute[]).find(r => r.id === routeId) || references.routes[0] as ObaRoute;
+    // Use effectiveRouteId when matching references
+    const refRoute = (references.routes as ObaRoute[]).find(r => r.id === effectiveRouteId) || references.routes[0] as ObaRoute;
     if (refRoute) {
       routeInfo = {
         id: refRoute.id,
@@ -462,25 +521,20 @@ export async function getRouteShapes(routeId: string): Promise<{
 }> {
   const baseUrl = 'https://api.pugetsound.onebusaway.org/api/where';
   
+  // Ensure we use the raw OBA route ID (strip any store prefix)
+  const effectiveRouteId = routeId.startsWith('oba-') ? routeId.slice(4) : routeId;
+  
   try {
     const data = await rateLimitedRequest(async () => {
-      const response = await fetch(
-        `${baseUrl}/stops-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}&includePolylines=true&includeReferences=true`
-      );
-      
+      const url = `${baseUrl}/stops-for-route/${effectiveRouteId}.json?key=${ONEBUSAWAY_API_KEY}&includePolylines=true&includeReferences=true`;
+      const response = await fetch(url);
+
       if (!response.ok) {
         throw new Error(`API request failed: ${response.status} ${response.statusText}`);
       }
-      
+
       return await response.json();
     }, 'route shapes');
-    
-    // Add raw response logging for debugging
-    console.log(`[OBA] raw stops-for-route response for ${routeId}:`, data);
-    
-    if (data.code !== 200) {
-      throw new Error(`OBA API error: ${data.text || 'Unknown error'}`);
-    }
     
     // Process polylines into separate route segments
     const routeSegments: ObaRouteGeometry[] = [];
@@ -533,9 +587,6 @@ export async function getRouteShapes(routeId: string): Promise<{
       });
     }
     
-    // Debug logging: segment and stop counts
-    console.log(`[OBA] getRouteShapes(${routeId}) → segments: ${routeSegments.length}, stopsBySegment: [${stopsBySegment.map(arr => arr.length).join(', ')}]`);
-    
     // Build per-branch variants
     const directionGrouping = data.data.entry.stopGroupings?.find((g: any) => (g as any).type === 'direction');
     const branches = (directionGrouping?.stopGroups as any[] || []).map((group: any, branchIdx: number) => {
@@ -574,7 +625,13 @@ export async function getRouteShapes(routeId: string): Promise<{
     
   } catch (error) {
     console.error('Error fetching route shapes:', error);
-    throw error;
+    // Return empty shapes on error to avoid breaking route loading
+    return {
+      routeSegments: [],
+      routeDetails: null,
+      stopsBySegment: [],
+      branches: []
+    };
   }
 }
 
@@ -657,11 +714,14 @@ export async function getRoutesForAgency(agencyId: string): Promise<ObaRouteSear
 }
 
 export async function getScheduleForRoute(routeId: string): Promise<ObaScheduleEntry> {
+  // Strip any store prefix to get the raw OBA route ID
+  const effectiveRouteId = routeId.startsWith('oba-') ? routeId.slice(4) : routeId;
   if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
     throw new Error('OneBusAway API key is required');
   }
 
-  const response = await fetch(`${OBA_BASE_URL}/schedule-for-route/${routeId}.json?key=${ONEBUSAWAY_API_KEY}`);
+  const scheduleUrl = `${OBA_BASE_URL}/schedule-for-route/${effectiveRouteId}.json?key=${ONEBUSAWAY_API_KEY}`;
+  const response = await fetch(scheduleUrl);
   if (!response.ok) {
     await handleApiError(response, `fetch schedule for route ${routeId}`);
   }
@@ -710,4 +770,97 @@ export async function getStopSchedule(stopId: string): Promise<ObaStopScheduleWi
   const entry = data.data?.entry as ObaStopSchedule;
   const references = data.data?.references;
   return { entry, references };
+}
+
+/**
+ * Helper function to extract situations for a specific stop from API references
+ * This works with any OBA API response that includes references
+ */
+export function getSituationsForStopFromReferences(
+  references: any, 
+  stopId: string
+): ObaSituation[] {
+  if (!references?.situations) {
+    return [];
+  }
+  
+  return references.situations.filter((situation: ObaSituation) => {
+    // Check if this situation affects the specific stop
+    return situation.affects?.stopIds?.includes(stopId) || false;
+  });
+}
+
+/**
+ * Helper function to extract situations for a specific route from API references
+ * This works with any OBA API response that includes references  
+ */
+export function getSituationsForRouteFromReferences(
+  references: any,
+  routeId: string
+): ObaSituation[] {
+  if (!references?.situations) {
+    return [];
+  }
+  
+  return references.situations.filter((situation: ObaSituation) => {
+    // Check if this situation affects the specific route
+    return situation.affects?.routeIds?.includes(routeId) || false;
+  });
+}
+
+/**
+ * Fetch arrivals and departures for a stop (includes situations in references)
+ */
+/**
+ * Get stop details by stop ID
+ */
+export async function getStopDetails(stopId: string): Promise<ObaStopSearchResult | null> {
+  if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${OBA_BASE_URL}/stop/${stopId}.json?key=${ONEBUSAWAY_API_KEY}`);
+    if (!response.ok) {
+      console.warn(`Failed to fetch stop details for ${stopId}:`, response.status);
+      return null;
+    }
+    
+    const data = await response.json();
+    const stop = data.data?.entry;
+    
+    if (!stop) return null;
+    
+    return {
+      id: stop.id,
+      name: stop.name,
+      code: stop.code,
+      latitude: stop.lat,
+      longitude: stop.lon,
+      direction: stop.direction || 'N',
+      routeIds: stop.routeIds || []
+    };
+  } catch (error) {
+    console.warn(`Error fetching stop details for ${stopId}:`, error);
+    return null;
+  }
+}
+
+export async function getArrivalsAndDeparturesForStop(stopId: string): Promise<{
+  arrivals: any[];
+  references: any;
+}> {
+  if (!isValidApiKey(ONEBUSAWAY_API_KEY)) {
+    throw new Error('OneBusAway API key is required');
+  }
+
+  const response = await fetch(`${OBA_BASE_URL}/arrivals-and-departures-for-stop/${stopId}.json?key=${ONEBUSAWAY_API_KEY}`);
+  if (!response.ok) {
+    await handleApiError(response, `fetch arrivals for stop ${stopId}`);
+  }
+  const data = await response.json();
+  return {
+    arrivals: data.data?.entry?.arrivalsAndDepartures || [],
+    references: data.data?.references || {}
+  };
 } 
