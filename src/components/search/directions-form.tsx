@@ -100,6 +100,8 @@ export function DirectionsForm({ mapRef, onBeginTrip }: DirectionsFormProps) {
           <Label className="flex items-center"><Icons.MapPin className="mr-2 h-4 w-4 text-green-600" /> Start Location</Label>
           {startAddressInputValue ? (
             <div className="p-2 border rounded-md bg-muted/50 text-sm overflow-hidden">
+              <div className="flex justify-between items-start">
+                <div className="flex-1 min-w-0">
               {isReverseGeocoding ? (
                 <p>Finding address...</p>
               ) : startInfo ? (
@@ -112,11 +114,13 @@ export function DirectionsForm({ mapRef, onBeginTrip }: DirectionsFormProps) {
               ) : (
                 <p className="font-medium leading-tight break-words">{startAddressInputValue}</p>
               )}
-              <Button variant="link" size="sm" className="p-0 h-auto text-xs mt-1" onClick={() => {
+                </div>
+                <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-2 flex-shrink-0" onClick={() => {
                 form.resetField('startLat');
                 form.resetField('startLng');
                 setStartAddressInputValue('');
               }}>Edit</Button>
+              </div>
             </div>
           ) : (
           <UnifiedSearchBox
@@ -154,6 +158,8 @@ export function DirectionsForm({ mapRef, onBeginTrip }: DirectionsFormProps) {
           <Label className="flex items-center"><Icons.MapPin className="mr-2 h-4 w-4 text-red-600" /> Destination</Label>
           {endAddressInputValue ? (
              <div className="p-2 border rounded-md bg-muted/50 text-sm overflow-hidden">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1 min-w-0">
                 {isReverseGeocoding ? (
                   <p className="flex items-center">
                     <Icons.Time className="mr-2 h-3 w-3 animate-spin" />
@@ -169,7 +175,9 @@ export function DirectionsForm({ mapRef, onBeginTrip }: DirectionsFormProps) {
                 ) : (
                 <p className="leading-tight break-words">{endAddressInputValue}</p>
                 )}
-              <Button variant="link" size="sm" className="p-0 h-auto text-xs mt-1" onClick={clearDestination}>Edit</Button>
+                  </div>
+                  <Button variant="link" size="sm" className="p-0 h-auto text-xs ml-2 flex-shrink-0" onClick={clearDestination}>Edit</Button>
+                </div>
              </div>
           ) : (
           <UnifiedSearchBox
@@ -240,14 +248,27 @@ export function DirectionsForm({ mapRef, onBeginTrip }: DirectionsFormProps) {
             }}>
               Clear
             </Button>
+            {/* Begin Trip button: triggers navigation UI for supported modes or fallbacks */}
             <Button variant="outline" size="sm" onClick={() => onBeginTrip?.()}>
               Begin Trip
             </Button>
+            {/* Distance and time estimation inline */}
+            <div className="text-sm text-muted-foreground ml-auto pl-2">
+              <span className="font-medium">{Math.round(route.distance / 1000)}km</span>
+              <span className="text-muted-foreground"> • </span>
+              <span>{Math.round(route.duration / 60)}min</span>
+              {isTransitRoute && (
+                <>
+                  <span className="text-muted-foreground"> • </span>
+                  <span className="text-xs text-muted-foreground">Transit</span>
+                </>
+              )}
+            </div>
           </div>
         )}
 
         {/* Show tabs for route alternatives when available (non-transit routes only) */}
-        {route && !isTransitRoute && initialPrimaryRoute && alternatives.length > 0 ? (
+        {route && !isTransitRoute && initialPrimaryRoute && initialAlternatives.length > 0 ? (
           <Tabs
             value={String(selectedAlt)}
             onValueChange={(val) => {
@@ -257,7 +278,7 @@ export function DirectionsForm({ mapRef, onBeginTrip }: DirectionsFormProps) {
               if (idx === 0) {
                 updateRoute(activeRouteId, { mapboxRoute: initialPrimaryRoute! });
               } else {
-                const chosen = alternatives[idx - 1];
+                const chosen = initialAlternatives[idx - 1];
                 updateRoute(activeRouteId, { mapboxRoute: chosen });
               }
             }}
@@ -267,23 +288,13 @@ export function DirectionsForm({ mapRef, onBeginTrip }: DirectionsFormProps) {
               <TabsTrigger value="0" className="flex-1 text-center text-xs">
                 Primary
               </TabsTrigger>
-              {alternatives.map((alt, i) => (
+              {initialAlternatives.map((alt, i) => (
                 <TabsTrigger key={i + 1} value={String(i + 1)} className="flex-1 text-center text-xs">
                   Alt {i + 1}
                 </TabsTrigger>
               ))}
             </TabsList>
             <TabsContent value={String(selectedAlt)} className="mt-2 space-y-3">
-              {/* Route summary */}
-              {route && (
-                <div className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
-                  <div className="text-sm">
-                    <span className="font-medium">{Math.round(route.distance / 1000)}km</span>
-                    <span className="text-muted-foreground"> • </span>
-                    <span>{Math.round(route.duration / 60)}min</span>
-                  </div>
-                </div>
-              )}
               {/* Turn-by-turn text instructions */}
               <div className="p-4 bg-muted rounded-md max-h-[32rem] overflow-y-auto">
                 {route.legs.map((leg, legIndex) => (
@@ -311,43 +322,27 @@ export function DirectionsForm({ mapRef, onBeginTrip }: DirectionsFormProps) {
         ) : (
           route && (
             <>
-              {/* Route summary */}
-              <div className="mt-4 space-y-3">
-                <div className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
-                  <div className="text-sm">
-                    <span className="font-medium">{Math.round(route.distance / 1000)}km</span>
-                    <span className="text-muted-foreground"> • </span>
-                    <span>{Math.round(route.duration / 60)}min</span>
-                    {isTransitRoute && (
-                      <>
-                        <span className="text-muted-foreground"> • </span>
-                        <span className="text-xs text-muted-foreground">Transit route</span>
-                      </>
+              {/* Instructions display */}
+              <div className="mt-4 p-4 bg-muted rounded-md max-h-[32rem] overflow-y-auto">
+                {route.legs.map((leg, legIndex) => (
+                  <div key={legIndex} className="mb-4">
+                    {route.legs.length > 1 && (
+                      <h5 className="font-medium text-sm mb-2 text-primary">
+                        {leg.summary}
+                      </h5>
                     )}
+                    <ol className="list-decimal list-inside space-y-2 marker:text-primary marker:font-semibold">
+                      {leg.steps.map((step: any, stepIndex: number) => (
+                        <li key={stepIndex} className="text-sm">
+                          {step.maneuver.instruction}{' '}
+                          <span className="text-xs text-muted-foreground">
+                            {Math.round(step.distance)}m
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
                   </div>
-                </div>
-                {/* Instructions display */}
-                <div className="p-4 bg-muted rounded-md max-h-[32rem] overflow-y-auto">
-                  {route.legs.map((leg, legIndex) => (
-                    <div key={legIndex} className="mb-4">
-                      {route.legs.length > 1 && (
-                        <h5 className="font-medium text-sm mb-2 text-primary">
-                          {leg.summary}
-                        </h5>
-                      )}
-                      <ol className="list-decimal list-inside space-y-2 marker:text-primary marker:font-semibold">
-                        {leg.steps.map((step: any, stepIndex: number) => (
-                          <li key={stepIndex} className="text-sm">
-                            {step.maneuver.instruction}{' '}
-                            <span className="text-xs text-muted-foreground">
-                              {Math.round(step.distance)}m
-                            </span>
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  ))}
-                </div>
+                ))}
               </div>
             </>
           )

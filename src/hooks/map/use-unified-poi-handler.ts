@@ -24,6 +24,11 @@ interface UnifiedPOIHandlerProps {
   enableRouteIntegration?: boolean;
 }
 
+// All Mapbox transit modes to detect real transit stops
+const MAPBOX_TRANSIT_MODES = new Set([
+  'bus','tram','rail','light_rail','subway','metro','ferry','trolleybus','cable_car','monorail'
+]);
+
 export function useUnifiedPOIHandler({
   map,
   enableNativeInteractions = true,
@@ -39,21 +44,57 @@ export function useUnifiedPOIHandler({
   const handlePOIInteraction = useCallback((interaction: POIInteractionEvent) => {
     // Handle different interaction types without console noise
     switch (interaction.type) {
-      case 'native':
-        // Native POIs are ephemeral - select but don't store
+      case 'native': {
+        // Always select the ephemeral POI
         poiStore.selectPOI(interaction.poi, 'native');
-        
-        // 🆕 OSM ENRICHMENT: Automatically enrich native POI with OSM data (async, non-blocking)
-        if (enableOSMEnrichment) {
-          // Run enrichment asynchronously without blocking the popup
+
+        // Detect any Mapbox transit stop via properties
+        const props = interaction.poi.properties || {};
+        const mode = String(props.transit_mode || '').toLowerCase();
+        const isMapboxTransitStop = props.group === 'transit' && MAPBOX_TRANSIT_MODES.has(mode);
+
+        if (isMapboxTransitStop) {
+          // Proxy lookup via our Next.js API to avoid CORS issues
+          setTimeout(async () => {
+            try {
+              const res = await fetch(
+                `/api/oba/nearby-transit?lat=${interaction.poi.latitude}&lon=${interaction.poi.longitude}&radius=200`
+              );
+              const { stops } = await res.json();
+              if (stops.length > 0) {
+                const stop = stops[0];
+                const stopPoi: Place = {
+                  id: stop.id,
+                  name: stop.name,
+                  type: 'Transit Stop',
+                  latitude: stop.latitude,
+                  longitude: stop.longitude,
+                  description: `Stop #${stop.code} - ${stop.direction} bound`,
+                  isObaStop: true,
+                  properties: {
+                    source: 'oba',
+                    stop_code: stop.code,
+                    direction: stop.direction,
+                    route_ids: stop.routeIds,
+                    wheelchair_boarding: stop.wheelchairBoarding
+                  }
+                };
+                poiStore.selectPOI(stopPoi, 'native');
+              }
+            } catch (err) {
+              console.warn('OBA proxy fetch failed:', err);
+            }
+          }, 0);
+        } else if (enableOSMEnrichment) {
+          // Non-transit or non-supported native POIs: OSM enrichment
           setTimeout(() => {
-            enrichNativePOIWithOSM(interaction.poi).catch(error => 
+            enrichNativePOIWithOSM(interaction.poi).catch(error =>
               console.warn('OSM enrichment failed for native POI:', error)
             );
-          }, 100); // Small delay to let popup render first
+          }, 100);
         }
         break;
-        
+      }
       case 'stored':
         // Stored POIs - just select
         poiStore.selectPOI(interaction.poi, 'stored');

@@ -48,8 +48,8 @@ export const MapPopup: React.FC<MapPopupProps> = ({ poi, popupTheme, onClose, ma
         situationsQuery.isLoading
       );
     } else {
-      // For POIs, wait for OSM enrichment if it's a native POI
-      return poi.isNativePoi ? hoursQuery.isLoading : false;
+      // For POIs and search results, wait for OSM enrichment
+      return (poi.isNativePoi || poi.isSearchResult) ? hoursQuery.isLoading : false;
     }
   })();
 
@@ -77,14 +77,14 @@ export const MapPopup: React.FC<MapPopupProps> = ({ poi, popupTheme, onClose, ma
           </div>
         ) : (
           <div
-            className="min-w-[320px] bg-card text-card-foreground rounded-lg p-4 space-y-3"
+            className="min-w-[320px] bg-card text-card-foreground rounded-lg p-3 space-y-0"
             style={{ backgroundColor: 'hsl(var(--card))', color: 'hsl(var(--card-foreground))' }}
           >
             {isStop ? (
               <>
                 <div className="px-4 pt-3">
                   <div className="text-lg font-semibold">{poi.name}</div>
-                  <div className="flex items-center justify-between mt-1 pb-2">
+                  <div className="flex items-center justify-between mt-0 pb-1">
                     <span className="text-sm text-muted-foreground">Transit Stop</span>
                     <ActionsSection
                       poi={poi}
@@ -106,7 +106,7 @@ export const MapPopup: React.FC<MapPopupProps> = ({ poi, popupTheme, onClose, ma
                     })()}
                   </div>
                   {/* Subclass and actions inline */}
-                  <div className="flex items-center justify-between mt-1 pb-2">
+                  <div className="flex items-center justify-between mt-0 pb-1">
                     {(() => {
                       const formatForDisplay = (value: string) =>
                         value.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -120,9 +120,9 @@ export const MapPopup: React.FC<MapPopupProps> = ({ poi, popupTheme, onClose, ma
                     <ActionsSection poi={poi} onDirections={() => console.log('Directions:', poi.name)} onSave={() => console.log('Save:', poi.name)} />
                   </div>
                 </div>
-                {poi.isNativePoi && (
+                {(poi.isNativePoi || poi.isSearchResult) && (
                   <OSMInfoSection
-                    isNativePoi={Boolean(poi.isNativePoi)}
+                    isNativePoi={Boolean(poi.isNativePoi || poi.isSearchResult)}
                     hasOSMEnrichment={!!hoursQuery.data}
                     osmLookupAttempted={hoursQuery.isFetched}
                     address={hoursQuery.data?.address}

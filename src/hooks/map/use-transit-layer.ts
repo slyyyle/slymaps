@@ -7,6 +7,7 @@ interface UseTransitLayerOptions {
   color?: string;
   width?: number;
   opacity?: number;
+  disableOutline?: boolean;
 }
 
 export function useTransitLayer(
@@ -16,6 +17,7 @@ export function useTransitLayer(
   options: UseTransitLayerOptions = {}
 ) {
   const { color = '#FF1493', width = 4, opacity = 1 } = options;
+  const disableOutline = Boolean(options.disableOutline);
 
   // Fetch route details (including branch segments) via React-Query
   const { data, status } = useFetchRouteDetails(routeId || '');
@@ -89,22 +91,24 @@ export function useTransitLayer(
           }
         });
 
-        // Add outline layer below main layer
-        map.addLayer(
-          {
-            id: layerIds.outline,
-            type: 'line',
-            source: layerIds.source,
-            layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: {
-              'line-color': '#ffffff',
-              'line-width': ['interpolate', ['linear'], ['zoom'], 10, width * 0.5 + 2, 15, width + 2, 18, width * 1.5 + 2],
-              'line-opacity': 0.6,
-              'line-emissive-strength': 1
-            }
-          },
-          layerIds.layer // Insert before main layer so outline is below
-        );
+        // Optionally add outline layer below main layer
+        if (!disableOutline) {
+          map.addLayer(
+            {
+              id: layerIds.outline,
+              type: 'line',
+              source: layerIds.source,
+              layout: { 'line-join': 'round', 'line-cap': 'round' },
+              paint: {
+                'line-color': '#ffffff',
+                'line-width': ['interpolate', ['linear'], ['zoom'], 10, width * 0.5 + 2, 15, width + 2, 18, width * 1.5 + 2],
+                'line-opacity': 0.6,
+                'line-emissive-strength': 1
+              }
+            },
+            layerIds.layer // Insert before main layer so outline is below
+          );
+        }
       } catch (error) {
         console.error('Error adding transit route layers:', error);
         // Try to cleanup on error
@@ -125,5 +129,5 @@ export function useTransitLayer(
       // Remove any pending style listeners
       map.off('styledata', addLayers);
     };
-  }, [mapRef, routeGeometry, color, width, opacity, cleanupLayers, layerIds]);
+  }, [mapRef, routeGeometry, color, width, opacity, cleanupLayers, layerIds, disableOutline]);
 } 

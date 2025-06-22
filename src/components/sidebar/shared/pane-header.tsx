@@ -5,11 +5,13 @@ import { BackButton } from './back-button';
 interface PaneHeaderProps {
   title: string;
   onBack: () => void;
+  /** whether to show back button; default true */
+  showBack?: boolean;
   className?: string;
   children?: React.ReactNode;
 }
 
-export function PaneHeader({ title, onBack, className, children }: PaneHeaderProps) {
+export function PaneHeader({ title, onBack, showBack = true, className, children }: PaneHeaderProps) {
   return (
     <div
       className={cn(
@@ -24,7 +26,7 @@ export function PaneHeader({ title, onBack, className, children }: PaneHeaderPro
       <div className="p-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <BackButton onClick={onBack} />
+            {showBack && <BackButton onClick={onBack} />}
             {title && (
               <h2 className="text-lg font-semibold" style={{ color: 'hsl(var(--foreground))' }}>
                 {title}

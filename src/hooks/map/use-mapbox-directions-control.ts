@@ -7,7 +7,10 @@ import type { Coordinates } from '@/types/core';
 import { MAPBOX_ACCESS_TOKEN } from '@/lib/constants';
 import { useTransitStore } from '@/stores/transit';
 
-// Hook to manage Mapbox Directions control for driving, walking, cycling
+// Hook to manage Mapbox Directions control for driving, walking, cycling.
+// Only attach MapboxDirections when in non-transit mode and both start and end coordinates are provided.
+// If the map isn't loaded yet (no mapRef), in transit mode, or coords are missing, the control is detached and not displayed.
+// This ensures Mapbox Navigation UI is only shown for supported routing scenarios.
 export function useMapboxDirectionsControl(
   mapRef: React.RefObject<MapRef>,
   mapLoaded: boolean,
@@ -23,17 +26,15 @@ export function useMapboxDirectionsControl(
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current.getMap();
 
-    // Remove control when switching to transit
-    if (mode === 'transit') {
+    // Detach control when switching to transit mode or missing coordinates
+    // Covers cases where user selects transit or clears route before starting a trip.
+    if (mode === 'transit' || !startCoords || !endCoords) {
       if (controlRef.current) {
         try { map.removeControl(controlRef.current); } catch {}
         controlRef.current = null;
       }
       return;
     }
-
-    // Only attach when we have valid coordinates
-    if (!startCoords || !endCoords) return;
 
     // Instantiate control if not already
     if (!controlRef.current) {

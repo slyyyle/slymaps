@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 
 interface ThemeSelectorProps {
   currentTheme: string;
@@ -38,9 +37,6 @@ export const ThemeSelector: React.FC<ThemeSelectorProps> = ({
           </Button>
         ))}
       </div>
-      <Badge variant="secondary" className="text-xs">
-        Applies to both sidebar and popups!
-      </Badge>
     </div>
   );
 };

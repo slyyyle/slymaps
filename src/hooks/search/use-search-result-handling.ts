@@ -165,7 +165,12 @@ export function useSearchResultHandling(options: UseSearchResultHandlingOptions)
   const handleUnifiedSelect = useCallback((suggestion: UnifiedSearchSuggestion) => {
     if (suggestion.type === 'route' && onRouteSelect) {
       const routeData = suggestion.data as any;
-      const storeId = transitIntegration.addRoute(routeData);
+      // Add route as a recent search, nesting the data under obaRoute
+      const storeId = transitIntegration.addRoute({
+        id: routeData.id,
+        obaRoute: routeData,
+        isRecentSearch: true,
+      });
       transitIntegration.selectRoute(storeId);
       // Only trigger onRouteSelect; do not create or select a POI for route
       onRouteSelect(suggestion.id);

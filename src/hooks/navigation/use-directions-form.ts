@@ -106,6 +106,7 @@ export function useDirectionsForm() {
       log.poi('Current location used for start location:', currentLocation);
       toast({ title: "Location Set", description: "Your current location has been set as the start point." });
     } else {
+      // No geolocation available: user has not granted permission or browser cannot detect location
       toast({ 
         title: "No Location Available", 
         description: "Please set your location using the map control at the top of the screen.", 

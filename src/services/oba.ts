@@ -352,39 +352,41 @@ export async function getRouteDetails(routeId: string): Promise<{
     branches: enhancedBranches
   } = await getRouteShapes(routeId);
 
-  // For backward compatibility, still fetch full API response for stops and other data
-  const data = await rateLimitedRequest(async () => {
-    const url = `${OBA_BASE_URL}/stops-for-route/${effectiveRouteId}.json?key=${ONEBUSAWAY_API_KEY}&includePolylines=true&includeReferences=true`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      await handleApiError(response, `fetch route details for ${routeId}`);
-    }
-
-    return await response.json();
-  }, `route details for ${routeId}`);
-  const dataData = data?.data as Record<string, unknown>;
-  const references = dataData?.references as Record<string, unknown>;
-
-  // Extract route details from references
+  // For backward compatibility, try fetching full API response for references (but don't error on rate limits)
   let routeInfo: ObaRoute | null = null;
-  if (dataData && references?.routes && Array.isArray(references.routes) && references.routes.length > 0) {
-    // Use effectiveRouteId when matching references
-    const refRoute = (references.routes as ObaRoute[]).find(r => r.id === effectiveRouteId) || references.routes[0] as ObaRoute;
-    if (refRoute) {
-      routeInfo = {
-        id: refRoute.id,
-        shortName: refRoute.shortName,
-        longName: refRoute.longName,
-        description: refRoute.description,
-        agencyId: refRoute.agencyId,
-        agency: (references.agencies as ObaAgency[])?.find(a => a.id === refRoute.agencyId),
-        url: refRoute.url,
-        color: refRoute.color,
-        textColor: refRoute.textColor,
-        type: refRoute.type,
-      };
+  try {
+    const data = await rateLimitedRequest(async () => {
+      const url = `${OBA_BASE_URL}/stops-for-route/${effectiveRouteId}.json?key=${ONEBUSAWAY_API_KEY}&includePolylines=true&includeReferences=true`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      }
+
+      return await response.json();
+    }, `route details for ${routeId}`);
+    const dataData = data?.data as Record<string, unknown>;
+    const references = dataData?.references as Record<string, unknown>;
+
+    if (dataData && references?.routes && Array.isArray(references.routes) && references.routes.length > 0) {
+      const refRoute = (references.routes as ObaRoute[]).find(r => r.id === effectiveRouteId) || references.routes[0] as ObaRoute;
+      if (refRoute) {
+        routeInfo = {
+          id: refRoute.id,
+          shortName: refRoute.shortName,
+          longName: refRoute.longName,
+          description: refRoute.description,
+          agencyId: refRoute.agencyId,
+          agency: (references.agencies as ObaAgency[])?.find(a => a.id === refRoute.agencyId),
+          url: refRoute.url,
+          color: refRoute.color,
+          textColor: refRoute.textColor,
+          type: refRoute.type,
+        };
+      }
     }
+  } catch (error) {
+    console.error(`Error fetching fallback route details for ${routeId}:`, error);
   }
 
   // Prefer enhanced route details if available

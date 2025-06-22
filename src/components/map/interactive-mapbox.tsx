@@ -37,6 +37,8 @@ import { useEnhancedMapInteractions } from '@/hooks/map/use-enhanced-map-interac
 import { TemporaryDestinationMarker } from './temporary-destination-marker';
 import { useThemeStore } from '@/stores/theme-store';
 import { useTransitStore } from '@/stores/transit';
+import { useHomeStore } from '@/stores/use-home-store';
+import HomePopup from '@/components/map/HomePopup';
 
 // ENHANCED ASYNC POPUP SYSTEM
 import MapPopup from '@/components/map/MapPopup';
@@ -44,7 +46,6 @@ import MapPopup from '@/components/map/MapPopup';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { useDrawStore } from '@/stores/draw';
 import MapboxTraffic from '@mapbox/mapbox-gl-traffic';
-import { useMapboxDirectionsControl } from '@/hooks/map/use-mapbox-directions-control';
 import { useDirectionsMode } from '@/contexts/DirectionsModeContext';
 
 import { formatAddressLines } from '@/utils/address-utils';
@@ -305,6 +306,9 @@ export function StandardMapView({
   obaRouteStops = [],
   obaVehicleLocations,
 }: MapViewProps) {
+  // Home location for persistent marker
+  const homeLocation = useHomeStore(state => state.homeLocation);
+  const [isHomePopupOpen, setIsHomePopupOpen] = useState(false);
   // Ref for the Mapbox Directions control
   const directionsControlRef = useRef<any>(null);
   // Render transit route line via map hook
@@ -314,11 +318,12 @@ export function StandardMapView({
   const storeRouteId = activeRoute?.id ?? null;
   const obaRouteId = activeRoute?.obaRoute?.id ?? null;
   const branchIndex = getSelectedSegmentIndex(storeRouteId);
-  // Render transit route line via map hook using original OBA ID
+  // Render transit route line via map hook using original OBA ID (thicker black, no outline)
   useMapTransitLayer(mapRef.current, obaRouteId, branchIndex, {
     color: '#000000',
-    width: 4,
-    opacity: 0.9
+    width: 8,
+    opacity: 1,
+    disableOutline: true
   });
   // Fetch stops & vehicles via data hooks using original OBA ID
   const { detailsQuery, vehiclesQuery } = useRouteData(obaRouteId);
@@ -433,7 +438,11 @@ export function StandardMapView({
             }
           }}
         >
-          <Icons.MapPin className="w-6 h-6 text-green-600 drop-shadow-lg" />
+          {poi.type === 'home' ? (
+            <span className="text-4xl drop-shadow-lg" style={{ lineHeight: 1 }}>🏠</span>
+          ) : (
+            <Icons.MapPin className="w-6 h-6 text-green-600 drop-shadow-lg" />
+          )}
         </Marker>
       ));
   }, [currentPois, searchPlaceIds, storedPlaceIds, createdPlaceIds, handleSearchResultClick, handleStoredPlaceClick, handleCreatedPlaceClick, setSelectedVehicleId]);
@@ -505,11 +514,9 @@ export function StandardMapView({
     }, 100);
   }, [mapRef, is3DEnabled, isTerrainEnabled, terrainExaggeration]);
 
-  // Native Mapbox navigation (driving/walking/cycling)
-  useMapboxDirectionsControl(mapRef, mapLoaded, routeStartCoords, routeEndCoords);
   // Get current mode for manual drawing logic
   const { mode } = useDirectionsMode();
-  
+
   // Map load event handler
   const handleMapLoad = useCallback((event: any) => {
     setMapLoaded(true);
@@ -573,28 +580,15 @@ export function StandardMapView({
     applyTerrainExaggeration(exaggeration);
   }, [applyTerrainExaggeration]);
 
-  // Removed handleCustomMapClick - now using modern addInteraction API exclusively
-
-  // Determine if we should use manual route drawing
-  const useManualRouteDrawing = React.useMemo(() => {
-    // Use manual drawing for:
-    // 1. Transit mode (OTP routes)
-    // 2. OBA bus routes
-    // 3. When no route is active
-    return mode === 'transit' || !mapboxDirectionsRoute || !!obaRouteSegments.length;
-  }, [mode, mapboxDirectionsRoute, obaRouteSegments.length]);
-
+  // Always draw the active route line (transit or non-transit) using store data
   const directionsRouteLine = React.useMemo(() => {
-    // Only create manual route line for transit mode
-    if (!mapboxDirectionsRoute?.geometry || mode !== 'transit') return null;
+    const geom = mapboxDirectionsRoute?.geometry;
+    if (!geom) return null;
     return {
-      type: 'Feature' as const,
-      properties: {
-        source: 'directions',
-        stable: true  // Mark as stable to prevent layer conflicts
-      },
-      geometry: mapboxDirectionsRoute.geometry
-    };
+      type: 'Feature',
+      properties: { source: mode === 'transit' ? 'oba' : 'directions' },
+      geometry: geom
+    } as GeoJSON.Feature;
   }, [mapboxDirectionsRoute?.geometry, mode]);
 
   const obaRouteLayer = React.useMemo<LayerProps>(() => ({
@@ -612,18 +606,18 @@ export function StandardMapView({
   const directionsLayer = React.useMemo<LayerProps>(() => ({
     id: 'directions-route-line',
     type: 'line',
-    slot: 'top',  // Higher priority than 'middle' to stay above transit routes
-    paint: {
-      'line-color': '#000000',
-      'line-width': 4,
-      'line-opacity': 0.9,
-      'line-emissive-strength': 1  // Immune to lighting changes
-    },
+    slot: 'top',
     layout: {
       'line-join': 'round',
       'line-cap': 'round'
+    },
+    paint: {
+      // Pure black line for maximum contrast
+      'line-color': '#000000',
+      'line-width': 8,
+      'line-opacity': 1
     }
-  } as const), []);
+  }) as const, []);
 
   const vehicleMarkers = React.useMemo(() => {
     if (!filteredVehiclesData || filteredVehiclesData.length === 0) return null;
@@ -667,16 +661,30 @@ export function StandardMapView({
   const startMarker = React.useMemo(() => {
     if (!routeStartCoords) return null;
     return (
-      <Marker longitude={routeStartCoords.longitude} latitude={routeStartCoords.latitude} anchor="bottom">
-        <Icons.MapPin className="w-6 h-6 text-green-600 drop-shadow-lg" />
+      <Marker
+        longitude={routeStartCoords.longitude}
+        latitude={routeStartCoords.latitude}
+        anchor="center"
+        style={{ zIndex: 1000 }}
+      >
+        <div className="w-6 h-6 rounded-full bg-blue-800 text-white flex items-center justify-center text-xs font-bold">
+          A
+        </div>
       </Marker>
     );
   }, [routeStartCoords]);
   const endMarker = React.useMemo(() => {
     if (!routeEndCoords) return null;
     return (
-      <Marker longitude={routeEndCoords.longitude} latitude={routeEndCoords.latitude} anchor="bottom">
-        <Icons.MapPin className="w-6 h-6 text-red-600 drop-shadow-lg" />
+      <Marker
+        longitude={routeEndCoords.longitude}
+        latitude={routeEndCoords.latitude}
+        anchor="center"
+        style={{ zIndex: 1000 }}
+      >
+        <div className="w-6 h-6 rounded-full bg-red-800 text-white flex items-center justify-center text-xs font-bold">
+          B
+        </div>
       </Marker>
     );
   }, [routeEndCoords]);
@@ -745,12 +753,15 @@ export function StandardMapView({
       };
       const isSelected = activeSelection?.poi.id === stop.id;
       const isHovered = hoveredStopId === stop.id;
+      // Hovered stops should appear on top, then selected, then default
+      const zIndex = isHovered ? 1000 : isSelected ? 800 : 500;
       return (
         <Marker
           key={`stop-${stop.id}`}
           latitude={stop.latitude}
           longitude={stop.longitude}
           anchor="bottom"
+          style={{ zIndex }}
           onClick={(e) => {
             e.originalEvent.stopPropagation();
             setSelectedVehicleId(null);
@@ -844,9 +855,12 @@ export function StandardMapView({
           </Source>
         )}
 
-        {/* Manual primary route drawing removed; plugin handles rendering */}
-
-        {/* Transit route line is rendered via useMapTransitLayer hook */}
+        {/* Manual directions route line for all modes */}
+        {directionsRouteLine && (
+          <Source id="directions-source" type="geojson" data={directionsRouteLine} key="directions-source">
+            <Layer {...directionsLayer} />
+          </Source>
+        )}
 
         {/* POI markers removed - using Mapbox right-click pinning instead */}
 
@@ -858,6 +872,24 @@ export function StandardMapView({
 
       {/* Only render place pins when no active directions route */}
       {!mapboxDirectionsRoute && placeMarkers}
+
+      {/* Always render home marker if set */}
+      {homeLocation && (
+        <Marker
+          key="home-marker"
+          longitude={homeLocation.longitude}
+          latitude={homeLocation.latitude}
+          anchor="bottom"
+          onClick={e => { e.originalEvent.stopPropagation(); setIsHomePopupOpen(true); }}
+        >
+          <span className="text-4xl drop-shadow-lg" style={{ lineHeight: 1 }}>🏠</span>
+        </Marker>
+      )}
+
+      {/* Show HomePopup when home marker is clicked */}
+      {homeLocation && isHomePopupOpen && (
+        <HomePopup homeLocation={homeLocation} onClose={() => setIsHomePopupOpen(false)} mapRef={mapRef} />
+      )}
 
         {/* Modern 2025: Temporary destination marker with visual feedback */}
         {enhancedInteractions.destinationSetting.temporaryDestination && (
@@ -954,40 +986,9 @@ export function StandardMapView({
           </PopupWrapper>
         )}
 
-        {/* Manual driving/walking/cycling route drawing - only show alternatives when manual drawing is enabled */}
-        {useManualRouteDrawing && mapboxDirectionsRoute?.alternatives?.map((altRoute, altIdx) => (
-          <Source
-            key={`alt-source-${altIdx}`}
-            id={`alt-source-${altIdx}`}
-            type="geojson"
-            data={{ type: 'Feature', properties: {}, geometry: altRoute.geometry }}
-          >
-            <Layer
-              key={`alt-layer-${altIdx}`}
-              {...{
-                ...directionsLayer,
-                id: `directions-route-alt-${altIdx}`,
-                paint: {
-                  ...directionsLayer.paint,
-                  'line-dasharray': [2, 2],
-                  'line-color': '#888',
-                  'line-opacity': 0.6
-                }
-              }}
-            />
-          </Source>
-        ))}
-
-        {/* Manual route drawing only for transit mode */}
-        {directionsRouteLine && (
-          <Source id="directions-source" type="geojson" data={directionsRouteLine}>
-            <Layer {...directionsLayer} />
-          </Source>
-        )}
-
-        {/* Start/end markers only for transit mode and OBA routes */}
-        {useManualRouteDrawing && startMarker}
-        {useManualRouteDrawing && endMarker}
+        {/* Always show start/end markers when coordinates exist */}
+        {startMarker}
+        {endMarker}
 
       </Core>
     </>

@@ -53,7 +53,7 @@ export function AppShell() {
   const { toast } = useToast();
   // Initialize route handler for Mapbox and OBA integration
   const routeHandler = useMapRouteHandler({ enableVehicleTracking: true });
-  const { getRouteCoordinates, getActiveRoute, showTurnMarkers, addOBARoute, selectRoute, clearAllRoutes } = routeHandler;
+  const { getRouteCoordinates, getActiveRoute, showTurnMarkers, addOBARoute, selectRoute, clearRouteSelection, clearAllRoutes } = routeHandler;
   const { start: routeStartCoords, end: routeEndCoords } = getRouteCoordinates();
   const activeRoute = getActiveRoute();
   const mapboxDirectionsRoute = activeRoute?.mapboxRoute ?? null;
@@ -95,15 +95,13 @@ export function AppShell() {
     selectRoute(storeId);
   }, [addOBARoute, selectRoute]);
 
-  // Clear map overlays, active selection, and route stops when search is cleared
+  // Clear map overlays and active selection when search is cleared (preserve past searches)
   const handleClearSearch = React.useCallback(() => {
-    // Remove any active transit route and live vehicle tracking
-    clearAllRoutes();
-    // Clear any selected POI
+    // Deselect the active route without clearing stored recent searches
+    clearRouteSelection();
+    // Clear any selected POI on the map
     unifiedHandler.clearSelection();
-    // Clear OBA route stops markers from POI store
-    clearSearchResults();
-  }, [clearAllRoutes, unifiedHandler, clearSearchResults]);
+  }, [clearRouteSelection, unifiedHandler]);
 
   // Simplified sidebar state - single source of truth
   const [activePane, setActivePane] = useState<PaneType>(null);
@@ -209,12 +207,12 @@ export function AppShell() {
       const leftPad = !isMobile && isSidebarOpen ? 336 : 16;
       const topPad = isMobile ? 80 : 96;
       if (mapboxDirectionsRoute) {
-        // Use maxZoom to zoom out one level during fitBounds animation
+        // Zoom out more for mapbox navigation routes (subtract 2 zoom levels)
         const currentZoom = map.getZoom();
         map.fitBounds(bounds, {
           padding: { left: leftPad, top: topPad, right: 16, bottom: 16 },
           duration: 1500,
-          maxZoom: currentZoom - 1
+          maxZoom: currentZoom - 2
         });
       } else {
         // For OBA routes, standard fitBounds

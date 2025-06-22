@@ -121,12 +121,11 @@ export const MapboxSearchBox = forwardRef<any, SearchBoxProps>(function MapboxSe
         params.append('proximity', `${currentLocation.longitude},${currentLocation.latitude}`);
       }
 
-      // Add bbox if available
-      if (mapBounds) {
-        params.append('bbox', mapBounds.join(','));
-        if (SEARCH_CONFIG.ANALYTICS.DEBUG_MODE) {
-          console.log('Search restricted to viewport bounds:', mapBounds);
-        }
+      // Restrict search to default state bounds (Washington)
+      const DEFAULT_STATE_BBOX: [number, number, number, number] = [-124.848974, 45.543541, -116.915989, 49.002494];
+      params.append('bbox', DEFAULT_STATE_BBOX.join(','));
+      if (SEARCH_CONFIG.ANALYTICS.DEBUG_MODE) {
+        console.log('Search restricted to default state bounds:', DEFAULT_STATE_BBOX);
       }
       
       const endpoint = `https://api.mapbox.com/search/searchbox/v1/suggest?${params.toString()}`;
@@ -157,7 +156,7 @@ export const MapboxSearchBox = forwardRef<any, SearchBoxProps>(function MapboxSe
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, sessionToken, currentLocation, mapBounds]);
+  }, [accessToken, sessionToken, currentLocation]);
 
   useEffect(() => {
     if (debouncedInputValue) {

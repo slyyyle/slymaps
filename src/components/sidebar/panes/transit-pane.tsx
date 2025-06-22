@@ -109,7 +109,28 @@ export function TransitPane({ mapRef }: TransitPaneProps): ReactElement {
     if (mapInst) {
       mapInst.flyTo({ center: [stop.longitude, stop.latitude], zoom: 16, duration: 1000, essential: true });
     }
+    // Clear any existing popup, then select this stop via unified handler
     unifiedHandler.clearSelection();
+    // Delay selecting the stop so the clearSelection has taken effect
+    setTimeout(() => {
+      const stopPoi: Place = {
+        id: stop.id,
+        name: stop.name,
+        type: 'Transit Stop',
+        latitude: stop.latitude,
+        longitude: stop.longitude,
+        description: `Stop #${stop.code} - ${stop.direction} bound`,
+        isObaStop: true,
+        properties: {
+          source: 'oba',
+          stop_code: stop.code,
+          direction: stop.direction,
+          route_ids: stop.routeIds,
+          wheelchair_boarding: stop.wheelchairBoarding
+        }
+      };
+      unifiedHandler.handleSearchResultClick(stopPoi);
+    }, 0);
   };
 
   // Show Service Alerts container in dev and capture real route situations
@@ -132,7 +153,7 @@ export function TransitPane({ mapRef }: TransitPaneProps): ReactElement {
             unifiedHandler.clearSelection();
           }}
           onClear={() => {
-            routeHandler.clearAllRoutes();
+            routeHandler.clearRouteSelection();
             setSelectedVehicleId(null);
             unifiedHandler.clearSelection();
           }}

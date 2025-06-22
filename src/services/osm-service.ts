@@ -95,7 +95,7 @@ class OSMService {
   /**
    * Normalize OSM tags to our POI format
    */
-  private normalizeOSMData(element: OSMElement): OSMPoiData | null {
+  private async normalizeOSMData(element: OSMElement): Promise<OSMPoiData | null> {
     const tags = element.tags || {};
     const name = tags.name;
     
@@ -143,9 +143,25 @@ class OSMService {
       country_code: tags['addr:country_code'],
     };
     const hasRaw = Object.values(rawAddress).some((v) => Boolean(v));
-    const address: AddressInput = hasRaw
-      ? rawAddress
-      : `${coordinates.lat.toFixed(4)}, ${coordinates.lon.toFixed(4)}`;
+    
+    let address: AddressInput;
+    if (hasRaw) {
+      address = rawAddress;
+    } else {
+      // Use reverse geocoding to get address when structured data is not available
+      try {
+        const geocodeResult = await this.reverseGeocode(coordinates.lat, coordinates.lon);
+        if (geocodeResult?.address) {
+          address = geocodeResult.address;
+        } else {
+          // Fallback to coordinates if reverse geocoding fails
+          address = `${coordinates.lat.toFixed(4)}, ${coordinates.lon.toFixed(4)}`;
+        }
+      } catch (error) {
+        console.warn('Reverse geocoding failed for POI:', name, error);
+        address = `${coordinates.lat.toFixed(4)}, ${coordinates.lon.toFixed(4)}`;
+      }
+    }
 
     return {
       name,
@@ -311,10 +327,11 @@ class OSMService {
 
       const data = await response.json();
       const elements: OSMElement[] = data.elements || [];
-      const rawPois = elements
-        .map(element => this.normalizeOSMData(element))
-        .filter((poi): poi is OSMPoiData => poi !== null)
-        .slice(0, 20); // Limit to 20 results
+      
+      // Process elements asynchronously
+      const rawPoisPromises = elements.map(element => this.normalizeOSMData(element));
+      const rawPoisResults = await Promise.all(rawPoisPromises);
+      const rawPois = rawPoisResults.filter((poi): poi is OSMPoiData => poi !== null).slice(0, 20); // Limit to 20 results
 
       // Validate the parsed POI data
       return OSMPoiDataSchema.array().parse(rawPois);

@@ -14,7 +14,9 @@ import type { Place } from '@/types/core';
 export interface RouteEntity {
   id: string;
   createdAt: number;
+  isFavorite?: boolean;
   lastAccessed?: number;
+  isRecentSearch?: boolean; // Flag to indicate this is from a recent search
   
   // OBA Data
   obaRoute?: ObaRoute;
@@ -94,6 +96,9 @@ interface TransitStoreActions {
   cleanup: () => void;
   exportData: () => { routes: RouteEntity[] };
   importData: (data: { routes?: RouteEntity[] }) => void;
+  
+  // Toggle favorite for routes
+  toggleFavoriteRoute: (id: string) => void;
 }
 
 export type TransitStore = TransitStoreState & TransitStoreActions;
@@ -118,6 +123,7 @@ export const useTransitStore = create<TransitStore>()(
       const routeEntity: RouteEntity = {
         id,
         createdAt: Date.now(),
+        isFavorite: false,
         lastAccessed: Date.now(),
         ...route,
       };
@@ -206,15 +212,25 @@ export const useTransitStore = create<TransitStore>()(
 
     // Cleanup
     clearAllRoutes: () => {
-      set({
-        routes: {},
-        activeRouteId: null,
-        routeStart: null,
-        routeEnd: null,
-        activeStopId: null,
-        hoveredStopId: null,
-        hoveredVehicleId: null,
-        selectedVehicleId: null,
+      set(state => {
+        // Preserve favorite routes when clearing
+        const favoriteRoutes: Record<string, RouteEntity> = {};
+        Object.entries(state.routes).forEach(([id, route]) => {
+          if (route.isFavorite) {
+            favoriteRoutes[id] = route;
+          }
+        });
+        
+        return {
+          routes: favoriteRoutes,
+          activeRouteId: null,
+          routeStart: null,
+          routeEnd: null,
+          activeStopId: null,
+          hoveredStopId: null,
+          hoveredVehicleId: null,
+          selectedVehicleId: null,
+        };
       });
     },
 
@@ -247,5 +263,19 @@ export const useTransitStore = create<TransitStore>()(
 
     // Hovered vehicle setter for map marker hover
     setHoveredVehicle: (vehicleId: string | null) => set({ hoveredVehicleId: vehicleId }),
+
+    // Toggle favorite for routes
+    toggleFavoriteRoute: (id: string) => {
+      set(state => {
+        const existing = state.routes[id];
+        if (!existing) return state;
+        return {
+          routes: {
+            ...state.routes,
+            [id]: { ...existing, isFavorite: !existing.isFavorite },
+          }
+        };
+      });
+    },
   }))
 ); 

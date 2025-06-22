@@ -21,7 +21,7 @@ import { BackButton } from './shared/back-button';
 import { useTransitStore } from '@/stores/transit';
 import type { TransitStore } from '@/stores/use-transit-store';
 
-export type PaneType = 'home' | 'directions' | 'transit' | 'places' | 'style' | null;
+export type PaneType = 'home' | 'directions' | 'transit' | 'style' | null;
 
 interface SidebarShellProps {
   className?: string;
@@ -74,11 +74,16 @@ export function SidebarShell({
   };
 
   const handleClearRoute = () => {
-    routeHandler.clearAllRoutes();
+    // Deselect active route without clearing route history
+    routeHandler.clearRouteSelection();
     unifiedHandler.clearSelection();
   };
 
   // Start navigation: hide sidebar but leave route in place
+  // Called when user clicks 'Begin Trip':
+  // - If MapboxDirections plugin is active (driving/walking/cycling with valid coords), it remains on map showing directions UI.
+  // - If in transit mode or missing coords, plugin is detached; custom transit route drawing is used instead.
+  // - Sidebar is hidden to give full map view for navigation.
   const handleStartNavigation = () => {
     setActivePane(null);
   };
@@ -104,7 +109,7 @@ export function SidebarShell({
         }}
       >
         <div className="flex items-center gap-2">
-          {(activePane === 'transit' || activePane === 'directions') && (
+          {activePane && (
             <BackButton onClick={handleBackToMenu} />
           )}
         <h2 
@@ -181,8 +186,8 @@ export function SidebarShell({
             <MainMenu onPaneSelect={handlePaneChange} className="px-3 py-1 space-y-1" />
             {/* Separator */}
             <div className="border-t my-1" style={{ borderColor: 'hsl(var(--border))' }} />
-            {/* Compact Places section below menu */}
-            <PlacesPane compact onBack={handleCloseSidebar} mapRef={mapRef} />
+            {/* Recent Searches section below menu */}
+            <PlacesPane onBack={handleCloseSidebar} mapRef={mapRef} />
           </>
         ) : (
           <div className="flex-1 flex flex-col min-h-0">
@@ -194,9 +199,6 @@ export function SidebarShell({
             )}
             {activePane === 'transit' && (
               <TransitPane mapRef={mapRef} />
-            )}
-            {activePane === 'places' && (
-              <PlacesPane onBack={handleBackToMenu} mapRef={mapRef} />
             )}
             {activePane === 'style' && (
               <StylePane onBack={handleBackToMenu} />

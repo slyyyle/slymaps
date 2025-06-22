@@ -30,14 +30,25 @@ export const OSMInfoSection: React.FC<OSMInfoSectionProps> = ({
   cuisine,
   opening_hours
 }) => {
+  // Simple logic: only show sections if we have OSM enrichment AND actual data
+  const hasContactInfo = address || phone || website || operator || cuisine;
+  const hasHours = opening_hours && opening_hours.trim() !== '';
+  
+  // Debug logging
+  console.log('OSMInfoSection props:', {
+    isNativePoi,
+    hasOSMEnrichment,
+    osmLookupAttempted,
+    opening_hours,
+    hasContactInfo: Boolean(address || phone || website || operator || cuisine),
+    hasHours
+  });
+
   // Don't render anything for non-native POIs
   if (!isNativePoi) {
     return null;
   }
 
-  // Simple logic: only show sections if we have OSM enrichment AND actual data
-  const hasContactInfo = address || phone || website || operator || cuisine;
-  
   // If OSM lookup failed/errored, show error state 
   if (osmLookupAttempted && !hasOSMEnrichment) {
     return (
@@ -51,7 +62,7 @@ export const OSMInfoSection: React.FC<OSMInfoSectionProps> = ({
   }
   
   // If OSM succeeded but no useful data, show different message
-  if (hasOSMEnrichment && !hasContactInfo && !opening_hours) {
+  if (hasOSMEnrichment && !hasContactInfo && !hasHours) {
     return (
       <div className="bg-gray-50 rounded-md p-2">
         <div className="text-sm text-gray-600 flex items-center gap-2">
@@ -68,58 +79,98 @@ export const OSMInfoSection: React.FC<OSMInfoSectionProps> = ({
   }
 
   // If we only have one type of content, show it without tabs
-  if (hasContactInfo && !opening_hours) {
+  if (hasContactInfo && !hasHours) {
     return (
-      <div className="border-l-4 border-blue-300 bg-blue-50 pl-3 pr-3 pt-2 pb-2 rounded-r">
-        <h5 className="text-xs font-medium text-blue-800 flex items-center gap-2 mb-2">
-          📋 Details
-        </h5>
-        <OSMDescription
-          variant="double"
-          address={address}
-          phone={phone}
-          website={website}
-          operator={operator}
-          cuisine={cuisine}
-        />
+      <div className="bg-card border border-border rounded-md pt-[3px] px-3 pb-3">
+        <Tabs defaultValue="details" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 h-8 p-0.5">
+            <TabsTrigger value="details" className="text-xs px-2 py-1">
+              📋 Details
+            </TabsTrigger>
+            <TabsTrigger 
+              value="hours" 
+              className="text-xs px-2 py-1"
+              disabled={true}
+            >
+              🕐 Hours (NA)
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="details" className="mt-[3px]">
+            <OSMDescription
+              variant="double"
+              address={address}
+              phone={phone}
+              website={website}
+              operator={operator}
+              cuisine={cuisine}
+            />
+          </TabsContent>
+          
+          <TabsContent value="hours" className="mt-[3px]">
+            <div className="text-xs text-gray-500 italic bg-gray-50 p-2 rounded">
+              No Hours Available
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     );
   }
 
-  if (!hasContactInfo && opening_hours) {
+  if (!hasContactInfo && hasHours) {
     return (
-      <div className="border-l-4 border-green-300 bg-green-50 rounded-r flex">
-        <div className="flex items-center justify-center w-8 pt-0.5 pb-2">
-          <h5 className="text-xs font-medium text-green-800 transform -rotate-90 whitespace-nowrap">
-            🕐 Hours
-          </h5>
-        </div>
-        <div className="flex-1 pt-0.5 pb-2 pr-3">
-          <OSMHoursTable
-            opening_hours={opening_hours}
-            isLoading={false}
-            hasError={false}
-            contentOnly={true}
-          />
-        </div>
+      <div className="bg-card border border-border rounded-md pt-[3px] px-3 pb-3">
+        <Tabs defaultValue="hours" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 h-8 p-0.5">
+            <TabsTrigger 
+              value="details" 
+              className="text-xs px-2 py-1"
+              disabled={true}
+            >
+              📋 Details (NA)
+            </TabsTrigger>
+            <TabsTrigger value="hours" className="text-xs px-2 py-1">
+              🕐 Hours
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="details" className="mt-[3px]">
+            <div className="text-xs text-gray-500 italic bg-gray-50 p-2 rounded">
+              No Details Available
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="hours" className="mt-[3px]">
+            <OSMHoursTable
+              opening_hours={opening_hours}
+              isLoading={false}
+              hasError={false}
+              contentOnly={true}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
     );
   }
 
   // If we have both types of content, show tabs
   return (
-    <div className="bg-card border border-border rounded-md p-3">
+    <div className="bg-card border border-border rounded-md pt-[3px] px-3 pb-3">
       <Tabs defaultValue="details" className="w-full">
         <TabsList className="grid w-full grid-cols-2 h-8 p-0.5">
           <TabsTrigger value="details" className="text-xs px-2 py-1">
             📋 Details
           </TabsTrigger>
-          <TabsTrigger value="hours" className="text-xs px-2 py-1">
-            🕐 Hours
+          <TabsTrigger 
+            value="hours" 
+            className="text-xs px-2 py-1"
+            disabled={!hasHours}
+          >
+            {hasHours ? "🕐 Hours" : "🕐 Hours (NA)"}
           </TabsTrigger>
         </TabsList>
         
-        <TabsContent value="details" className="mt-3">
+        <TabsContent value="details" className="mt-[3px]">
           <OSMDescription
             variant="double"
             address={address}
@@ -130,7 +181,7 @@ export const OSMInfoSection: React.FC<OSMInfoSectionProps> = ({
           />
         </TabsContent>
         
-        <TabsContent value="hours" className="mt-3">
+        <TabsContent value="hours" className="mt-[3px]">
           <OSMHoursTable
             opening_hours={opening_hours}
             isLoading={false}
