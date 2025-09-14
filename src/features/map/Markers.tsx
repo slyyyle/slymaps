@@ -40,47 +40,6 @@ const Markers: React.FC<MarkersProps> = ({
     {/* POI markers removed - using Mapbox right-click pinning instead */}
     {vehicleMarkers}
     {turnMarkers}
-    {(activeStopId
-      ? obaRouteStops.filter(stop => stop.id === activeStopId)
-      : obaRouteStops
-    ).map(stop => {
-      const stopPoi: Place = {
-        id: stop.id,
-        name: stop.name,
-        type: 'Bus Stop',
-        latitude: stop.latitude,
-        longitude: stop.longitude,
-        description: `Stop #${stop.code} - ${stop.direction} bound`,
-        isObaStop: true,
-        properties: {
-          source: 'oba',
-          stop_code: stop.code,
-          direction: stop.direction,
-          route_ids: stop.routeIds,
-          wheelchair_boarding: stop.wheelchairBoarding
-        }
-      };
-      const isSelected = activeSelectionId === stop.id;
-      return (
-        <Marker
-          key={`oba-stop-${stop.id}`}
-          latitude={stop.latitude}
-          longitude={stop.longitude}
-          anchor="bottom"
-          onClick={(e) => {
-            e.originalEvent.stopPropagation();
-            handleSearchResultClick(stopPoi);
-            flyTo({ latitude: stop.latitude, longitude: stop.longitude }, { zoom: 16 });
-          }}
-        >
-          {isSelected ? (
-            <span className="text-2xl">🚦</span>
-          ) : (
-            <div className="w-3 h-3 bg-green-500 rounded-full" />
-          )}
-        </Marker>
-      );
-    })}
     {routeStartCoords && (
       <Marker longitude={routeStartCoords.longitude} latitude={routeStartCoords.latitude} anchor="bottom">
         <Icons.MapPin className="w-6 h-6 text-green-600 drop-shadow-lg" />

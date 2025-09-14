@@ -67,6 +67,11 @@ export function DirectionsForm({ mapRef, onBeginTrip }: DirectionsFormProps) {
   const initialPrimaryRoute = initialPrimaryRouteRef.current;
   const initialAlternatives = initialAlternativesRef.current;
   const [selectedAlt, setSelectedAlt] = React.useState(0);
+  const setSelectedAlternativeIndex = useTransitStore(state => state.setSelectedAlternativeIndex);
+  
+  React.useEffect(() => {
+    setSelectedAlternativeIndex(selectedAlt);
+  }, [selectedAlt, setSelectedAlternativeIndex]);
   
   const route = React.useMemo(() => {
     if (!primaryRoute) return null;
@@ -346,6 +351,19 @@ export function DirectionsForm({ mapRef, onBeginTrip }: DirectionsFormProps) {
               </div>
             </>
           )
+        )}
+        {/* Alternatives tabs for non-transit modes */}
+        {!isTransitRoute && initialPrimaryRoute && initialAlternatives.length > 0 && (
+          <div className="border rounded-md p-2">
+            <Tabs value={`alt-${selectedAlt}`} onValueChange={(v) => setSelectedAlt(Number(v.replace('alt-','')))}>
+              <TabsList className="h-8">
+                <TabsTrigger value="alt-0">Primary</TabsTrigger>
+                {initialAlternatives.map((_, idx) => (
+                  <TabsTrigger key={idx+1} value={`alt-${idx+1}`}>Alt {idx+1}</TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
         )}
       </form>
     </Form>

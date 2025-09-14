@@ -1,5 +1,5 @@
-import { useCallback } from 'react';
-import type { MapRef } from 'react-map-gl/maplibre';
+import { useCallback, useRef } from 'react';
+import type { MapRef } from 'react-map-gl/mapbox';
 import { usePOIInteractionManager, type POIInteractionEvent, type PlaceInteractionType } from './use-poi-interaction-manager';
 import { usePlaceStore } from '@/stores/use-place-store';
 import { useOSMHandler } from './use-osm-handler';
@@ -40,59 +40,53 @@ export function useUnifiedPOIHandler({
   const osmHandler = useOSMHandler({ enableAutoEnrichment: enableOSMEnrichment });
   const routeHandler = useRouteHandler({ enableVehicleTracking: enableRouteIntegration });
 
+  // Deduplicate enrichment calls per POI id within session
+  const enrichingIdsRef = useRef<Set<string>>(new Set());
+  // Deduplicate by name+coords, survives POI id changes across re-selects
+  const enrichingKeysRef = useRef<Set<string>>(new Set());
+
   // 🔧 CORE FIX: Single stable handler function with no dependencies
   const handlePOIInteraction = useCallback((interaction: POIInteractionEvent) => {
     // Handle different interaction types without console noise
     switch (interaction.type) {
       case 'native': {
-        // Always select the ephemeral POI
-        poiStore.selectPOI(interaction.poi, 'native');
-
-        // Detect any Mapbox transit stop via properties
-        const props = interaction.poi.properties || {};
-        const mode = String(props.transit_mode || '').toLowerCase();
-        const isMapboxTransitStop = props.group === 'transit' && MAPBOX_TRANSIT_MODES.has(mode);
-
-        if (isMapboxTransitStop) {
-          // Proxy lookup via our Next.js API to avoid CORS issues
-          setTimeout(async () => {
-            try {
-              const res = await fetch(
-                `/api/oba/nearby-transit?lat=${interaction.poi.latitude}&lon=${interaction.poi.longitude}&radius=200`
-              );
-              const { stops } = await res.json();
-              if (stops.length > 0) {
-                const stop = stops[0];
-                const stopPoi: Place = {
-                  id: stop.id,
-                  name: stop.name,
-                  type: 'Transit Stop',
-                  latitude: stop.latitude,
-                  longitude: stop.longitude,
-                  description: `Stop #${stop.code} - ${stop.direction} bound`,
-                  isObaStop: true,
-                  properties: {
-                    source: 'oba',
-                    stop_code: stop.code,
-                    direction: stop.direction,
-                    route_ids: stop.routeIds,
-                    wheelchair_boarding: stop.wheelchairBoarding
-                  }
-                };
-                poiStore.selectPOI(stopPoi, 'native');
-              }
-            } catch (err) {
-              console.warn('OBA proxy fetch failed:', err);
-            }
-          }, 0);
-        } else if (enableOSMEnrichment) {
-          // Non-transit or non-supported native POIs: OSM enrichment
-          setTimeout(() => {
-            enrichNativePOIWithOSM(interaction.poi).catch(error =>
-              console.warn('OSM enrichment failed for native POI:', error)
-            );
-          }, 100);
+        // If this native POI is already enriched, just select it
+        if (interaction.poi.properties?.osm_enriched) {
+          poiStore.selectPOI(interaction.poi, 'native');
+          break;
         }
+        // Guard enrichment when disabled
+        if (!enableOSMEnrichment) {
+          poiStore.selectPOI(interaction.poi, 'native');
+          break;
+        }
+        // Deduplicate inflight enrichments by id
+        const enrichKey = interaction.poi.id;
+        if (!enrichKey || enrichingIdsRef.current.has(enrichKey)) {
+          poiStore.selectPOI(interaction.poi, 'native');
+          break;
+        }
+        // Also dedupe by name+coords so re-renders or re-selections don't refetch
+        const nameKey = `${interaction.poi.name}|${interaction.poi.latitude.toFixed(5)}|${interaction.poi.longitude.toFixed(5)}`;
+        if (enrichingKeysRef.current.has(nameKey)) {
+          poiStore.selectPOI(interaction.poi, 'native');
+          break;
+        }
+        enrichingIdsRef.current.add(enrichKey);
+        enrichingKeysRef.current.add(nameKey);
+        // Mark lookup attempted immediately to prevent UI loops
+        poiStore.selectPOI({
+          ...interaction.poi,
+          properties: { ...interaction.poi.properties, osm_lookup_attempted: true }
+        } as any, 'native');
+        setTimeout(() => {
+          enrichNativePOIWithOSM(interaction.poi)
+            .catch(error => console.warn('OSM enrichment failed for native POI:', error))
+            .finally(() => {
+              enrichingIdsRef.current.delete(enrichKey);
+              enrichingKeysRef.current.delete(nameKey);
+            });
+        }, 100);
         break;
       }
       case 'stored':
@@ -120,10 +114,11 @@ export function useUnifiedPOIHandler({
   // 🆕 OSM ENRICHMENT: Helper function to enrich native POIs with OSM data
   const enrichNativePOIWithOSM = useCallback(async (nativePoi: Place) => {
     try {
-      // Fetching OSM data for native POI
-      // Find matching OSM POI directly via service (not nested queries)
-      const osmMatch = await osmService.findMatchingPOI(nativePoi.name, nativePoi.latitude, nativePoi.longitude);
-      
+      if (nativePoi.properties?.osm_enriched) {
+        return; // Already enriched
+      }
+      // Fetching OSM data for native POI via react-query (deduped by key)
+      const osmMatch = await findMatchingPOI(nativePoi.name, nativePoi.latitude, nativePoi.longitude);
       if (osmMatch) {
         // Found OSM match
         // Prepare address (fallback reverse geocoding if it's just raw coords)
@@ -154,18 +149,22 @@ export function useUnifiedPOIHandler({
             osm_tourism: osmMatch.tourism,
             osm_address: address,
             osm_enriched: true,
-            osm_enriched_at: Date.now()
+            osm_enriched_at: Date.now(),
+            osm_lookup_attempted: true
           }
         };
         poiStore.selectPOI(enrichedPoi, 'native');
-        // Updated native POI selection with OSM enrichment
       } else {
-        // No OSM match found for native POI
+        // No OSM match found; mark lookup attempted to avoid loops
+        poiStore.selectPOI({
+          ...nativePoi,
+          properties: { ...nativePoi.properties, osm_lookup_attempted: true }
+        } as any, 'native');
       }
     } catch (error) {
       console.warn('OSM enrichment failed for native POI:', error);
-        }
-  }, [osmReverseGeocode, poiStore]);
+    }
+  }, [findMatchingPOI, osmReverseGeocode, poiStore]);
 
   // Set up native interactions with the stable handler
   const interactionManager = usePOIInteractionManager({

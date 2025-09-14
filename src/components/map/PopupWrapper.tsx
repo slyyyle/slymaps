@@ -129,7 +129,7 @@ export const PopupWrapper: React.FC<PopupWrapperProps> = ({
       className={cn(themeClasses[theme], className)}
       {...props}
     >
-      <div ref={contentRef} className="popup-content-wrapper popup-reset">
+      <div ref={contentRef} className="popup-content-wrapper popup-reset" style={{ zIndex: 1100 }}>
         {children}
       </div>
     </Popup>

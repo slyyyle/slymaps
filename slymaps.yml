@@ -1,0 +1,10 @@
+tunnel: aeb2a766-a79d-4d91-b9e8-a73a7f501551
+credentials-file: /home/slyle/.cloudflared/aeb2a766-a79d-4d91-b9e8-a73a7f501551.json
+protocol: http2
+
+ingress:
+  - hostname: slymaps.io
+    service: http://localhost:3006
+  - hostname: www.slymaps.io
+    service: http://localhost:3006
+  - service: http_status:404 

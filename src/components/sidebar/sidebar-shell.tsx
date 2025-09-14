@@ -20,6 +20,8 @@ import { MAPBOX_ACCESS_TOKEN } from '@/lib/constants';
 import { BackButton } from './shared/back-button';
 import { useTransitStore } from '@/stores/transit';
 import type { TransitStore } from '@/stores/use-transit-store';
+import { useNavigationStore } from '@/stores/navigation-store';
+import { useDirectionsMode } from '@/contexts/DirectionsModeContext';
 
 export type PaneType = 'home' | 'directions' | 'transit' | 'style' | null;
 
@@ -84,7 +86,16 @@ export function SidebarShell({
   // - If MapboxDirections plugin is active (driving/walking/cycling with valid coords), it remains on map showing directions UI.
   // - If in transit mode or missing coords, plugin is detached; custom transit route drawing is used instead.
   // - Sidebar is hidden to give full map view for navigation.
+  const { mode } = useDirectionsMode();
   const handleStartNavigation = () => {
+    const { startNavigation, startPreview } = useNavigationStore.getState();
+
+    const hasGeolocation = typeof navigator !== 'undefined' && 'geolocation' in navigator;
+    if (hasGeolocation) {
+      startNavigation(mode);
+    } else {
+      startPreview();
+    }
     setActivePane(null);
   };
 
@@ -155,6 +166,8 @@ export function SidebarShell({
                 }}
                 onClear={() => {}}
                 onRouteSelect={async (routeId) => {
+                  // Replace current displayed OBA route when selecting a new one
+                  routeHandler.clearAllRoutes();
                   const storeRouteId = await routeHandler.addOBARoute(routeId);
                   routeHandler.selectRoute(storeRouteId);
                   // Switch to transit pane
@@ -201,7 +214,7 @@ export function SidebarShell({
               <TransitPane mapRef={mapRef} />
             )}
             {activePane === 'style' && (
-              <StylePane onBack={handleBackToMenu} />
+              <StylePane onBack={handleBackToMenu} mapRef={mapRef} />
             )}
           </div>
         )}

@@ -115,7 +115,7 @@ export const OSMHoursTable: React.FC<OSMHoursTableProps> = ({
                 <td className="py-1.5 px-2 font-medium text-green-900 w-20">
                   {dayHours.fullDay}
                 </td>
-                <td className={`py-1.5 px-2 ${dayHours.isClosed ? 'text-red-600' : 'text-green-700'}`}>
+                <td className={`py-1.5 px-2 ${dayHours.isClosed ? 'status-closed' : 'status-open'}`}>
                   {dayHours.hours}
                 </td>
               </tr>

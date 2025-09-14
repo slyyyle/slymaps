@@ -200,7 +200,7 @@ export const HoursSection = ({ name, latitude, longitude }: { name: string; lati
                       {parsed.schedule.map((day, idx) => (
                         <tr key={idx} className={`${idx % 2 === 0 ? 'bg-green-50' : 'bg-white'} border-b border-green-100 last:border-b-0`}>
                           <td className="py-1.5 px-2 font-medium text-green-900 w-20">{day.fullDay}</td>
-                          <td className={`py-1.5 px-2 ${day.isClosed ? 'text-red-600' : 'text-green-700'}`}>{day.hours}</td>
+                          <td className={`py-1.5 px-2 ${day.isClosed ? 'status-closed' : 'status-open'}`}>{day.hours}</td>
                         </tr>
                       ))}
                     </tbody></table>
@@ -214,8 +214,8 @@ export const HoursSection = ({ name, latitude, longitude }: { name: string; lati
           )}
           {(hoursQuery.data.phone || hoursQuery.data.website) && (
             <div className="space-y-0.5">
-              {hoursQuery.data.phone && <p className="text-xs text-green-700">📞 {hoursQuery.data.phone}</p>}
-              {hoursQuery.data.website && <p className="text-xs text-green-700">🌐 <a href={hoursQuery.data.website} target="_blank" rel="noopener noreferrer" className="underline">Website</a></p>}
+              {hoursQuery.data.phone && <p className="text-xs">📞 {hoursQuery.data.phone}</p>}
+              {hoursQuery.data.website && <p className="text-xs">🌐 <a href={hoursQuery.data.website} target="_blank" rel="noopener noreferrer" className="underline">Website</a></p>}
             </div>
           )}
           {hoursQuery.data.operator && <p className="text-xs text-green-600">Operated by {hoursQuery.data.operator}</p>}

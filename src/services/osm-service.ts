@@ -70,7 +70,6 @@ export interface GeocodingResult {
 
 class OSMService {
   private overpassUrl = 'https://overpass-api.de/api/interpreter';
-  private nominatimUrl = 'https://nominatim.openstreetmap.org';
   
   /**
    * Build Overpass QL query to get POI data around coordinates
@@ -79,16 +78,16 @@ class OSMService {
     return `
       [out:json][timeout:25];
       (
-        node["name"]["amenity"](around:${radius},${lat},${lon});
-        node["name"]["shop"](around:${radius},${lat},${lon});
-        node["name"]["tourism"](around:${radius},${lat},${lon});
-        node["name"]["leisure"](around:${radius},${lat},${lon});
-        way["name"]["amenity"](around:${radius},${lat},${lon});
-        way["name"]["shop"](around:${radius},${lat},${lon});
-        way["name"]["tourism"](around:${radius},${lat},${lon});
-        way["name"]["leisure"](around:${radius},${lat},${lon});
+        node["amenity"](around:${radius},${lat},${lon});
+        node["shop"](around:${radius},${lat},${lon});
+        node["tourism"](around:${radius},${lat},${lon});
+        node["leisure"](around:${radius},${lat},${lon});
+        way["amenity"](around:${radius},${lat},${lon});
+        way["shop"](around:${radius},${lat},${lon});
+        way["tourism"](around:${radius},${lat},${lon});
+        way["leisure"](around:${radius},${lat},${lon});
       );
-      out center;
+      out center tags;
     `;
   }
 
@@ -149,18 +148,9 @@ class OSMService {
       address = rawAddress;
     } else {
       // Use reverse geocoding to get address when structured data is not available
-      try {
-        const geocodeResult = await this.reverseGeocode(coordinates.lat, coordinates.lon);
-        if (geocodeResult?.address) {
-          address = geocodeResult.address;
-        } else {
-          // Fallback to coordinates if reverse geocoding fails
-          address = `${coordinates.lat.toFixed(4)}, ${coordinates.lon.toFixed(4)}`;
-        }
-      } catch (error) {
-        console.warn('Reverse geocoding failed for POI:', name, error);
-        address = `${coordinates.lat.toFixed(4)}, ${coordinates.lon.toFixed(4)}`;
-      }
+      // Avoid expensive reverse geocoding per POI to prevent rate limiting
+      // Prefer OSM address tags; otherwise provide coordinates string fallback
+      address = `${coordinates.lat.toFixed(4)}, ${coordinates.lon.toFixed(4)}`;
     }
 
     return {
@@ -236,16 +226,14 @@ class OSMService {
   async geocodeAddress(address: string): Promise<GeocodingResult[]> {
     try {
       const params = new URLSearchParams({
-        q: address,
-        format: 'jsonv2',
-        addressdetails: '1',
-        limit: '5'
+        q: address
       });
 
-      const response = await fetch(`${this.nominatimUrl}/search?${params}`);
+      // Use our API proxy to avoid CORS issues
+      const response = await fetch(`/api/osm/geocode?${params}`);
       
       if (!response.ok) {
-        throw new Error(`Nominatim API error: ${response.status}`);
+        throw new Error(`Geocoding API error: ${response.status}`);
       }
 
       const data: NominatimPlace[] = await response.json();
@@ -275,15 +263,14 @@ class OSMService {
     try {
       const params = new URLSearchParams({
         lat: lat.toString(),
-        lon: lon.toString(),
-        format: 'jsonv2',
-        addressdetails: '1'
+        lon: lon.toString()
       });
 
-      const response = await fetch(`${this.nominatimUrl}/reverse?${params}`);
+      // Use our API proxy to avoid CORS issues
+      const response = await fetch(`/api/osm/reverse-geocode?${params}`);
       
       if (!response.ok) {
-        throw new Error(`Nominatim reverse API error: ${response.status}`);
+        throw new Error(`Reverse geocoding API error: ${response.status}`);
       }
 
       const place: NominatimPlace = await response.json();
@@ -309,10 +296,10 @@ class OSMService {
   async fetchPOIData(lat: number, lon: number, radius: number = 50): Promise<OSMPoiData[]> {
     // Use AbortController to enforce a timeout in case Overpass API hangs
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
       const query = this.buildQuery(lat, lon, radius);
-      const response = await fetch(this.overpassUrl, {
+      let response = await fetch('/api/osm/overpass', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -320,6 +307,19 @@ class OSMService {
         body: `data=${encodeURIComponent(query)}`,
         signal: controller.signal
       });
+
+      if (!response.ok) {
+        // brief retry once on 5xx/429
+        if (response.status >= 500 || response.status === 429) {
+          await new Promise(r => setTimeout(r, 400));
+          response = await fetch('/api/osm/overpass', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `data=${encodeURIComponent(query)}`,
+            signal: controller.signal
+          });
+        }
+      }
 
       if (!response.ok) {
         throw new Error(`OSM API error: ${response.status}`);
@@ -337,9 +337,9 @@ class OSMService {
       return OSMPoiDataSchema.array().parse(rawPois);
     } catch (error) {
       if ((error as any).name === 'AbortError') {
-        console.warn('OSM fetch timed out after 5 seconds');
+        console.warn('OSM fetch timed out after 8 seconds');
       } else {
-      console.warn('Failed to fetch OSM data:', error);
+        console.warn('Failed to fetch OSM data:', error);
       }
       return [];
     } finally {
@@ -352,22 +352,46 @@ class OSMService {
    */
   async findMatchingPOI(name: string, lat: number, lon: number): Promise<OSMPoiData | null> {
     try {
-      const pois = await this.fetchPOIData(lat, lon, 100); // Wider search
-      
-      // Find closest match by name similarity and distance
-      const matches = pois.filter(poi => 
-        poi.name?.toLowerCase().includes(name.toLowerCase()) ||
-        name.toLowerCase().includes(poi.name?.toLowerCase() || '')
-      );
+      const pois = await this.fetchPOIData(lat, lon, 150); // Wider search for robustness
+      const query = (name || '').toLowerCase().trim();
+      if (pois.length === 0) return null;
 
-      if (matches.length === 0) return null;
+      // Score candidates by brand/name/operator similarity and distance (implicitly by Overpass ordering)
+      const scored = pois.map(p => {
+        const cname = (p.name || '').toLowerCase();
+        const cbrand = (p.brand || '').toLowerCase();
+        const coper = (p.operator || '').toLowerCase();
+        let score = 0;
+        if (cname && (cname.includes(query) || query.includes(cname))) score += 3;
+        if (cbrand && (cbrand.includes(query) || query.includes(cbrand))) score += 2;
+        if (coper && (coper.includes(query) || query.includes(coper))) score += 1;
+        return { poi: p, score };
+      });
 
-      // Return the first match (closest by default due to query)
-      return matches[0];
+      scored.sort((a, b) => b.score - a.score);
+      const best = scored[0];
+      if (!best || best.score === 0) {
+        // Fallback: return the first POI (closest) if no string match
+        return pois[0];
+      }
+      return best.poi;
     } catch (error) {
       console.warn('Failed to find matching POI:', error);
       return null;
     }
+  }
+
+  // Dev helper: run a raw Overpass call for debugging from console
+  async __debugRawOverpass(lat: number, lon: number, radius: number = 150) {
+    const q = this.buildQuery(lat, lon, radius);
+    const res = await fetch('/api/osm/overpass', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(q)}`
+    });
+    const data = await res.json();
+    console.log('🔬 Raw Overpass response:', data);
+    return data;
   }
 }
 

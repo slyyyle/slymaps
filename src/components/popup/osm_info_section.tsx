@@ -1,7 +1,5 @@
 import React from 'react';
 import { OSMDescription } from './osm_description';
-import { OSMHoursTable } from './osm_hours_table';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import type { AddressInput } from '@/utils/address-utils';
 
 interface OSMInfoSectionProps {
@@ -17,6 +15,8 @@ interface OSMInfoSectionProps {
   shop?: string;
   tourism?: string;
   opening_hours?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export const OSMInfoSection: React.FC<OSMInfoSectionProps> = ({
@@ -28,7 +28,9 @@ export const OSMInfoSection: React.FC<OSMInfoSectionProps> = ({
   website,
   operator,
   cuisine,
-  opening_hours
+  opening_hours,
+  latitude,
+  longitude
 }) => {
   // Simple logic: only show sections if we have OSM enrichment AND actual data
   const hasContactInfo = address || phone || website || operator || cuisine;
@@ -47,6 +49,16 @@ export const OSMInfoSection: React.FC<OSMInfoSectionProps> = ({
   // Don't render anything for non-native POIs
   if (!isNativePoi) {
     return null;
+  }
+
+  // If still loading (no enrichment yet), show lightweight placeholder
+  if (!hasOSMEnrichment && !osmLookupAttempted) {
+    return (
+      <div className="bg-gray-50 rounded-md p-2 text-xs text-gray-500 flex items-center gap-2">
+        <span className="animate-spin h-3 w-3 border-2 border-gray-400 border-t-transparent rounded-full"></span>
+        Loading details…
+      </div>
+    );
   }
 
   // If OSM lookup failed/errored, show error state 
@@ -78,118 +90,20 @@ export const OSMInfoSection: React.FC<OSMInfoSectionProps> = ({
     return null; // No OSM data yet
   }
 
-  // If we only have one type of content, show it without tabs
-  if (hasContactInfo && !hasHours) {
-    return (
-      <div className="bg-card border border-border rounded-md pt-[3px] px-3 pb-3">
-        <Tabs defaultValue="details" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 h-8 p-0.5">
-            <TabsTrigger value="details" className="text-xs px-2 py-1">
-              📋 Details
-            </TabsTrigger>
-            <TabsTrigger 
-              value="hours" 
-              className="text-xs px-2 py-1"
-              disabled={true}
-            >
-              🕐 Hours (NA)
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="details" className="mt-[3px]">
-            <OSMDescription
-              variant="double"
-              address={address}
-              phone={phone}
-              website={website}
-              operator={operator}
-              cuisine={cuisine}
-            />
-          </TabsContent>
-          
-          <TabsContent value="hours" className="mt-[3px]">
-            <div className="text-xs text-gray-500 italic bg-gray-50 p-2 rounded">
-              No Hours Available
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
-    );
-  }
-
-  if (!hasContactInfo && hasHours) {
-    return (
-      <div className="bg-card border border-border rounded-md pt-[3px] px-3 pb-3">
-        <Tabs defaultValue="hours" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 h-8 p-0.5">
-            <TabsTrigger 
-              value="details" 
-              className="text-xs px-2 py-1"
-              disabled={true}
-            >
-              📋 Details (NA)
-            </TabsTrigger>
-            <TabsTrigger value="hours" className="text-xs px-2 py-1">
-              🕐 Hours
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="details" className="mt-[3px]">
-            <div className="text-xs text-gray-500 italic bg-gray-50 p-2 rounded">
-              No Details Available
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="hours" className="mt-[3px]">
-            <OSMHoursTable
-              opening_hours={opening_hours}
-              isLoading={false}
-              hasError={false}
-              contentOnly={true}
-            />
-          </TabsContent>
-        </Tabs>
-      </div>
-    );
-  }
-
-  // If we have both types of content, show tabs
+  // Single Details section
   return (
     <div className="bg-card border border-border rounded-md pt-[3px] px-3 pb-3">
-      <Tabs defaultValue="details" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 h-8 p-0.5">
-          <TabsTrigger value="details" className="text-xs px-2 py-1">
-            📋 Details
-          </TabsTrigger>
-          <TabsTrigger 
-            value="hours" 
-            className="text-xs px-2 py-1"
-            disabled={!hasHours}
-          >
-            {hasHours ? "🕐 Hours" : "🕐 Hours (NA)"}
-          </TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="details" className="mt-[3px]">
-          <OSMDescription
-            variant="double"
-            address={address}
-            phone={phone}
-            website={website}
-            operator={operator}
-            cuisine={cuisine}
-          />
-        </TabsContent>
-        
-        <TabsContent value="hours" className="mt-[3px]">
-          <OSMHoursTable
-            opening_hours={opening_hours}
-            isLoading={false}
-            hasError={false}
-            contentOnly={true}
-          />
-        </TabsContent>
-      </Tabs>
+      <OSMDescription
+        variant="double"
+        address={address}
+        phone={phone}
+        website={website}
+        operator={operator}
+        cuisine={cuisine}
+        opening_hours={opening_hours}
+        latitude={latitude}
+        longitude={longitude}
+      />
     </div>
   );
 }; 

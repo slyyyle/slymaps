@@ -1016,6 +1016,26 @@
   .sidebar-container.ocean button:hover {
     box-shadow: 0 0 12px rgba(52, 211, 153, 0.3);
   }
+
+  /* Force Open/Closed status colors in popups regardless of theme */
+  .mapbox-popup-container span.status-open {
+    color: #16a34a !important; /* green-600 */
+  }
+  .mapbox-popup-container span.status-closed {
+    color: #dc2626 !important; /* red-600 */
+  }
+  .mapbox-popup-container.dark .status-open,
+  .mapbox-popup-container.midnight .status-open,
+  .mapbox-popup-container.neon .status-open,
+  .mapbox-popup-container.ocean .status-open {
+    color: #16a34a !important;
+  }
+  .mapbox-popup-container.dark .status-closed,
+  .mapbox-popup-container.midnight .status-closed,
+  .mapbox-popup-container.neon .status-closed,
+  .mapbox-popup-container.ocean .status-closed {
+    color: #dc2626 !important;
+  }
 }
 
 /* ===== MAPBOX CONTROLS THEMING ===== */
@@ -1501,6 +1521,12 @@ body.theme-ocean .quick-settings-label {
     font-family: inherit;
     line-height: inherit;
     /* Keep our glassmorphism - don't override background, border, etc. */
+  }
+
+  /* Ensure popup container stacks above low z-index markers */
+  .mapboxgl-popup {
+    z-index: 1100; /* higher than non-selected stops (50) and equal to selected stop base (1000+) */
+    position: relative;
   }
 }
 

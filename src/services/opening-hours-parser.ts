@@ -244,6 +244,119 @@ class OpeningHoursParser {
       todayHours: todaySchedule.hours
     };
   }
+
+  /**
+   * Compute open/closed state and next change using a timezone-aware clock
+   */
+  getOpenNowState(parsedHours: ParsedHours, timeZone: string): { isOpenNow: boolean; untilLabel?: string } {
+    if (!parsedHours?.hasData) {
+      return { isOpenNow: false };
+    }
+
+    const weekdayShort = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' }).format(new Date());
+    const hourParts = new Intl.DateTimeFormat('en-US', { timeZone, hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date());
+    const hourStr = (hourParts.find(p => p.type === 'hour')?.value || '00');
+    const minuteStr = (hourParts.find(p => p.type === 'minute')?.value || '00');
+    const nowMinutes = parseInt(hourStr, 10) * 60 + parseInt(minuteStr, 10);
+
+    const weekdayIndexMap: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+    const todayIndex = weekdayIndexMap[weekdayShort as keyof typeof weekdayIndexMap] ?? 0;
+
+    const parseTime12hToMinutes = (label: string): number | null => {
+      const m = label.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+      if (!m) return null;
+      let h = parseInt(m[1], 10);
+      const min = parseInt(m[2], 10);
+      const ampm = m[3].toUpperCase();
+      if (ampm === 'AM') {
+        if (h === 12) h = 0;
+      } else {
+        if (h !== 12) h += 12;
+      }
+      return h * 60 + min;
+    };
+
+    const parseRange = (hours: string): { start: number; end: number } | null => {
+      const parts = hours.split('-').map(s => s.trim());
+      if (parts.length !== 2) return null;
+      const start = parseTime12hToMinutes(parts[0]);
+      const end = parseTime12hToMinutes(parts[1]);
+      if (start == null || end == null) return null;
+      return { start, end };
+    };
+
+    const fmt = (minutes: number): string => {
+      const h24 = Math.floor(minutes / 60) % 24;
+      const m = minutes % 60;
+      if (h24 === 0) return `12:${m.toString().padStart(2, '0')} AM`;
+      if (h24 < 12) return `${h24}:${m.toString().padStart(2, '0')} AM`;
+      if (h24 === 12) return `12:${m.toString().padStart(2, '0')} PM`;
+      return `${h24 - 12}:${m.toString().padStart(2, '0')} PM`;
+    };
+
+    const dayNamesShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    const getLabelForDay = (idx: number) => dayNamesShort[idx % 7];
+
+    const getDayRange = (idx: number): { type: 'closed'|'all'|'range'; start?: number; end?: number } => {
+      const entry = parsedHours.schedule[idx];
+      const hours = entry?.hours || '';
+      if (!hours || /not available/i.test(hours)) return { type: 'closed' };
+      if (/24\s*hours/i.test(hours)) return { type: 'all' };
+      if (/closed/i.test(hours)) return { type: 'closed' };
+      const r = parseRange(hours);
+      if (!r) return { type: 'closed' };
+      return { type: 'range', start: r.start, end: r.end };
+    };
+
+    // Today
+    const today = getDayRange(todayIndex);
+
+    const computeOpenNow = (range: { start: number; end: number } | null): { open: boolean; until?: string } => {
+      if (!range) return { open: false };
+      const { start, end } = range;
+      if (end > start) {
+        if (nowMinutes >= start && nowMinutes < end) {
+          return { open: true, until: fmt(end) };
+        }
+        return { open: false };
+      }
+      // wraps past midnight
+      if (nowMinutes >= start || nowMinutes < end) {
+        return { open: true, until: fmt(end) };
+      }
+      return { open: false };
+    };
+
+    if (today.type === 'all') {
+      return { isOpenNow: true };
+    }
+
+    if (today.type === 'range') {
+      const state = computeOpenNow({ start: today.start!, end: today.end! });
+      if (state.open) {
+        return { isOpenNow: true, untilLabel: state.until };
+      }
+      // Closed now but opens later today (non-wrap case)
+      if (today.end! > today.start! && nowMinutes < today.start!) {
+        return { isOpenNow: false, untilLabel: `${fmt(today.start!)} ${getLabelForDay(todayIndex)}` };
+      }
+    }
+
+    // Find next opening time
+    for (let offset = 1; offset <= 7; offset++) {
+      const idx = (todayIndex + offset) % 7;
+      const next = getDayRange(idx);
+      if (next.type === 'all') {
+        return { isOpenNow: false, untilLabel: `${fmt(0)} ${getLabelForDay(idx)}` };
+      }
+      if (next.type === 'range') {
+        return { isOpenNow: false, untilLabel: `${fmt(next.start!)} ${getLabelForDay(idx)}` };
+      }
+    }
+
+    return { isOpenNow: false };
+  }
 }
 
 export const openingHoursParser = new OpeningHoursParser(); 

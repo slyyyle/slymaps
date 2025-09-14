@@ -7,10 +7,9 @@ import type { Coordinates } from '@/types/core';
 import { MAPBOX_ACCESS_TOKEN } from '@/lib/constants';
 import { useTransitStore } from '@/stores/transit';
 
-// Hook to manage Mapbox Directions control for driving, walking, cycling.
-// Only attach MapboxDirections when in non-transit mode and both start and end coordinates are provided.
-// If the map isn't loaded yet (no mapRef), in transit mode, or coords are missing, the control is detached and not displayed.
-// This ensures Mapbox Navigation UI is only shown for supported routing scenarios.
+// Feature flag: disable embedded MapboxDirections control to avoid double-draw.
+const ENABLE_EMBEDDED_DIRECTIONS_CONTROL = false;
+
 export function useMapboxDirectionsControl(
   mapRef: React.RefObject<MapRef>,
   mapLoaded: boolean,
@@ -23,11 +22,18 @@ export function useMapboxDirectionsControl(
   const activeRouteId = useTransitStore(state => state.activeRouteId);
 
   useEffect(() => {
+    if (!ENABLE_EMBEDDED_DIRECTIONS_CONTROL) {
+      // Ensure detached if previously attached
+      if (mapRef.current && controlRef.current) {
+        try { mapRef.current.getMap().removeControl(controlRef.current); } catch {}
+        controlRef.current = null;
+      }
+      return;
+    }
+
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current.getMap();
 
-    // Detach control when switching to transit mode or missing coordinates
-    // Covers cases where user selects transit or clears route before starting a trip.
     if (mode === 'transit' || !startCoords || !endCoords) {
       if (controlRef.current) {
         try { map.removeControl(controlRef.current); } catch {}
@@ -36,7 +42,6 @@ export function useMapboxDirectionsControl(
       return;
     }
 
-    // Instantiate control if not already
     if (!controlRef.current) {
       const ctrl = new MapboxDirections({
         accessToken: MAPBOX_ACCESS_TOKEN,
@@ -46,7 +51,6 @@ export function useMapboxDirectionsControl(
         alternatives: true,
         interactive: false
       });
-      // Sync plugin route events to our store for manual tab UI
       ctrl.on('route', (event: any) => {
         if (!activeRouteId) return;
         const routes = event.route as any[];
@@ -59,7 +63,6 @@ export function useMapboxDirectionsControl(
       map.addControl(ctrl, 'top-left');
     }
 
-    // Update origin/destination
     controlRef.current.setOrigin([startCoords.longitude, startCoords.latitude]);
     controlRef.current.setDestination([endCoords.longitude, endCoords.latitude]);
   }, [mapLoaded, mode, startCoords, endCoords, updateRoute, activeRouteId, mapRef]);

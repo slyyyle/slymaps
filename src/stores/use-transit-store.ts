@@ -61,6 +61,8 @@ interface TransitStoreState {
   hoveredVehicleId: string | null;
   // Currently selected vehicle for unified vehicle-centric popups
   selectedVehicleId: string | null;
+  // Selected alternative index for non-transit Mapbox routes
+  selectedAlternativeIndex?: number;
 }
 
 interface TransitStoreActions {
@@ -78,6 +80,7 @@ interface TransitStoreActions {
   // Navigation
   setRouteCoordinates: (start: Coordinates | null, end: Coordinates | null) => void;
   getRouteCoordinates: () => { start: Coordinates | null; end: Coordinates | null };
+  setSelectedAlternativeIndex: (index: number) => void;
   // Active stop setter for stepping-stone jumps
   setActiveStop: (stopId: string | null) => void;
   // Hovered stop setter for sidebar hover
@@ -116,6 +119,7 @@ export const useTransitStore = create<TransitStore>()(
     hoveredStopId: null,
     hoveredVehicleId: null,
     selectedVehicleId: null,
+    selectedAlternativeIndex: 0,
 
     // Route management
     addRoute: (route: Partial<RouteEntity>) => {
@@ -197,6 +201,8 @@ export const useTransitStore = create<TransitStore>()(
       const { routeStart, routeEnd } = get();
       return { start: routeStart, end: routeEnd };
     },
+
+    setSelectedAlternativeIndex: (index: number) => set({ selectedAlternativeIndex: index }),
 
     // Active stop getter for stepping-stone jumps
     getActiveStopId: () => get().activeStopId,

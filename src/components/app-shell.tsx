@@ -91,9 +91,11 @@ export function AppShell() {
   }, [unifiedHandler]);
 
   const handleRouteSelect = React.useCallback(async (routeId: string) => {
+    // Replace any existing displayed OBA route
+    routeHandler.clearAllRoutes();
     const storeId = await addOBARoute(routeId);
     selectRoute(storeId);
-  }, [addOBARoute, selectRoute]);
+  }, [addOBARoute, selectRoute, routeHandler]);
 
   // Clear map overlays and active selection when search is cleared (preserve past searches)
   const handleClearSearch = React.useCallback(() => {

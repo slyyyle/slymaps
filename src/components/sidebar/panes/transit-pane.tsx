@@ -83,6 +83,8 @@ export function TransitPane({ mapRef }: TransitPaneProps): ReactElement {
 
 
   const handleRouteSelect = async (routeId: string) => {
+    // Replace any existing displayed OBA route
+    routeHandler.clearAllRoutes();
     const storeRouteId = await routeHandler.addOBARoute(routeId);
     routeHandler.selectRoute(storeRouteId);
     const route = routeHandler.getRoute(storeRouteId);

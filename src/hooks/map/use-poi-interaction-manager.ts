@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import type { MapRef } from 'react-map-gl/maplibre';
+import type { MapRef } from 'react-map-gl/mapbox';
 import type { Place, Coordinates } from '@/types/core';
 
 /**
@@ -15,182 +15,173 @@ import type { Place, Coordinates } from '@/types/core';
 export type PlaceInteractionType = 'native' | 'stored' | 'search' | 'created';
 
 export interface POIInteractionEvent {
-  type: PlaceInteractionType;
-  poi: Place;
-  coordinates: Coordinates;
-  source: 'click' | 'hover' | 'context';
+	type: PlaceInteractionType;
+	poi: Place;
+	coordinates: Coordinates;
+	source: 'click' | 'hover' | 'context';
 }
 
 interface POIInteractionManagerProps {
-  map: MapRef | null;
-  onPOIInteraction: (event: POIInteractionEvent) => void;
-  enabledTypes?: PlaceInteractionType[];
+	map: MapRef | null;
+	onPOIInteraction: (event: POIInteractionEvent) => void;
+	enabledTypes?: PlaceInteractionType[];
 }
 
 export function usePOIInteractionManager({
-  map,
-  onPOIInteraction,
-  enabledTypes = ['native', 'stored', 'search', 'created']
+	map,
+	onPOIInteraction,
+	enabledTypes = ['native', 'stored', 'search', 'created']
 }: POIInteractionManagerProps) {
-  // 🔧 CORE FIX: Use refs for stable references
-  const onPOIInteractionRef = useRef(onPOIInteraction);
-  const enabledTypesRef = useRef(enabledTypes);
-  const interactionSetupRef = useRef(false);
-  const mapRef = useRef<MapRef | null>(null);
+	// 🔧 CORE FIX: Use refs for stable references
+	const onPOIInteractionRef = useRef(onPOIInteraction);
+	const enabledTypesRef = useRef(enabledTypes);
+	const interactionSetupRef = useRef(false);
+	const mapRef = useRef<MapRef | null>(null);
 
-  // Keep refs current without causing re-renders
-  useEffect(() => {
-    onPOIInteractionRef.current = onPOIInteraction;
-  });
+	// Keep refs current without causing re-renders
+	useEffect(() => {
+		onPOIInteractionRef.current = onPOIInteraction;
+	});
 
-  useEffect(() => {
-    enabledTypesRef.current = enabledTypes;
-  });
+	useEffect(() => {
+		enabledTypesRef.current = enabledTypes;
+	});
 
-  // 🔧 CORE FIX: Setup native interactions once, not on every render
-  const setupNativeInteractions = useCallback(() => {
-    if (!mapRef.current || interactionSetupRef.current) return;
-    
-    const mapInstance = mapRef.current.getMap();
-    if (!mapInstance || !mapInstance.isStyleLoaded()) return;
+	// 🔧 CORE FIX: Setup native interactions once, not on every render
+	const setupNativeInteractions = useCallback(() => {
+		if (!mapRef.current || interactionSetupRef.current) return;
+		
+		const mapInstance = mapRef.current.getMap();
+		if (!mapInstance || !mapInstance.isStyleLoaded()) return;
 
-    // Remove existing interaction if it exists
-    try {
-      mapInstance.removeInteraction('poi-interaction-native');
-    } catch (e) {
-      // Interaction doesn't exist yet, that's fine
-    }
+		// Remove existing interaction if it exists
+		try { mapInstance.removeInteraction('poi-interaction-native'); } catch {}
 
-    mapInstance.addInteraction('poi-interaction-native', {
-      type: 'click',
-      target: { featuresetId: 'poi', importId: 'basemap' },
-      handler: ({ feature }: { feature: { id: string; properties: Record<string, unknown>; geometry: { coordinates: [number, number] } } }) => {
-        const ephemeralPoi: Place = {
-          id: `native-ephemeral-${feature.id}-${Date.now()}`,
-          name: (feature.properties.name as string) || 'Native POI',
-          type: mapNativeFeatureType(feature.properties),
-          latitude: feature.geometry.coordinates[1],
-          longitude: feature.geometry.coordinates[0],
-          description: '',
-          isNativePoi: true,
-          properties: feature.properties
-        };
+		const handler = (evt: any) => {
+			const f = evt?.feature as { id?: string; properties?: Record<string, unknown>; geometry?: { coordinates?: [number, number] } } | undefined;
+			if (!f || !f.id || !f.properties || !f.geometry || !Array.isArray(f.geometry.coordinates)) return;
+			const [lon, lat] = f.geometry.coordinates as [number, number];
+			const ephemeralPoi: Place = {
+				id: `native-ephemeral-${f.id}-${Date.now()}`,
+				name: (f.properties.name as string) || 'Native POI',
+				type: mapNativeFeatureType(f.properties),
+				latitude: lat,
+				longitude: lon,
+				description: '',
+				isNativePoi: true,
+				properties: f.properties
+			};
 
-        const event: POIInteractionEvent = {
-          type: 'native',
-          poi: ephemeralPoi,
-          coordinates: {
-            latitude: feature.geometry.coordinates[1],
-            longitude: feature.geometry.coordinates[0]
-          },
-          source: 'click'
-        };
+			const event: POIInteractionEvent = {
+				type: 'native',
+				poi: ephemeralPoi,
+				coordinates: { latitude: lat, longitude: lon },
+				source: 'click'
+			};
 
-        onPOIInteractionRef.current(event);
-      }
-    });
+			onPOIInteractionRef.current(event);
+		};
 
-    interactionSetupRef.current = true;
-  }, []); // 🔧 CORE FIX: Empty dependencies = stable forever
+		// Primary POI featureset (Standard v3)
+		try { mapInstance.addInteraction('poi-interaction-native', {
+			type: 'click',
+			target: { featuresetId: 'poi', importId: 'basemap' },
+			handler
+		}); } catch {}
 
-  // 🔧 CORE FIX: Stable handlers that don't recreate
-  const handleStoredPlaceClick = useCallback((poi: Place) => {
-    const event: POIInteractionEvent = {
-      type: 'stored',
-      poi,
-      coordinates: { latitude: poi.latitude, longitude: poi.longitude },
-      source: 'click'
-    };
-    onPOIInteractionRef.current(event);
-  }, []); // No dependencies = stable forever
+		interactionSetupRef.current = true;
+	}, []);
 
-  const handleSearchResultClick = useCallback((poi: Place) => {
-    const event: POIInteractionEvent = {
-      type: 'search',
-      poi,
-      coordinates: { latitude: poi.latitude, longitude: poi.longitude },
-      source: 'click'
-    };
-    onPOIInteractionRef.current(event);
-  }, []);
+	// 🔧 CORE FIX: Stable handlers that don't recreate
+	const handleStoredPlaceClick = useCallback((poi: Place) => {
+		const event: POIInteractionEvent = {
+			type: 'stored',
+			poi,
+			coordinates: { latitude: poi.latitude, longitude: poi.longitude },
+			source: 'click'
+		};
+		onPOIInteractionRef.current(event);
+	}, []); // No dependencies = stable forever
 
-  const handleCreatedPlaceClick = useCallback((poi: Place) => {
-    const event: POIInteractionEvent = {
-      type: 'created',
-      poi,
-      coordinates: { latitude: poi.latitude, longitude: poi.longitude },
-      source: 'click'
-    };
-    onPOIInteractionRef.current(event);
-  }, []);
+	const handleSearchResultClick = useCallback((poi: Place) => {
+		const event: POIInteractionEvent = {
+			type: 'search',
+			poi,
+			coordinates: { latitude: poi.latitude, longitude: poi.longitude },
+			source: 'click'
+		};
+		onPOIInteractionRef.current(event);
+	}, []);
 
-  // Setup interactions when map is ready
-  useEffect(() => {
-    mapRef.current = map;
-    
-    if (!map) {
-      // Clean up previous interactions when map is removed
-      const prevMap = mapRef.current;
-      if (prevMap) {
-        const prevMapInstance = prevMap.getMap();
-        if (prevMapInstance) {
-          try {
-            prevMapInstance.removeInteraction('poi-interaction-native');
-          } catch (e) {
-            // Interaction doesn't exist, that's fine
-          }
-        }
-      }
-      interactionSetupRef.current = false;
-      return;
-    }
+	const handleCreatedPlaceClick = useCallback((poi: Place) => {
+		const event: POIInteractionEvent = {
+			type: 'created',
+			poi,
+			coordinates: { latitude: poi.latitude, longitude: poi.longitude },
+			source: 'click'
+		};
+		onPOIInteractionRef.current(event);
+	}, []);
 
-    const mapInstance = map.getMap();
-    if (!mapInstance) return;
+	// Setup interactions when map is ready
+	useEffect(() => {
+		mapRef.current = map;
+		
+		if (!map) {
+			// Clean up previous interactions when map is removed
+			const prevMap = mapRef.current;
+			if (prevMap) {
+				const prevMapInstance = prevMap.getMap();
+				if (prevMapInstance) {
+					try { prevMapInstance.removeInteraction('poi-interaction-native'); } catch {}
+				}
+			}
+			interactionSetupRef.current = false;
+			return;
+		}
 
-    const handleStyleLoad = () => {
-      setupNativeInteractions();
-    };
+		const mapInstance = map.getMap();
+		if (!mapInstance) return;
 
-    if (mapInstance.isStyleLoaded()) {
-      handleStyleLoad();
-    } else {
-      mapInstance.once('style.load', handleStyleLoad);
-    }
+		const handleStyleLoad = () => {
+			setupNativeInteractions();
+		};
 
-    // Cleanup function for when map ref changes
-    return () => {
-      if (mapInstance) {
-        try {
-          mapInstance.removeInteraction('poi-interaction-native');
-        } catch (e) {
-          // Interaction doesn't exist, that's fine
-        }
-      }
-      interactionSetupRef.current = false;
-    };
-  }, [map, setupNativeInteractions]); // 🔧 CORE FIX: Only depends on map reference
+		if (mapInstance.isStyleLoaded()) {
+			handleStyleLoad();
+		} else {
+			mapInstance.once('style.load', handleStyleLoad);
+		}
 
-  return {
-    handleStoredPlaceClick,
-    handleSearchResultClick,
-    handleCreatedPlaceClick,
-    isNativeInteractionActive: interactionSetupRef.current
-  };
+		// Cleanup function for when map ref changes
+		return () => {
+			if (mapInstance) {
+				try { mapInstance.removeInteraction('poi-interaction-native'); } catch {}
+			}
+			interactionSetupRef.current = false;
+		};
+	}, [map, setupNativeInteractions]); // 🔧 CORE FIX: Only depends on map reference
+
+	return {
+		handleStoredPlaceClick,
+		handleSearchResultClick,
+		handleCreatedPlaceClick,
+		isNativeInteractionActive: interactionSetupRef.current
+	};
 }
 
 // Helper function to map native feature properties to POI type
 function mapNativeFeatureType(props: Record<string, unknown>): string {
-  if (props.group === 'transit') {
-    if (props.transit_mode === 'tram') return 'Tram Station';
-    if (props.transit_mode === 'bus') return 'Bus Stop';
-    if (props.transit_mode === 'rail') return 'Rail Station';
-    return 'Transit Stop';
-  }
-  
-  if (props.class && typeof props.class === 'string') {
-    return props.class.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
-  }
-  
-  return 'Place';
+	if ((props as any).group === 'transit') {
+		if ((props as any).transit_mode === 'tram') return 'Tram Station';
+		if ((props as any).transit_mode === 'bus') return 'Bus Stop';
+		if ((props as any).transit_mode === 'rail') return 'Rail Station';
+		return 'Transit Stop';
+	}
+	
+	if ((props as any).class && typeof (props as any).class === 'string') {
+		return ((props as any).class as string).replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+	}
+	
+	return 'Place';
 } 

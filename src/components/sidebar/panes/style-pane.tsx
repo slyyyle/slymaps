@@ -1,21 +1,25 @@
 import React, { useState } from 'react';
+import type { MapRef } from 'react-map-gl/mapbox';
 import { ThemeSelector } from '@/components/map/ThemeSelector';
 import { useThemeStore } from '../../../stores/theme-store';
 import { useDrawStore } from '../../../stores/draw';
+import { useTerrainStore } from '../../../stores/terrain-store';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { MAP_STYLES } from '@/lib/constants';
 import { StyleOptions } from '@/components/draw/StyleOptions';
 import { Slider } from '@/components/ui/slider';
 import { useMapViewport } from '@/hooks/map/use-map-navigation';
 import { useMapStyleConfig } from '@/hooks/map/use-map-style-config';
+import { useMapStyling } from '@/hooks/map/use-map-styling';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface StylePaneProps {
   onBack: () => void;
+  mapRef?: React.RefObject<MapRef>;
 }
 
-export function StylePane({ onBack }: StylePaneProps) {
+export function StylePane({ onBack, mapRef }: StylePaneProps) {
   const { popupTheme, setTheme } = useThemeStore();
   // Draw store properties
   const lineColor = useDrawStore(state => state.lineColor);
@@ -36,20 +40,43 @@ export function StylePane({ onBack }: StylePaneProps) {
   const setPointRadius = useDrawStore(state => state.setPointRadius);
 
   const [activeTab, setActiveTab] = useState<'themes' | 'mapstyle' | 'drawing'>('themes');
-  const { mapRef, getMapInstance } = useMapViewport();
-  const mapStyleUrl = MAP_STYLES[0].url;
-  const { toggle3D, toggleTerrain } = useMapStyleConfig({ mapRef, mapStyleUrl });
-  const [is3dEnabled, setIs3dEnabled] = useState<boolean>(false);
-  const [isTerrainEnabled, setIsTerrainEnabled] = useState<boolean>(false);
-  const [terrainExaggeration, setTerrainExaggeration] = useState<number>(1.2);
-
-  const [zoom3DThreshold, setZoom3DThreshold] = useState<number>(15);
-  const [zoomTerrainThreshold, setZoomTerrainThreshold] = useState<number>(12);
+  
+  // Use the passed mapRef if available, otherwise fall back to useMapViewport
+  const { mapRef: viewportMapRef, getMapInstance } = useMapViewport();
+  const effectiveMapRef = mapRef || viewportMapRef;
+  
+  const mapStyling = useMapStyling(effectiveMapRef);
+  const mapStyleUrl = mapStyling.currentMapStyle.url;
+  const { toggle3D, toggleTerrain, setTerrainExaggeration: setMapTerrainExaggeration, setTerrainCutoff } = useMapStyleConfig({ mapRef: effectiveMapRef, mapStyleUrl });
+  
+  // Use terrain store instead of local state
+  const {
+    is3DEnabled,
+    isTerrainEnabled,
+    terrainExaggeration,
+    cutoffEnabled,
+    set3DEnabled,
+    setTerrainEnabled,
+    setTerrainExaggeration: setStoreTerrainExaggeration,
+    setCutoffEnabled
+  } = useTerrainStore();
 
   // Memoize slider value arrays to keep references stable
-  const zoom3DValue = React.useMemo(() => [zoom3DThreshold], [zoom3DThreshold]);
-  const zoomTerrainValue = React.useMemo(() => [zoomTerrainThreshold], [zoomTerrainThreshold]);
   const terrainExaggValue = React.useMemo(() => [terrainExaggeration], [terrainExaggeration]);
+
+  // Apply 3D on mount if not already enabled (debounced)
+  React.useEffect(() => {
+    if (is3DEnabled || !effectiveMapRef?.current) return;
+    
+    const timeoutId = setTimeout(() => {
+      if (effectiveMapRef?.current) {
+        toggle3D(true);
+        set3DEnabled(true);
+      }
+    }, 200);
+    
+    return () => clearTimeout(timeoutId);
+  }, [effectiveMapRef, is3DEnabled, toggle3D, set3DEnabled]);
 
   return (
     <div className="flex flex-col h-full">
@@ -69,66 +96,69 @@ export function StylePane({ onBack }: StylePaneProps) {
 
           <TabsContent value="mapstyle">
             <div className="space-y-6 pt-4">
-              {/* 3D Zoom Threshold */}
+              {/* 3D Buildings Toggle */}
               <div className="flex flex-col space-y-2">
                 <div className="text-sm flex items-center">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span>3D Zoom Threshold ({zoom3DThreshold})</span>
+                      <span>3D Buildings</span>
                     </TooltipTrigger>
                     <TooltipContent>
-                      The map zoom level above which 3D buildings are enabled
+                      Enable or disable 3D buildings on the map
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Slider
-                    className="flex-1"
-                    value={zoom3DValue}
-                    onValueChange={(vals) => setZoom3DThreshold(vals[0])}
-                    min={0}
-                    max={22}
-                    step={0.1}
-                  />
-                  <Button size="sm" variant="secondary" onClick={() => {
-                    toggle3D(!is3dEnabled);
-                    const map = getMapInstance();
-                    if (map) map.flyTo({ zoom: zoom3DThreshold });
-                  }}>
-                    Preview
+                <Button 
+                  size="sm" 
+                  variant={is3DEnabled ? "default" : "secondary"} 
+                  onClick={() => {
+                    toggle3D(!is3DEnabled);
+                    set3DEnabled(!is3DEnabled);
+                  }}
+                >
+                  {is3DEnabled ? "Disable 3D" : "Enable 3D"}
                   </Button>
-                </div>
               </div>
-              {/* Terrain Zoom Threshold */}
+              
+              {/* Terrain Toggle */}
               <div className="flex flex-col space-y-2">
                 <div className="text-sm flex items-center">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span>Terrain Zoom Threshold ({zoomTerrainThreshold})</span>
+                      <span>3D Terrain</span>
                     </TooltipTrigger>
                     <TooltipContent>
-                      The map zoom level above which terrain is enabled
+                      Enable or disable 3D terrain on the map
                     </TooltipContent>
                   </Tooltip>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Slider
-                    className="flex-1"
-                    value={zoomTerrainValue}
-                    onValueChange={(vals) => setZoomTerrainThreshold(vals[0])}
-                    min={0}
-                    max={22}
-                    step={0.1}
-                  />
-                  <Button size="sm" variant="secondary" onClick={() => {
+                <Button 
+                  size="sm" 
+                  variant={isTerrainEnabled ? "default" : "secondary"} 
+                  onClick={() => {
                     toggleTerrain(!isTerrainEnabled, terrainExaggeration);
-                    const map = getMapInstance();
-                    if (map) map.flyTo({ zoom: zoomTerrainThreshold });
-                  }}>
-                    Preview
+                    setTerrainEnabled(!isTerrainEnabled);
+                  }}
+                >
+                  {isTerrainEnabled ? "Disable Terrain" : "Enable Terrain"}
+                  </Button>
+                {/* Terrain Cutoff */}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Terrain Cutoff</span>
+                  <Button
+                    size="sm"
+                    variant={cutoffEnabled ? 'default' : 'secondary'}
+                    onClick={() => {
+                      const next = !cutoffEnabled;
+                      setCutoffEnabled(next);
+                      setTerrainCutoff(next);
+                    }}
+                  >
+                    {cutoffEnabled ? 'On' : 'Off'}
                   </Button>
                 </div>
               </div>
+              
               {/* Terrain Exaggeration */}
               <div className="flex flex-col space-y-2">
                 <div className="text-sm flex items-center">
@@ -143,7 +173,14 @@ export function StylePane({ onBack }: StylePaneProps) {
                 </div>
                 <Slider
                   value={terrainExaggValue}
-                  onValueChange={(vals) => setTerrainExaggeration(vals[0])}
+                  onValueChange={(vals) => {
+                    const newExaggeration = vals[0];
+                    setStoreTerrainExaggeration(newExaggeration);
+                    
+                    // Always enable terrain with the new exaggeration
+                    toggleTerrain(true, newExaggeration);
+                    setTerrainEnabled(true);
+                  }}
                   min={1}
                   max={5}
                   step={0.1}

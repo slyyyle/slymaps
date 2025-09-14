@@ -165,6 +165,8 @@ export function useSearchResultHandling(options: UseSearchResultHandlingOptions)
   const handleUnifiedSelect = useCallback((suggestion: UnifiedSearchSuggestion) => {
     if (suggestion.type === 'route' && onRouteSelect) {
       const routeData = suggestion.data as any;
+      // Replace any existing displayed route before selecting a new one
+      transitIntegration.clearAllRoutes();
       // Add route as a recent search, nesting the data under obaRoute
       const storeId = transitIntegration.addRoute({
         id: routeData.id,

@@ -38,6 +38,7 @@ import { TemporaryDestinationMarker } from './temporary-destination-marker';
 import { useThemeStore } from '@/stores/theme-store';
 import { useTransitStore } from '@/stores/transit';
 import { useHomeStore } from '@/stores/use-home-store';
+import { useTerrainStore } from '@/stores/terrain-store';
 import HomePopup from '@/components/map/HomePopup';
 
 // ENHANCED ASYNC POPUP SYSTEM
@@ -53,6 +54,11 @@ import type { AddressInput } from '@/utils/address-utils';
 
 // Static import for draw controls (no longer lazy loaded)
 import DrawControls from '@/components/draw/DrawControls';
+import { useNavigationStore } from '@/stores/navigation-store';
+import type { Route } from '@/types/transit/directions';
+
+// Hoist navigation store usage before any effects that depend on it
+const { isActive: navActive, followingEnabled } = useNavigationStore.getState ? useNavigationStore.getState() : { isActive: false, followingEnabled: true };
 
 const getIconForPoiType = (poi: Place): IconName => {
   const type = poi.type?.toLowerCase() || 'default';
@@ -313,11 +319,39 @@ export function StandardMapView({
   const directionsControlRef = useRef<any>(null);
   // Render transit route line via map hook
   const { getActiveRoute, getSelectedSegmentIndex } = useMapRouteHandler();
-  const activeRoute = getActiveRoute();
+  const activeRouteEntity = getActiveRoute();
   // Identify store route ID vs original OBA route ID
-  const storeRouteId = activeRoute?.id ?? null;
-  const obaRouteId = activeRoute?.obaRoute?.id ?? null;
+  const storeRouteId = activeRouteEntity?.id ?? null;
+  const obaRouteId = activeRouteEntity?.obaRoute?.id ?? null;
   const branchIndex = getSelectedSegmentIndex(storeRouteId);
+
+  // Mapbox route (non-transit) used for navigation overlay/progress
+  const routeStore = useTransitStore();
+  const activeRouteId = routeStore.activeRouteId;
+  const activeMapboxRoute: Route | null = (() => {
+    const r = activeRouteId ? routeStore.getRoute(activeRouteId) : null;
+    return (r?.mapboxRoute ?? null) as any;
+  })();
+  // Current directions mode (driving/walking/cycling/transit)
+  const { mode } = useDirectionsMode();
+  // Unified route used for drawing: OTP in transit, Mapbox route otherwise
+  const displayRoute = mode === 'transit' ? mapboxDirectionsRoute : activeMapboxRoute;
+
+  // Simple nearest-point snap along a LineString (approximate, no turf)
+  function getNearestIndexOnLine(coords: [number, number][], point: [number, number]) {
+    let bestI = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < coords.length; i++) {
+      const dx = coords[i][0] - point[0];
+      const dy = coords[i][1] - point[1];
+      const d = dx*dx + dy*dy;
+      if (d < bestD) { bestD = d; bestI = i; }
+    }
+    return { index: bestI, dist2: bestD };
+  }
+
+  // Minimal in-map overlay for next maneuver
+  const { nextManeuverText, isActive: isNavActive } = useNavigationStore();
   // Render transit route line via map hook using original OBA ID (thicker black, no outline)
   useMapTransitLayer(mapRef.current, obaRouteId, branchIndex, {
     color: '#000000',
@@ -326,29 +360,23 @@ export function StandardMapView({
     disableOutline: true
   });
   // Fetch stops & vehicles via data hooks using original OBA ID
-  const { detailsQuery, vehiclesQuery } = useRouteData(obaRouteId);
-  // Log batch vehicles data for debugging
-  useEffect(() => {
-    console.log('📡 Batch vehicles data:', vehiclesQuery.data);
-  }, [vehiclesQuery.data]);
+  const { detailsQuery } = useRouteData(obaRouteId);
   const branchData = detailsQuery.data?.branches?.[branchIndex];
   const stopsData: ObaStopSearchResult[] = branchData?.stops ?? [];
-  const vehiclesData: ObaVehicleLocation[] = vehiclesQuery.data ?? [];
+  const vehiclesData: ObaVehicleLocation[] = obaVehicleLocations ?? [];
   
-  // Filter vehicles by selected branch headsign
+  // Filter vehicles by selected branch headsign (fallback to all vehicles)
   const filteredVehiclesData = useMemo(() => {
     if (!vehiclesData.length) return vehiclesData;
     if (!branchData?.name) return vehiclesData;
 
-    // Case-insensitive substring match on headsign, include vehicles without headsign
     const branchKey = branchData.name.trim().toLowerCase();
-    return vehiclesData.filter(vehicle => {
+    const filtered = vehiclesData.filter(vehicle => {
       const heads = vehicle.tripHeadsign?.trim().toLowerCase();
-      if (!heads) {
-        return true;
-      }
+      if (!heads) return true;
       return heads.includes(branchKey);
     });
+    return filtered.length ? filtered : vehiclesData;
   }, [vehiclesData, branchData?.name]);
 
   // Allowed stop IDs for filtering POIs when a route is active
@@ -376,9 +404,15 @@ export function StandardMapView({
   const selectedVehicle = useMemo(() => {
     return selectedVehicleId ? filteredVehiclesData.find(v => v.id === selectedVehicleId) ?? null : null;
   }, [selectedVehicleId, filteredVehiclesData]);
-  const [is3DEnabled, setIs3DEnabled] = useState(true);
-  const [isTerrainEnabled, setIsTerrainEnabled] = useState(false);
-  const [terrainExaggeration, setTerrainExaggeration] = useState(1.2);
+  // Use terrain store instead of local state
+  const {
+    is3DEnabled,
+    isTerrainEnabled,
+    terrainExaggeration,
+    set3DEnabled,
+    setTerrainEnabled,
+    setTerrainExaggeration: setStoreTerrainExaggeration
+  } = useTerrainStore();
   // Track when the Map has loaded to initialize native POI interactions
   const [mapLoaded, setMapLoaded] = useState(false);
   
@@ -387,6 +421,36 @@ export function StandardMapView({
   // Remove local state - we'll get this from segregated stores
   
   const moveDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  // Guard: skip external updates during programmatic camera moves
+  const programmaticMoveRef = useRef<boolean>(false);
+  const geolocateRef = useRef<any>(null);
+
+  // When navigation becomes active, trigger geolocate follow
+  useEffect(() => {
+    if (!navActive) return;
+    try {
+      geolocateRef.current?.trigger?.();
+    } catch {}
+  }, [navActive]);
+
+  // On geolocate updates, slightly increase pitch and lock follow if enabled
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current.getMap();
+    const handler = (e: any) => {
+      if (!followingEnabled) return;
+      const heading = e?.coords?.heading ?? null;
+      map.easeTo({
+        pitch: Math.max(map.getPitch(), 50),
+        bearing: heading ?? map.getBearing(),
+        duration: 500
+      });
+    };
+    geolocateRef.current?.on?.('geolocate', handler);
+    return () => {
+      try { geolocateRef.current?.off?.('geolocate', handler); } catch {}
+    };
+  }, [mapRef, followingEnabled]);
 
   // Initialize POI handler once map has loaded to ensure mapRef.current is available
   const poiHandler = useUnifiedPOIHandler({
@@ -460,92 +524,194 @@ export function StandardMapView({
   // --- Direct setConfigProperty handlers ---
   const apply3D = useCallback((enabled: boolean) => {
     if (!mapRef.current) return;
-    const map = mapRef.current.getMap();
-    map.setConfigProperty('basemap', 'show3dObjects', enabled);
-    setIs3DEnabled(enabled);
+    try {
+      const map = mapRef.current.getMap();
+      if (!map.isStyleLoaded()) return;
+      map.setConfigProperty('basemap', 'show3dObjects', enabled);
+      set3DEnabled(enabled);
+    } catch (error) {
+      console.warn('Failed to apply 3D settings:', error);
+    }
+  }, [mapRef, set3DEnabled]);
+
+  const applyCutoff = useCallback((enabled: boolean) => {
+    if (!mapRef.current) return;
+    try {
+      const map = mapRef.current.getMap();
+      if (!map.isStyleLoaded()) return;
+      try { map.setConfigProperty('basemap', 'terrainCutoff', enabled ? 'default' : 'none'); } catch {}
+    } catch (error) {
+      console.warn('Failed to apply terrain cutoff:', error);
+    }
   }, [mapRef]);
 
   const applyTerrain = useCallback((enabled: boolean, exaggeration: number) => {
     if (!mapRef.current) return;
-    const map = mapRef.current.getMap();
-    if (enabled) {
-      map.addSource('mapbox-dem', {
-        type: 'raster-dem',
-        url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-        tileSize: 512,
-        maxzoom: 14
-      });
-      map.setTerrain({ source: 'mapbox-dem', exaggeration });
-    } else {
-      map.setTerrain(null);
-      if (map.getSource('mapbox-dem')) map.removeSource('mapbox-dem');
+    try {
+      const map = mapRef.current.getMap();
+      if (!map.isStyleLoaded()) return;
+      
+      if (enabled) {
+        // Terrain DEM
+        if (!map.getSource('app-dem')) {
+          map.addSource('app-dem', {
+            type: 'raster-dem',
+            url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+            tileSize: 512,
+            maxzoom: 14
+          });
+        }
+        map.setTerrain({ source: 'app-dem', exaggeration });
+
+        // Dedicated DEM for hillshade to avoid resolution warning
+        if (!map.getSource('app_hillshade_dem')) {
+          map.addSource('app_hillshade_dem', {
+            type: 'raster-dem',
+            url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+            tileSize: 512,
+            maxzoom: 14
+          });
+        }
+        // Add hillshade layer if missing (place it low in the stack)
+        if (!map.getLayer('app_hillshade')) {
+          const firstSymbol = map.getStyle().layers?.find(l => l.type === 'symbol')?.id;
+          const layerDef: any = {
+            id: 'app_hillshade',
+            type: 'hillshade',
+            source: 'app_hillshade_dem',
+            paint: { 'hillshade-exaggeration': 0.5 }
+          };
+          if (firstSymbol) {
+            map.addLayer(layerDef, firstSymbol);
+          } else {
+            map.addLayer(layerDef);
+          }
+        }
+      } else {
+        map.setTerrain(null);
+        if (map.getLayer('app_hillshade')) {
+          map.removeLayer('app_hillshade');
+        }
+        if (map.getSource('app-dem')) {
+          map.removeSource('app-dem');
+        }
+        if (map.getSource('app_hillshade_dem')) {
+          map.removeSource('app_hillshade_dem');
+        }
+      }
+      setTerrainEnabled(enabled);
+    } catch (error) {
+      console.warn('Failed to apply terrain settings:', error);
     }
-    setIsTerrainEnabled(enabled);
-  }, [mapRef]);
+  }, [mapRef, setTerrainEnabled]);
 
   const applyTerrainExaggeration = useCallback((exaggeration: number) => {
     if (!mapRef.current) return;
-    const map = mapRef.current.getMap();
-    if (map.getTerrain()) {
-      map.setTerrain({ source: 'mapbox-dem', exaggeration });
+    try {
+      const map = mapRef.current.getMap();
+      if (!map.isStyleLoaded()) return;
+      
+      const currentTerrain = map.getTerrain();
+      if (currentTerrain) {
+         map.setTerrain({ source: 'app-dem', exaggeration });
+      }
+      setStoreTerrainExaggeration(exaggeration);
+    } catch (error) {
+      console.warn('Failed to apply terrain exaggeration:', error);
     }
-    setTerrainExaggeration(exaggeration);
-  }, [mapRef]);
+  }, [mapRef, setStoreTerrainExaggeration]);
 
   // --- Re-apply all settings on style reload ---
   const reapplyAllSettings = useCallback(() => {
     if (!mapRef.current) return;
     const map = mapRef.current.getMap();
-    setTimeout(() => {
-      map.setConfigProperty('basemap', 'lightPreset', 'dusk');
-      map.setConfigProperty('basemap', 'show3dObjects', is3DEnabled);
-      if (isTerrainEnabled) {
-        map.addSource('mapbox-dem', {
-          type: 'raster-dem',
-          url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-          tileSize: 512,
-          maxzoom: 14
-        });
-        map.setTerrain({ source: 'mapbox-dem', exaggeration: terrainExaggeration });
-      } else {
-        map.setTerrain(null);
-        if (map.getSource('mapbox-dem')) map.removeSource('mapbox-dem');
+    
+    // Wait for style to be fully loaded before applying settings
+    const applySettings = () => {
+      if (!map.isStyleLoaded()) return;
+      
+      try {
+        map.setConfigProperty('basemap', 'lightPreset', 'dusk');
+        apply3D(is3DEnabled);
+        applyTerrain(isTerrainEnabled, terrainExaggeration);
+        applyCutoff(true);
+      } catch (error) {
+        console.warn('Failed to reapply settings:', error);
       }
-    }, 100);
-  }, [mapRef, is3DEnabled, isTerrainEnabled, terrainExaggeration]);
+    };
 
-  // Get current mode for manual drawing logic
-  const { mode } = useDirectionsMode();
+    // Apply settings immediately if style is loaded, otherwise wait
+    if (map.isStyleLoaded()) {
+      applySettings();
+    } else {
+      map.once('style.load', applySettings);
+    }
+  }, [mapRef, is3DEnabled, isTerrainEnabled, terrainExaggeration, apply3D, applyTerrain, applyCutoff]);
+
 
   // Map load event handler
   const handleMapLoad = useCallback((event: any) => {
+    const map = mapRef?.current?.getMap();
+    if (!map) return;
     setMapLoaded(true);
-    const map = event.target;
     reapplyAllSettings();
     map.on('style.load', reapplyAllSettings);
 
     // Add Mapbox Traffic control
     map.addControl(new MapboxTraffic({ showTraffic: true, showTrafficButton: false }));
-  }, [reapplyAllSettings]);
+  }, [reapplyAllSettings, mapRef]);
 
   useEffect(() => {
     setInternalViewState(prev => ({ ...prev, ...externalViewState }));
   }, [externalViewState]);
 
+  // Off-route detection & next step update when we get geolocation updates (non-transit only)
+  useEffect(() => {
+    if (!activeMapboxRoute || mode === 'transit') return;
+    if (!mapRef.current) return;
+    const map = mapRef.current.getMap();
+
+    const handleGeo = (e: any) => {
+      if (!useNavigationStore.getState().isActive) return;
+      const coords = (activeMapboxRoute.geometry?.coordinates as [number, number][]) || [];
+      if (coords.length === 0) return;
+      const here: [number, number] = [e.coords.longitude, e.coords.latitude];
+      const { index, dist2 } = getNearestIndexOnLine(coords, here);
+      try {
+        const steps = activeMapboxRoute.legs.flatMap(l => l.steps);
+        let nextText: string | null = null;
+        for (const step of steps) {
+          const m = step.maneuver?.location as [number, number];
+          if (!m) continue;
+          const stepIdx = getNearestIndexOnLine(coords, m).index;
+          if (stepIdx >= index) { nextText = step.maneuver?.instruction; break; }
+        }
+        useNavigationStore.getState().setNextManeuverText(nextText);
+      } catch {}
+      if (dist2 > 1e-6) {
+        // TODO: reroute
+      }
+      if (useNavigationStore.getState().followingEnabled) {
+        map.easeTo({ center: here, duration: 500 });
+      }
+    };
+
+    geolocateRef.current?.on?.('geolocate', handleGeo);
+    return () => { try { geolocateRef.current?.off?.('geolocate', handleGeo); } catch {} };
+  }, [activeMapboxRoute, mode, mapRef]);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleMove = useCallback((evt: any) => {
     // Always update internal view state
     setInternalViewState(evt.viewState);
-    // Only propagate to external state on user-initiated events
-    if (!evt.originalEvent) {
+    
+    // Skip external propagation for programmatic moves to avoid redundant re-fetches
+    if (programmaticMoveRef.current && !evt.originalEvent) {
       return;
     }
-    if (moveDebounceRef.current) {
-      clearTimeout(moveDebounceRef.current);
-    }
-    moveDebounceRef.current = setTimeout(() => {
-      onViewStateChange(evt.viewState);
-    }, 100);
+
+    // Immediately propagate external view state for responsive tile updates
+    onViewStateChange(evt.viewState);
   }, [onViewStateChange]);
 
   const handleVehicleClick = useCallback((vehicle: ObaVehicleLocation) => {
@@ -580,28 +746,29 @@ export function StandardMapView({
     applyTerrainExaggeration(exaggeration);
   }, [applyTerrainExaggeration]);
 
-  // Always draw the active route line (transit or non-transit) using store data
+  // Primary route feature for all modes
   const directionsRouteLine = React.useMemo(() => {
-    const geom = mapboxDirectionsRoute?.geometry;
+    const geom = displayRoute?.geometry as any;
     if (!geom) return null;
     return {
       type: 'Feature',
-      properties: { source: mode === 'transit' ? 'oba' : 'directions' },
+      properties: { source: mode === 'transit' ? 'otp' : 'directions' },
       geometry: geom
     } as GeoJSON.Feature;
-  }, [mapboxDirectionsRoute?.geometry, mode]);
+  }, [displayRoute?.geometry, mode]);
 
-  const obaRouteLayer = React.useMemo<LayerProps>(() => ({
-    id: 'oba-route-line',
-    type: 'line',
-    slot: 'middle',
-    paint: { 
-      'line-color': '#000000', 
-      'line-width': 4, 
-      'line-opacity': 0.8,
-      'line-emissive-strength': 0.9  // Modern v3 Standard compatibility for 3D lighting
-    }
-  } as const), []);
+  // Alternatives (non-transit only)
+  const directionsAlternatives = React.useMemo(() => {
+    if (!displayRoute || mode === 'transit') return [] as GeoJSON.Feature[];
+    const alts = (displayRoute as any).alternatives as any[] | undefined;
+    if (!alts || alts.length === 0) return [] as GeoJSON.Feature[];
+    const features: GeoJSON.Feature[] = alts.map((alt, idx) => ({
+      type: 'Feature',
+      properties: { source: 'directions-alt', altIndex: idx + 1 },
+      geometry: alt.geometry
+    }));
+    return features;
+  }, [displayRoute, mode]);
 
   const directionsLayer = React.useMemo<LayerProps>(() => ({
     id: 'directions-route-line',
@@ -612,12 +779,38 @@ export function StandardMapView({
       'line-cap': 'round'
     },
     paint: {
-      // Pure black line for maximum contrast
       'line-color': '#000000',
       'line-width': 8,
       'line-opacity': 1
     }
   }) as const, []);
+
+  const directionsAltLayer = React.useMemo<LayerProps>(() => ({
+    id: 'directions-alts-line',
+    type: 'line',
+    slot: 'top',
+    layout: {
+      'line-join': 'round',
+      'line-cap': 'round'
+    },
+    paint: {
+      'line-color': '#000000',
+      'line-width': 4,
+      'line-opacity': 0.35
+    }
+  }) as const, []);
+
+  const obaRouteLayer = React.useMemo<LayerProps>(() => ({
+    id: 'oba-route-line',
+    type: 'line',
+    slot: 'middle',
+    paint: {
+      'line-color': '#000000',
+      'line-width': 4,
+      'line-opacity': 0.8,
+      'line-emissive-strength': 0.9
+    }
+  } as const), []);
 
   const vehicleMarkers = React.useMemo(() => {
     if (!filteredVehiclesData || filteredVehiclesData.length === 0) return null;
@@ -625,12 +818,9 @@ export function StandardMapView({
     return filteredVehiclesData.map(vehicle => {
       // Determine marker color: orange = late (>0), yellow = early (<0), green = on time (0 or null)
       const deviation = vehicle.scheduleDeviation ?? 0;
-      let colorClass = 'text-green-500';
-      if (deviation > 0) {
-        colorClass = 'text-orange-500';
-      } else if (deviation < 0) {
-        colorClass = 'text-yellow-500';
-      }
+      // Simplified color scheme: green when driving, yellow when arrived (at_stop)
+      const isAtStop = (vehicle.closestStopTimeOffset != null && Math.abs(vehicle.closestStopTimeOffset) < 30) || (vehicle.phase === 'STOPPED_AT');
+      const colorClass = isAtStop ? 'text-yellow-500' : 'text-green-500';
       // Compute scale based on hover or selected state
       const isHoveredOrSelected = vehicle.id === hoveredVehicleId || vehicle.id === selectedVehicleId;
       const scaleClass = isHoveredOrSelected ? 'scale-150' : 'scale-100';
@@ -645,7 +835,7 @@ export function StandardMapView({
           onMouseEnter={() => setHoveredVehicle(vehicle.id)}
           onMouseLeave={() => setHoveredVehicle(null)}
           className={`transform ${scaleClass} transition-transform text-4xl ${colorClass} drop-shadow-lg`}
-          style={{ transform: `rotate(${vehicle.heading ?? 0}deg)` }}
+          style={{ transform: `rotate(${90 - (vehicle.heading ?? 0)}deg)` }}
         >
           ▲
         </div>
@@ -753,8 +943,8 @@ export function StandardMapView({
       };
       const isSelected = activeSelection?.poi.id === stop.id;
       const isHovered = hoveredStopId === stop.id;
-      // Hovered stops should appear on top, then selected, then default
-      const zIndex = isHovered ? 1000 : isSelected ? 800 : 500;
+      // Hovered stops highest, then selected, others low so they sit behind the popup
+      const zIndex = isHovered ? 1200 : isSelected ? 1000 : 50;
       return (
         <Marker
           key={`stop-${stop.id}`}
@@ -778,6 +968,63 @@ export function StandardMapView({
       );
     });
   }, [stopsData, handleSearchResultClick, doFlyTo, activeSelection, hoveredStopId, setSelectedVehicleId]);
+
+  // Build GeoJSON for stops to render as a Symbol layer (more performant than many DOM Markers)
+  const stopsGeojson = React.useMemo(() => {
+    const features = stopsData.map((s) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [s.longitude, s.latitude] },
+      properties: {
+        id: s.id,
+        name: s.name,
+        code: s.code,
+        selected: activeSelection?.poi.id === s.id ? 1 : 0,
+      }
+    }));
+    return { type: 'FeatureCollection', features } as any;
+  }, [stopsData, activeSelection]);
+
+  const stopsLayer = React.useMemo<LayerProps>(() => ({
+    id: 'oba-stops-layer',
+    type: 'circle',
+    slot: 'top',
+    paint: {
+      'circle-radius': ['case', ['==', ['get', 'selected'], 1], 6, 4],
+      'circle-color': ['case', ['==', ['get', 'selected'], 1], '#ffb703', '#22c55e'],
+      'circle-stroke-width': ['case', ['==', ['get', 'selected'], 1], 2, 0],
+      'circle-stroke-color': '#1f2937',
+      'circle-emissive-strength': 0.8
+    }
+  }) as any, []);
+
+  // Click handler for stops layer
+  const onMapClick = useCallback((e: any) => {
+    const mapInst = mapRef?.current?.getMap();
+    if (!mapInst) return;
+    const features = mapInst.queryRenderedFeatures(e.point, { layers: ['oba-stops-layer'] });
+    if (features && features.length > 0) {
+      const f = features[0];
+      const [lon, lat] = (f.geometry as any).coordinates;
+      const id = f.properties?.id as string;
+      const name = f.properties?.name as string;
+      const stopPoi: Place = {
+        id,
+        name,
+        type: 'Bus Stop',
+        latitude: lat,
+        longitude: lon,
+        description: '',
+        isObaStop: true,
+        properties: { source: 'oba' }
+      } as any;
+      setSelectedVehicleId(null);
+      handleSearchResultClick(stopPoi);
+      const clearGuard = () => { programmaticMoveRef.current = false; mapInst.off('moveend', clearGuard); };
+      programmaticMoveRef.current = true;
+      mapInst.on('moveend', clearGuard);
+      mapInst.flyTo({ center: [lon, lat], zoom: 16, duration: 800, essential: true });
+    }
+  }, [mapRef, handleSearchResultClick, setSelectedVehicleId]);
 
   // Development-only flag for vehicle test alerts (true in non-production builds)
   const isDev = process.env.NODE_ENV !== 'production';
@@ -806,20 +1053,149 @@ export function StandardMapView({
 
   DirectionsRoute.displayName = 'DirectionsRoute';
 
-  // Fly to new POI/stop when selected via unified handler
+  // Fly to new POI/stop when selected via unified handler (debounced)
   React.useEffect(() => {
-    if (activeSelection) {
-      const { latitude, longitude } = activeSelection.poi;
-      doFlyTo({ latitude, longitude }, { zoom: 16 });
-    }
-  }, [activeSelection, doFlyTo]);
+    if (!activeSelection) return;
+    const { poi } = activeSelection;
+    const mapInst = mapRef?.current?.getMap();
+    if (!mapInst) return;
 
-  // Fly to selected vehicle when a vehicle is clicked or selected from sidebar
+    const clearGuard = () => { programmaticMoveRef.current = false; mapInst.off('moveend', clearGuard); };
+    programmaticMoveRef.current = true;
+    mapInst.on('moveend', clearGuard);
+    mapInst.flyTo({ center: [poi.longitude, poi.latitude], zoom: 16, duration: 800, essential: true });
+    return () => { mapInst.off('moveend', clearGuard); programmaticMoveRef.current = false; };
+  }, [activeSelection, mapRef]);
+
+  // Fly to selected vehicle when a vehicle is clicked or selected from sidebar (debounced)
   React.useEffect(() => {
-    if (selectedVehicle) {
-      doFlyTo({ latitude: selectedVehicle.latitude, longitude: selectedVehicle.longitude }, { zoom: 16 });
+    if (!selectedVehicle) return;
+    const mapInst = mapRef?.current?.getMap();
+    if (!mapInst) return;
+
+    const clearGuard = () => { programmaticMoveRef.current = false; mapInst.off('moveend', clearGuard); };
+    programmaticMoveRef.current = true;
+    mapInst.on('moveend', clearGuard);
+    mapInst.flyTo({ center: [selectedVehicle.longitude, selectedVehicle.latitude], zoom: 15, duration: 800, essential: true });
+    return () => { mapInst.off('moveend', clearGuard); programmaticMoveRef.current = false; };
+  }, [selectedVehicle, mapRef]);
+
+  // OTP legs split into walk vs transit features (only when in transit mode)
+  const otpWalkLegs = React.useMemo<GeoJSON.Feature[]>(() => {
+    if (mode !== 'transit' || !mapboxDirectionsRoute) return [];
+    const feats: GeoJSON.Feature[] = [];
+    try {
+      for (const leg of mapboxDirectionsRoute.legs || []) {
+        // Our OTP adapter produces one step per leg with geometry
+        const step = leg.steps?.[0];
+        const g = step?.geometry as GeoJSON.LineString | undefined;
+        const type = step?.maneuver?.type || '';
+        if (g && type.toLowerCase() === 'walk') {
+          feats.push({ type: 'Feature', properties: { kind: 'walk' }, geometry: g });
+        }
+      }
+    } catch {}
+    return feats;
+  }, [mapboxDirectionsRoute, mode]);
+
+  const otpTransitLegs = React.useMemo<GeoJSON.Feature[]>(() => {
+    if (mode !== 'transit' || !mapboxDirectionsRoute) return [];
+    const feats: GeoJSON.Feature[] = [];
+    try {
+      for (const leg of mapboxDirectionsRoute.legs || []) {
+        const step = leg.steps?.[0];
+        const g = step?.geometry as GeoJSON.LineString | undefined;
+        const type = step?.maneuver?.type || '';
+        if (g && type.toLowerCase() !== 'walk') {
+          feats.push({ type: 'Feature', properties: { kind: 'transit', mode: type }, geometry: g });
+        }
+      }
+    } catch {}
+    return feats;
+  }, [mapboxDirectionsRoute, mode]);
+
+  const otpWalkLayer = React.useMemo<LayerProps>(() => ({
+    id: 'otp-walk-legs',
+    type: 'line',
+    slot: 'top',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': '#777777',
+      'line-width': 5,
+      'line-dasharray': [2, 2],
+      'line-opacity': 0.95,
+      'line-emissive-strength': 0.8
     }
-  }, [selectedVehicle, doFlyTo]);
+  }) as const, []);
+
+  const otpTransitLayer = React.useMemo<LayerProps>(() => ({
+    id: 'otp-transit-legs',
+    type: 'line',
+    slot: 'top',
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': '#1a73e8',
+      'line-width': 6,
+      'line-opacity': 1,
+      'line-emissive-strength': 0.95
+    }
+  }) as const, []);
+
+  // Fit bounds to the current display route when it changes (e.g., user toggles alternative)
+  useEffect(() => {
+    if (!displayRoute?.geometry || !mapRef.current) return;
+    try {
+      const coords = (displayRoute.geometry as any).coordinates as [number, number][];
+      if (!coords || coords.length === 0) return;
+      let minLng = coords[0][0], maxLng = coords[0][0];
+      let minLat = coords[0][1], maxLat = coords[0][1];
+      for (const [lng, lat] of coords) {
+        if (lng < minLng) minLng = lng;
+        if (lng > maxLng) maxLng = lng;
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+      }
+      const map = mapRef.current.getMap();
+      // @ts-ignore fitBounds options
+      map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 60, duration: 800, essential: true });
+    } catch {}
+  }, [displayRoute?.geometry, mapRef]);
+
+  // Preview simulation when GPS is unavailable or user chose Preview (non-transit only)
+  useEffect(() => {
+    if (mode === 'transit') return;
+    if (!activeMapboxRoute?.geometry || !mapRef.current) return;
+    const nav = useNavigationStore.getState();
+    if (!nav.isPreview) return;
+    const coords = (activeMapboxRoute.geometry as any).coordinates as [number, number][];
+    if (!coords || coords.length < 2) return;
+    let i = 0;
+    const map = mapRef.current.getMap();
+    const tick = () => {
+      if (!useNavigationStore.getState().isPreview) return; // stop if preview ended
+      i = Math.min(i + 1, coords.length - 1);
+      const here = coords[i];
+      map.easeTo({ center: here as any, duration: 450, pitch: Math.max(map.getPitch(), 45) });
+      // Update next maneuver text roughly
+      try {
+        const steps = activeMapboxRoute.legs.flatMap(l => l.steps);
+        let nextText: string | null = null;
+        const nearest = getNearestIndexOnLine(coords, here as any).index;
+        for (const step of steps) {
+          const m = step.maneuver?.location as [number, number];
+          if (!m) continue;
+          const stepIdx = getNearestIndexOnLine(coords, m).index;
+          if (stepIdx >= nearest) { nextText = step.maneuver?.instruction; break; }
+        }
+        useNavigationStore.getState().setNextManeuverText(nextText);
+      } catch {}
+      if (i >= coords.length - 1) {
+        useNavigationStore.getState().stopNavigation();
+      }
+    };
+    const interval = setInterval(tick, 500);
+    return () => clearInterval(interval);
+  }, [activeMapboxRoute, mode, mapRef]);
 
   return (
     <>
@@ -831,12 +1207,14 @@ export function StandardMapView({
       mapStyleUrl={mapStyleUrl}
       cursor={enhancedInteractions.mapCursorStyle}
       onContextMenu={enhancedInteractions.handleMapRightClick}
+      onClick={onMapClick}
     >
         <NavigationControl position="top-right" />
         <FullscreenControl position="top-right" />
         {/* Removed inline 3D/Terrain controls, moved to sidebar style pane */}
         {/* Native GeolocateControl provides better location handling */}
         <GeolocateControl
+          ref={geolocateRef}
           positionOptions={{ enableHighAccuracy: true }}
           trackUserLocation={true}
           showUserHeading={true}
@@ -855,10 +1233,40 @@ export function StandardMapView({
           </Source>
         )}
 
-        {/* Manual directions route line for all modes */}
-        {directionsRouteLine && (
+        {/* Manual directions route line for all modes (hidden in transit to use per-leg styling) */}
+        {directionsRouteLine && mode !== 'transit' && (
           <Source id="directions-source" type="geojson" data={directionsRouteLine} key="directions-source">
             <Layer {...directionsLayer} />
+          </Source>
+        )}
+        {/* OTP per-leg styling */}
+        {mode === 'transit' && otpTransitLegs.length > 0 && (
+          <Source id="otp-transit-legs-source" type="geojson" data={{ type: 'FeatureCollection', features: otpTransitLegs }}>
+            <Layer {...otpTransitLayer} />
+          </Source>
+        )}
+        {mode === 'transit' && otpWalkLegs.length > 0 && (
+          <Source id="otp-walk-legs-source" type="geojson" data={{ type: 'FeatureCollection', features: otpWalkLegs }}>
+            <Layer {...otpWalkLayer} />
+          </Source>
+        )}
+        {/* Alternatives (faint) for non-transit */}
+        {directionsAlternatives.length > 0 && (
+          <Source id="directions-alts-source" type="geojson" data={{ type: 'FeatureCollection', features: directionsAlternatives }}>
+            <Layer {...directionsAltLayer} />
+          </Source>
+        )}
+        {/* OBA Route Line */}
+        {obaRouteId && (
+          <Source id="oba-route-source" type="geojson" data={{ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: obaRouteSegments } }] }}>
+            <Layer {...obaRouteLayer} />
+          </Source>
+        )}
+
+        {/* OBA stops as a performant layer */}
+        {stopsGeojson.features.length > 0 && (
+          <Source id="oba-stops-source" type="geojson" data={stopsGeojson}>
+            <Layer {...stopsLayer} />
           </Source>
         )}
 
@@ -867,8 +1275,6 @@ export function StandardMapView({
       {vehicleMarkers}
 
       {turnMarkers}
-      {/* Render stops via stopMarkers hook */}
-      {stopMarkers}
 
       {/* Only render place pins when no active directions route */}
       {!mapboxDirectionsRoute && placeMarkers}
@@ -989,6 +1395,13 @@ export function StandardMapView({
         {/* Always show start/end markers when coordinates exist */}
         {startMarker}
         {endMarker}
+
+        {/* Navigation overlay */}
+        {isNavActive && nextManeuverText && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white text-sm px-3 py-1.5 rounded shadow">
+            {nextManeuverText}
+          </div>
+        )}
 
       </Core>
     </>

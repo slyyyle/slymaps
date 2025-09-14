@@ -26,7 +26,7 @@ export function useMapStyleConfig({
       try {
         map.setConfigProperty('basemap', 'show3dObjects', true);
         map.setConfigProperty('basemap', 'theme', 'default');
-        console.log(`✅ Map initialized with 3D: enabled, theme: default`);
+        // Prefer dusk by default if caller wants it
       } catch (error) {
         console.error('❌ Failed to initialize map configuration:', error);
       }
@@ -39,59 +39,111 @@ export function useMapStyleConfig({
   }, [mapStyleUrl, isStandardStyle]);
 
   const toggle3D = useCallback((enabled: boolean) => {
-    if (!mapRef.current || !isStandardStyle(mapStyleUrl)) return;
+    if (!mapRef.current) return;
+    
     try {
       const map = mapRef.current.getMap();
       map.setConfigProperty('basemap', 'show3dObjects', enabled);
-      console.log(`🏢 3D objects ${enabled ? 'enabled' : 'disabled'}`);
     } catch (error) {
       console.warn('Failed to toggle 3D objects:', error);
     }
-  }, [mapRef, mapStyleUrl, isStandardStyle]);
+  }, [mapRef]);
 
   const toggleTerrain = useCallback((enabled: boolean, exaggeration: number = 1.2) => {
-    if (!mapRef.current || !isStandardStyle(mapStyleUrl)) return;
+    if (!mapRef.current) {
+      return;
+    }
     try {
       const map = mapRef.current.getMap();
+      if (!map.isStyleLoaded()) {
+        console.warn('Map style not loaded, skipping terrain toggle');
+        return;
+      }
+      
       if (enabled) {
-        map.addSource('mapbox-dem', {
-          type: 'raster-dem',
-          url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-          tileSize: 512,
-          maxzoom: 14
-        });
+        // Terrain DEM
+        if (!map.getSource('app-dem')) {
+          map.addSource('app-dem', {
+            type: 'raster-dem',
+            url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+            tileSize: 512,
+            maxzoom: 14
+          });
+        }
         map.setTerrain({ 
-          source: 'mapbox-dem', 
+          source: 'app-dem', 
           exaggeration: exaggeration 
         });
-        console.log(`🏔️ 3D terrain enabled with ${exaggeration}x exaggeration (DEM v1)`);
+
+        // Dedicated DEM for hillshade to avoid resolution warning
+        if (!map.getSource('app_hillshade_dem')) {
+          map.addSource('app_hillshade_dem', {
+            type: 'raster-dem',
+            url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+            tileSize: 512,
+            maxzoom: 14
+          });
+        }
+        if (!map.getLayer('app_hillshade')) {
+          const firstSymbol = map.getStyle().layers?.find(l => l.type === 'symbol')?.id;
+          const layerDef: any = {
+            id: 'app_hillshade',
+            type: 'hillshade',
+            source: 'app_hillshade_dem',
+            paint: { 'hillshade-exaggeration': 0.5 }
+          };
+          if (firstSymbol) map.addLayer(layerDef, firstSymbol); else map.addLayer(layerDef);
+        }
       } else {
         map.setTerrain(null);
-        if (map.getSource('mapbox-dem')) {
-          map.removeSource('mapbox-dem');
-        }
-        console.log(`🏔️ 3D terrain disabled`);
+        if (map.getLayer('app_hillshade')) map.removeLayer('app_hillshade');
+        if (map.getSource('app-dem')) map.removeSource('app-dem');
+        if (map.getSource('app_hillshade_dem')) map.removeSource('app_hillshade_dem');
       }
     } catch (error) {
       console.warn('Failed to toggle terrain:', error);
     }
-  }, [mapRef, mapStyleUrl, isStandardStyle]);
+  }, [mapRef]);
 
   const setTerrainExaggeration = useCallback((exaggeration: number) => {
-    if (!mapRef.current || !isStandardStyle(mapStyleUrl)) return;
+    if (!mapRef.current) {
+      return;
+    }
+    
     try {
       const map = mapRef.current.getMap();
-      if (map.getTerrain()) {
+      if (!map.isStyleLoaded()) {
+        console.warn('Map style not loaded, skipping terrain exaggeration');
+        return;
+      }
+      
+      const currentTerrain = map.getTerrain();
+      if (currentTerrain) {
         map.setTerrain({ 
-          source: 'mapbox-dem', 
+          source: 'app-dem', 
           exaggeration: exaggeration 
         });
-        console.log(`🏔️ Terrain exaggeration set to: ${exaggeration}x`);
       }
     } catch (error) {
       console.warn('Failed to set terrain exaggeration:', error);
     }
-  }, [mapRef, mapStyleUrl, isStandardStyle]);
+  }, [mapRef]);
+
+  const setTerrainCutoff = useCallback((enabled: boolean) => {
+    if (!mapRef.current) return;
+    try {
+      const map = mapRef.current.getMap();
+      if (!map.isStyleLoaded()) return;
+      // In v3 Standard, cutoff is controlled by a style config/property. If not present, this is a no-op.
+      // There is no public setTerrainCutoff API; use basemap config proxy when available.
+      // Many partners expose cutoff via a config key; guard with try/catch to avoid errors on older styles.
+      try {
+        map.setConfigProperty('basemap', 'terrainCutoff', enabled ? 'default' : 'none');
+      } catch {}
+    } catch (error) {
+      console.warn('Failed to set terrain cutoff:', error);
+    }
+  }, [mapRef]);
 
   return {
     isStandardStyle: isStandardStyle(mapStyleUrl),
@@ -99,6 +151,7 @@ export function useMapStyleConfig({
     initializeMapConfig,
     toggle3D,
     toggleTerrain,
-    setTerrainExaggeration
+    setTerrainExaggeration,
+    setTerrainCutoff
   };
 } 

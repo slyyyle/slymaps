@@ -48,8 +48,8 @@ export const MapPopup: React.FC<MapPopupProps> = ({ poi, popupTheme, onClose, ma
         situationsQuery.isLoading
       );
     } else {
-      // For POIs and search results, wait for OSM enrichment
-      return (poi.isNativePoi || poi.isSearchResult) ? hoursQuery.isLoading : false;
+      // For POIs and search results, do NOT block popup on OSM enrichment
+      return false;
     }
   })();
 
@@ -134,6 +134,8 @@ export const MapPopup: React.FC<MapPopupProps> = ({ poi, popupTheme, onClose, ma
                     shop={hoursQuery.data?.shop as string | undefined}
                     tourism={hoursQuery.data?.tourism as string | undefined}
                     opening_hours={hoursQuery.data?.opening_hours as string | undefined}
+                    latitude={poi.latitude}
+                    longitude={poi.longitude}
                   />
                 )}
               </>
